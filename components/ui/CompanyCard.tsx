@@ -2,7 +2,8 @@ import { ThemedText } from "@/components/themed-text";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 
 type CompanyCardProps = {
   name: string;
@@ -21,7 +22,8 @@ const CompanyCard = ({ name, description, logo, onPress }: CompanyCardProps) => 
     >
       {/* HEADER */}
       <View style={styles.header}>
-        <Image source={{ uri: logo }} style={styles.logo} />
+        <Image source={{ uri: logo }} style={styles.logo} contentFit="cover"
+  transition={200} />
 
         <View style={{ flex: 1 }}>
           <ThemedText style={styles.name}>{name}</ThemedText>

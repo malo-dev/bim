@@ -1,10 +1,12 @@
-import { useRouter } from "expo-router";
-import { useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {jwtDecode } from "jwt-decode";
-import * as Device from "expo-device";
+import axios from "axios";
 import * as Application from "expo-application";
+import * as Device from "expo-device";
 import * as Location from "expo-location";
+import { useRouter } from "expo-router";
+import { jwtDecode } from "jwt-decode";
+import { useState, useRef, useEffect } from "react";
+import { C, Colors} from "@/constants/theme";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,360 +16,552 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
+  Animated,
+  Dimensions,
+  Text,
+  StatusBar,
+   useColorScheme,
 } from "react-native";
-import axios from 'axios';
-
-import {
-
-  ArrowIcon,
-  ArrowRightIcon,
-
-} from "@/assets/svg/ArrowIcon";
-
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import logo from "@/assets/images/logo.jpeg";
+import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
-import { Fonts } from "@/constants/theme";
+import { API_URL_BASE } from "@/constants/api";
 import { useLoginMutation } from "@/services/authService";
 import { useCreateHistoryMutation } from "@/services/historyService";
-import { useCreateNotificationMutation} from '@/services/notificationService'
-import { registerForPushNotificationsAsync, sendLocalNotification } from '@/services/pushNotifications';
-import { API_URL_BASE } from "@/constants/api";
+import { useCreateNotificationMutation } from "@/services/notificationService";
+import {
+  registerForPushNotificationsAsync,
+  sendLocalNotification,
+} from "@/services/pushNotifications";
+
+const {height } = Dimensions.get("window");
+
+function useTheme() {
+  const scheme = useColorScheme();
+  const isDark  = scheme === "dark";
+  return { isDark, t: isDark ? Colors.dark : Colors.light };
+}
 
 
 
-
+/* ─── LOGIN SCREEN ───────────────────────────────────────────────────── */
 export default function LoginScreen() {
   const router = useRouter();
-const [login, { isLoading }] = useLoginMutation();
-const [createHistory , { isLoading:isLoadingHIstory }] = useCreateHistoryMutation();
-const [createNotification, { isLoading:isLoadingNotfication }] = useCreateNotificationMutation();
-  const [email, setEmail] = useState("");
 
+  const [login, { isLoading }] = useLoginMutation();
+  const [createHistory]        = useCreateHistoryMutation();
+  const [createNotification]   = useCreateNotificationMutation();
+
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  
-
-  const [focusedInput, setFocusedInput] =
-    useState<"email" | "password" | null>(null);
-
+  const [focusedInput, setFocusedInput] = useState<"email" | "password" | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  /* ── Animations ── */
+  const cardSlide = useRef(new Animated.Value(60)).current;
+  const cardOpac  = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.7)).current;
+  const logoOpac  = useRef(new Animated.Value(0)).current;
+  const floatY    = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, friction: 6, useNativeDriver: true }),
+      Animated.timing(logoOpac,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(cardSlide, { toValue: 0, duration: 600, delay: 200, useNativeDriver: true }),
+      Animated.timing(cardOpac,  { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
+    ]).start();
 
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [cardOpac, cardSlide, floatY, logoOpac, logoScale]);
 
+   const { isDark,t }             = useTheme();
 
-const handleLogin = async () => {
-  try {
-    const deviceName = Device.deviceName || "Unknown device";
-    const osName = Device.osName || Platform.OS;
-    const osVersion = Device.osVersion || "";
-    const appVersion = Application.nativeApplicationVersion || "";
+  /* ── Handlers ── */
+  const handleLogin = async () => {
 
-    let locationName = "Inconnue";
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === "granted") {
-      const location = await Location.getCurrentPositionAsync({});
-      locationName = `${location.coords.latitude}, ${location.coords.longitude}`;
-    }
-
-    const payload = {
-      email,
-      password,
-      device: `${deviceName} - ${osName} ${osVersion}`,
-      location: locationName,
-      appVersion,
-    };
-
-    const response = await login(payload).unwrap();
-    if (!response) return;
-
-    await AsyncStorage.multiSet([
-      ["token", response.token],
-      ["refreshToken", response.refreshToken],
-    ]);
-
-    const decoded: any = jwtDecode(response.token);
-    const userId = decoded?.userId;
-    const emailUser = decoded?.email;
-
-    await AsyncStorage.multiSet([
-      ["userId", String(userId)],
-      ["email", emailUser],
-    ]);
-
-   
-    const pushToken = await registerForPushNotificationsAsync();
-    if (pushToken) {
-     
-
-     
-    await axios.post(`${API_URL_BASE}/api/v1/auth/users/${userId}/expoPushToken`, { tokenPush : pushToken});
-  
-
-   
-      // await sendLocalNotification(
-      //   "Connexion réussie ✅",
-      //   "Bienvenue ! Vous êtes maintenant connecté."
-      // );
-    }
-
-    router.replace("/(tabs)");
-
-  } catch (err) {
-    const dataMess = err as any;
-    const userId = await AsyncStorage.getItem("userId");
-
+    console.log(API_URL_BASE)
     try {
-      await createHistory({
-        type: "connexion",
-        description: "Une tentative de connexion a été détectée, mais elle a échoué.",
-        userId: userId || null,
-        action: "Échec de la connexion ❌",
-      });
+      const deviceName = Device.deviceName || "Unknown device";
+      const osName     = Device.osName || Platform.OS;
+      const osVersion  = Device.osVersion || "";
+      const appVersion = Application.nativeApplicationVersion || "";
 
-      await createNotification({
-        title: "Échec de connexion",
-        message: "Une tentative de connexion a échoué.",
-        type: "ERREUR",
-        userId: userId || null,
-      });
+      let locationName = "Inconnue";
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const loc = await Location.getCurrentPositionAsync({});
+        locationName = `${loc.coords.latitude}, ${loc.coords.longitude}`;
+      }
 
-    
-      await sendLocalNotification(
-        "Échec de connexion ❌",
-        "Une tentative de connexion a échoué."
-      );
+      const response = await login({
+        email, password,
+        device: `${deviceName} - ${osName} ${osVersion}`,
+        location: locationName,
+        appVersion,
+      }).unwrap();
 
-    } catch (notifErr) {
-      console.error("Erreur lors de la création de l'historique ou notification :", notifErr);
+      if (!response) return;
+
+      await AsyncStorage.multiSet([
+        ["token", response.token],
+        ["refreshToken", response.refreshToken],
+      ]);
+
+      const decoded: any = jwtDecode(response.token);
+      await AsyncStorage.multiSet([
+        ["userId", String(decoded?.userId)],
+        ["email", decoded?.email],
+      ]);
+
+      const pushToken = await registerForPushNotificationsAsync();
+      if (pushToken) {
+        await axios.post(
+          `${API_URL_BASE}/api/v1/auth/users/${decoded?.userId}/expoPushToken`,
+          { tokenPush: pushToken }
+        );
+      }
+
+      router.replace("/(tabs)");
+    } catch (err) {
+      const dataMess = err as any;
+      const userId = await AsyncStorage.getItem("userId");
+      try {
+        await createHistory({
+          type: "connexion",
+          description: "Une tentative de connexion a été détectée, mais elle a échoué.",
+          userId: userId || null,
+          action: "Échec de la connexion ❌",
+        });
+        await createNotification({
+          title: "Échec de connexion",
+          message: "Une tentative de connexion a échoué.",
+          type: "ERREUR",
+          userId: userId || null,
+        });
+        await sendLocalNotification("Échec de connexion ❌", "Une tentative de connexion a échoué.");
+      } catch {
+        Alert.alert("Une erreur est survenue");
+      }
+      Alert.alert(dataMess?.data?.message || "Une erreur est survenue");
     }
-
-    Alert.alert(dataMess?.data?.message || "Une erreur est survenue");
-    console.error(err);
-  }
-};
-
-
-
-
-
-
-  const handleRegister = () => {
-    router.push("/register");
   };
 
-
-
+  /* ── Render ── */
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
+    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Gradient bg — même que FullScreenLoader du home */}
+      <LinearGradient
+        colors={
+          isDark
+            ? ["#060D1F", "#091528", "#0D1F3C"]
+            : [t.gradientStart, t.gradientEnd, t.accent]
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Cercles décoratifs — pattern home */}
+      <View style={[s.circle, s.circle1]} />
+      <View style={[s.circle, s.circle2]} />
+      <View style={[s.circle, s.circle3]} />
+      <View style={[s.circle, s.circle4]} />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ThemedView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
 
-          {/* TITLE */}
-          <ThemedText
-            type="title"
-            style={{ fontFamily: Fonts.rounded, textAlign: "center" }}
-          >
-            Bon retour parmi nous !
-          </ThemedText>
-
-          <ThemedText style={styles.subtitle}>
-            Connectez-vous maintenant et plongez dans une expérience unique
-          </ThemedText>
-
-          {/* EMAIL */}
-          <ThemedText style={styles.label}>Adresse email</ThemedText>
-
-          <View
+          {/* ── Logo flottant ── */}
+          <Animated.View
             style={[
-              styles.inputContainer,
-              focusedInput === "email" && styles.inputFocused,
+              s.logoArea,
+              { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] },
             ]}
           >
-            <Ionicons name="mail-outline" size={20} color="#777" />
+            <View style={s.logoWrap}>
+              <Image source={logo} style={s.logo} resizeMode="contain" />
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="exemple@gmail.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              onFocus={() => setFocusedInput("email")}
-              onBlur={() => setFocusedInput(null)}
-            />
-          </View>
+            {/* Barre accent tricolore — même pattern que sectorAccent du home */}
+            <View style={s.logoAccentBar}>
+              <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 2 }]} />
+              <View style={[s.logoAccentSeg, { backgroundColor: C.red,     flex: 1 }]} />
+              <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 1 }]} />
+            </View>
+          </Animated.View>
 
-          {/* PASSWORD */}
-          <ThemedText style={styles.label}>Mot de passe</ThemedText>
-
-          <View
-            style={[
-              styles.inputContainer,
-              focusedInput === "password" && styles.inputFocused,
-            ]}
+          {/* ── Card (même ombre / rayon que quickCard du home) ── */}
+          <Animated.View
+            style={[s.cardWrap, { opacity: cardOpac, transform: [{ translateY: cardSlide }] }]}
           >
-            <Ionicons name="lock-closed-outline" size={20} color="#777" />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Votre mot de passe"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              onFocus={() => setFocusedInput("password")}
-              onBlur={() => setFocusedInput(null)}
-            />
+            {/* Section header — copie exacte du home */}
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: C.accent }]} />
+              <Text style={s.sectionLabel}>CONNEXION</Text>
+            </View>
 
-            <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-            >
-              <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color="#777"
+            <Text style={s.title}>Bon retour parmi nous !</Text>
+            <Text style={s.subtitle}>
+              Connectez-vous et plongez dans une expérience unique
+            </Text>
+
+            {/* ── EMAIL ── */}
+            <Text style={s.label}>Adresse email</Text>
+            <View style={[s.inputRow, focusedInput === "email" && s.inputFocused]}>
+              {/* iconCircle — copie de home */}
+              <View style={[s.iconCircle, { backgroundColor: focusedInput === "email" ? C.primary + "18" : C.f4 }]}>
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={focusedInput === "email" ? C.primary : C.muted}
+                />
+              </View>
+              <TextInput
+                style={s.input}
+                placeholder="exemple@gmail.com"
+                placeholderTextColor={C.muted}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onFocus={() => setFocusedInput("email")}
+                onBlur={() => setFocusedInput(null)}
               />
+              {email.length > 0 && (
+                <Ionicons name="checkmark-circle" size={18} color="#22C55E" style={{ marginRight: 12 }} />
+              )}
+            </View>
+
+            {/* ── PASSWORD ── */}
+            <Text style={s.label}>Mot de passe</Text>
+            <View style={[s.inputRow, focusedInput === "password" && s.inputFocused]}>
+              <View style={[s.iconCircle, { backgroundColor: focusedInput === "password" ? C.primary + "18" : C.f4 }]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={focusedInput === "password" ? C.primary : C.muted}
+                />
+              </View>
+              <TextInput
+                style={s.input}
+                placeholder="Votre mot de passe"
+                placeholderTextColor={C.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                onFocus={() => setFocusedInput("password")}
+                onBlur={() => setFocusedInput(null)}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={s.eyeBtn}>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={C.muted}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Forgot */}
+            <TouchableOpacity
+              onPress={() => router.push("/forgot-password")}
+              style={s.forgotRow}
+            >
+              <FontAwesome6 name="circle-question" size={12} color={C.red} />
+              <Text style={s.forgot}>Mot de passe oublié ?</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* FORGOT */}
-          <TouchableOpacity onPress={() => router.push("/forgot-password")}>
-            <ThemedText style={styles.forgot}>
-              Mot de passe oublié ?
-            </ThemedText>
-          </TouchableOpacity>
+            {/* Login button */}
+            <GradientButton
+              isLoad={isLoading}
+              title="Se connecter"
+              onPress={handleLogin}
+              leftIcon={<ArrowIcon width={20} height={14} />}
+              rightIcon={<ArrowRightIcon width={30} height={24} />}
+            />
 
-          {/* LOGIN BUTTON */}
-          <GradientButton
-          isLoad={isLoading}
-            title="Se connecter"
-            onPress={handleLogin}
-            leftIcon={<ArrowIcon width={20} height={14} color="#3A3AB7" />}
-            rightIcon={<ArrowRightIcon width={30} height={24} />}
-          />
+            {/* Divider */}
+            <View style={s.divider}>
+              <View style={s.line} />
+              <View style={s.dividerBadge}>
+                <Text style={s.dividerText}>OU</Text>
+              </View>
+              <View style={s.line} />
+            </View>
 
-          {/* DIVIDER */}
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <ThemedText>OU</ThemedText>
-            <View style={styles.line} />
-          </View>
-
-
-          {/* REGISTER */}
-          <View style={styles.footer}>
-            <ThemedText>Pas de compte ?</ThemedText>
-
-            <TouchableOpacity onPress={handleRegister}>
-              <ThemedText style={styles.register}>
-                Créer un compte
-              </ThemedText>
+            {/* Register — même btn style que ActionButton du home */}
+            <TouchableOpacity
+              style={s.registerBtn}
+              onPress={() => router.push("/register")}
+              activeOpacity={0.85}
+            >
+              <View style={[s.iconCircle, { backgroundColor: C.violet + "18" }]}>
+                <FontAwesome6 name="user-plus" size={16} color={C.violet} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.registerMain}>Créer un compte</Text>
+                <Text style={s.registerSub}>Rejoignez-nous en quelques secondes</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </TouchableOpacity>
-          </View>
 
-        </ThemedView>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Animated.View>
+
+          <View style={{ height: 60 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-// LoginScreen.options = {
-//   headerShown: false,
-// };
-
-const styles = StyleSheet.create({
-  container: {
+/* ─── STYLES ─────────────────────────────────────────────────────────── */
+const s = StyleSheet.create({
+  bg: {
     flex: 1,
-    padding: 24,
-    justifyContent: "center",
+    backgroundColor: C.deep,
   },
 
+  /* Cercles décoratifs */
+  circle: {
+    position: "absolute",
+    borderRadius: 999,
+  },
+  circle1: {
+    width: 320, height: 320,
+    top: -140, right: -130,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  circle2: {
+    width: 160, height: 160,
+    top: 80, right: -40,
+    backgroundColor: "rgba(220,3,2,0.12)",
+  },
+  circle3: {
+    width: 200, height: 200,
+    bottom: 160, left: -90,
+    backgroundColor: "rgba(57,6,199,0.15)",
+  },
+  circle4: {
+    width: 70, height: 70,
+    top: height * 0.32, left: 24,
+    backgroundColor: "rgba(77,150,255,0.13)",
+  },
+
+  /* Logo */
+  logoArea: {
+    alignItems: "center",
+    paddingTop: Platform.OS === "ios" ? 72 : 52,
+    marginBottom: 22,
+  },
+  logoWrap: {
+    width: 96, height: 96,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    elevation: 14,
+    shadowColor: C.black,
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  logo: {
+    width: 78, height: 78,
+  },
+  logoAccentBar: {
+    flexDirection: "row",
+    width: 56, height: 3,
+    borderRadius: 2,
+    marginTop: 14,
+    overflow: "hidden",
+    gap: 2,
+  },
+  logoAccentSeg: {
+    height: "100%",
+    borderRadius: 2,
+  },
+
+  /* Card — même ombre que quickCard du home */
+  cardWrap: {
+    marginHorizontal: 16,
+    backgroundColor: C.white,
+    borderRadius: 28,
+    padding: 22,
+    elevation: 10,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+  },
+
+  /* Section header — copie exacte du home */
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionDot: {
+    width: 4, height: 16,
+    borderRadius: 2,
+  },
+  sectionLabel: {
+    fontFamily: "NexaLight",
+    fontSize: 11,
+    color: C.muted,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+
+  title: {
+    fontFamily: "NexaLight",
+    fontSize: 23,
+    fontWeight: "700",
+    color: C.text,
+    marginBottom: 5,
+  },
   subtitle: {
-    marginBottom: 25,
-    opacity: 0.7,
-    textAlign: "center",
+    fontFamily: "NexaLight",
+    fontSize: 13,
+    color: C.muted,
+    lineHeight: 19,
+    marginBottom: 24,
   },
 
   label: {
-    marginBottom: 6,
-    fontSize: 13,
-    opacity: 0.7,
+    fontFamily: "NexaLight",
+    fontSize: 11,
+    color: C.muted,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 8,
   },
 
-  inputContainer: {
+  /* Input row — même forme arrondie que btn du home */
+  inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 50,
-    marginBottom: 15,
-    gap: 10,
+    borderWidth: 1.5,
+    borderColor: "#E8EDF5",
+    borderRadius: 18,
+    height: 54,
+    backgroundColor: C.f4,
+    marginBottom: 16,
+    overflow: "hidden",
+    paddingRight: 12,
+  },
+  inputFocused: {
+    borderColor: C.primary,
+    backgroundColor: "#EEF4FF",
+  },
+
+  /* iconCircle — copie exacte du home */
+  iconCircle: {
+    width: 44, height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 6,
   },
 
   input: {
     flex: 1,
     height: "100%",
+    fontSize: 14,
+    color: C.text,
+    fontFamily: "NexaLight",
+  },
+  eyeBtn: {
+    padding: 4,
   },
 
-  inputFocused: {
-    borderColor: "#3A3AB7",
-    borderWidth: 2,
-  },
-
-  forgot: {
+  forgotRow: {
+    flexDirection: "row",
+    alignItems: "center",
     alignSelf: "flex-end",
+    gap: 5,
     marginBottom: 20,
-    color: "#3A3AB7",
+    marginTop: -4,
+  },
+  forgot: {
+    fontFamily: "NexaLight",
+    fontSize: 13,
+    color: C.red,
+    fontWeight: "600",
   },
 
+  /* Divider */
   divider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 25,
+    marginVertical: 20,
+    gap: 10,
   },
-
   line: {
     flex: 1,
     height: 1,
-    backgroundColor: "#ccc",
+    backgroundColor: "#E8EDF5",
+  },
+  dividerBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: C.f4,
+    borderWidth: 1,
+    borderColor: "#E8EDF5",
+  },
+  dividerText: {
+    fontFamily: "NexaLight",
+    fontSize: 11,
+    color: C.muted,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
 
-  socialButton: {
+  /* Register — ActionButton style du home */
+  registerBtn: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    height: 50,
-    width: "100%",
-    borderRadius: 10,
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 12,
+    backgroundColor: C.f4,
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
   },
-
-  socialText: {
+  registerMain: {
+    fontFamily: "NexaLight",
     fontSize: 14,
+    fontWeight: "700",
+    color: C.text,
   },
-
-  footer: {
-    flexDirection: "row",
-    marginTop: 25,
-    gap: 5,
-    justifyContent: "center",
-  },
-
-  register: {
-    color: "#3A3AB7",
-    fontWeight: "bold",
+  registerSub: {
+    fontFamily: "NexaLight",
+    fontSize: 11,
+    color: C.muted,
+    marginTop: 2,
   },
 });

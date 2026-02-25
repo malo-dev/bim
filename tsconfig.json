@@ -13,5 +13,5 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-, "services/pushNotifications.js"  ]
+, "services/pushNotifications.js", "services/globalSlice.js"  ]
 }

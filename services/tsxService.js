@@ -80,7 +80,7 @@ export const transactionApi = createApi({
     // ==== TRANSACTIONS CRUD ====
     getAllTransactions: builder.query({
       query: (params) => ({
-        url: '/tsx/transactions',
+        url: '/tsx',
         method: 'GET',
         params,
       }),

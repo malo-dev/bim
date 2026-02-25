@@ -1,53 +1,152 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Global theme — basé sur la palette HomeScreen
  */
 
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+/* ───────── PALETTE BASE APP ───────── */
+const BRAND = {
+  primary: "#0353CC",
+  red: "#DC0302",
+  violet: "#3906C7",
+  deep: "#302E99",
+  accent: "#4D96FF",
+  gold: "#FFD700",
 
+  white: "#FFFFFF",
+  black: "#000000",
+
+  text: "#0D1B3E",
+  muted: "#7B8DB0",
+  gray: "#F4F6FA",
+};
+
+/* ───────── COLORS LIGHT / DARK ───────── */
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    /* background */
+    background: BRAND.gray,
+    card: BRAND.white,
+    surface: BRAND.white,
+
+    /* text */
+    text: BRAND.text,
+    textSecondary: BRAND.muted,
+
+    /* brand */
+    primary: BRAND.primary,
+    accent: BRAND.accent,
+    danger: BRAND.red,
+
+    /* icons */
+    icon: "#5E6A85",
+
+    /* tabs */
+    tabIconDefault: "#7B8DB0",
+    tabIconSelected: BRAND.primary,
+
+    /* borders */
+    border: "#E6EAF2",
+
+    /* gradients */
+    gradientStart: BRAND.deep,
+    gradientEnd: BRAND.primary,
   },
+
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    /* background */
+    background: "#0B1220",
+    card: "#121A2B",
+    surface: "#182033",
+
+    /* text */
+    text: "#EAF0FF",
+    textSecondary: "#9FB0D0",
+
+    /* brand */
+    primary: "#4D8DFF",
+    accent: "#6AA8FF",
+    danger: "#FF5A5A",
+
+    /* icons */
+    icon: "#A8B3CF",
+
+    /* tabs */
+    tabIconDefault: "#6B7AA6",
+    tabIconSelected: "#4D8DFF",
+
+    /* borders */
+    border: "#1F2A44",
+
+    /* gradients */
+    gradientStart: "#1A2A6C",
+    gradientEnd: "#0353CC",
   },
 };
 
+/* ───────── QUICK ACCESS COLORS ───────── */
+export const COLORS = {
+  primary: BRAND.primary,
+  primaryLight: "#1561CC",
+  red: BRAND.red,
+  white: BRAND.white,
+  black: BRAND.black,
+  gray: BRAND.gray,
+};
+
+/* ───────── FONTS APP (TES FONTS) ───────── */
+export const FONTS = {
+  light: "NexaLight",
+  regular: "NexaRegular",
+  bold: "NexaBold",
+};
+
+/* ───────── SYSTEM FONTS FALLBACK ───────── */
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    sans: "system-ui",
+    serif: "ui-serif",
+    rounded: "ui-rounded",
+    mono: "ui-monospace",
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+    sans: "normal",
+    serif: "serif",
+    rounded: "normal",
+    mono: "monospace",
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans:
+      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    rounded:
+      "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
+    mono:
+      "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });
+
+
+
+export const B = {
+  violet: "#3906C7",
+  deep:   "#0353CC",
+  white:  "#FFFFFF",
+};
+
+
+export const C = {
+  primary: "#0353CC",
+  red:     "#DC0302",
+  violet:  "#3906C7",
+  deep:    "#302E99",
+  accent:  "#4D96FF",
+  gold:    "#FFD700",
+  white:   "#FFFFFF",
+  black:   "#000000",
+  bg:      "#0353CC",
+  card:    "#FFFFFF",
+  text:    "#0D1B3E",
+  muted:   "#7B8DB0",
+  f4:      "#F4F6FA",
+};

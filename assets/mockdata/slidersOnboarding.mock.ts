@@ -1,43 +1,41 @@
 export const slides = [
   {
     id: 1,
-    title: "Bienvenue sur BIM NEXT",
-    description: "Découvrez le réseau où vous achetez, exposez vos produits et profitez de réductions exclusives, partout et dans tous les domaines.",
+    title: "Tout votre business au même endroit",
+    description: "Achetez, exposez vos produits et profitez d’avantages exclusifs partout.",
     type: "image",
-    // source: require("../onb.mp4"),
-
-    source: require("../images/logo.jpeg"),
+    source: require("../images/bimone.png"),
   },
   {
-  id: 2,
-  title: "BIM NEXT : UN RÉSEAU TRANSACTIONNEL",
-  description: "Rejoignez un réseau unique pour acheter, exposer vos produits et bénéficier d’avantages exclusifs dans de nombreux secteurs.",
-  type: "image",
-  source: require("../images/rafiki.png"), // illustration achat direct
-}
-,
+    id: 2,
+    title: "Un réseau transactionnel",
+    description: "Rejoignez un réseau unique pour acheter et vendre dans de nombreux secteurs.",
+    type: "image",
+    source: require("../images/bimtwo.png"),
+  },
   {
     id: 3,
-    title: "Achetez directement chez nos partenaires",
-    description: "Accédez facilement aux produits de nos partenaires et payez en toute sécurité, sans intermédiaire.",
+    title: "Achetez chez nos partenaires",
+    description: "Accédez facilement aux produits et payez en toute sécurité, sans intermédiaire.",
     type: "image",
-    source: require("../images/onboarding3.png"), // illustration achat direct
+    source: require("../images/bimthree.png"),
   },
   {
     id: 4,
-    title: "Exposez vos produits et services",
-    description: "Mettez vos offres en avant pour toucher davantage de clients et booster votre visibilité.",
+    title: "Exposez vos produits",
+    description: "Mettez vos offres en avant pour toucher plus de clients et booster votre visibilité.",
     type: "image",
-    source: require("../images/onboarding4.png"), // illustration exposition
+    source: require("../images/bimfour.png"),
   },
   {
     id: 5,
-    title: "Profitez de réductions dans tous les secteurs",
-    description: "Supermarchés, transport, carburant, santé, assurances et bien plus encore, directement depuis l’application.",
+    title: "Réductions dans tous les secteurs",
+    description: "Supermarchés, transport, carburant, santé… profitez d’avantages directement depuis l’app.",
     type: "image",
-    source: require("../images/onboarding2.png"), // illustration réductions
+    source: require("../images/bimfive.png"),
   },
 ];
+
 
 
 

@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BimNext",
-    "slug": "BimNext",
+    "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.jpeg",
@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "extra": {
-      "API_URL": "http://172.20.10.12:5000/api/v1",
+      "API_URL": "https://serverbimnext.masmara-dimajelo.org/api/v1",
       "eas": {
         "projectId": "68b578a1-d490-4427-848d-a5e0d8ba1280"
       }

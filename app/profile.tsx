@@ -1,424 +1,468 @@
 import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { useGetUserByIdQuery, useUpdateUserMutation } from "@/services/userService"; 
+import React, { useEffect, useRef, useState } from "react";
+import {
+  useGetUserByIdQuery,
+  useUpdateUserMutation,
+} from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCreateHistoryMutation } from "@/services/historyService";
-import { useCreateNotificationMutation} from '@/services/notificationService'
+import { useCreateNotificationMutation } from "@/services/notificationService";
+import { Image } from "expo-image";
 import {
-  Image,
+  Animated,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
   Alert,
+  StatusBar,
+  useColorScheme,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { API_URL_BASE } from "@/constants/api";
+import { Colors } from "@/constants/theme";
 
-export default function ProfileScreen() {
-  const router = useRouter();
-
-  const [userId, setUserId] = useState<string | null>(null);
-
-  const { data: user, isLoading, isError,refetch } = useGetUserByIdQuery(userId!, {
-    skip: !userId,
-  });
-
-  const [updateUser,{isLoading:isupdated}] = useUpdateUserMutation();
-
-  const [profile, setProfile] = useState({
-    username: "",
-    nom: "",
-    poste: "",
-    email: "",
-    tel: "",
-    adresse: "",
-    photo: "",
-  });
-
-  const [createHistory , { isLoading:isLoadingHIstory }] = useCreateHistoryMutation();
-  const [createNotification, { isLoading:isLoadingNotfication }] = useCreateNotificationMutation();
-
-  useEffect(() => {
-    const loadUser = async () => {
-      const id = await AsyncStorage.getItem("userId");
-      setUserId(id);
-    };
-    loadUser();
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-
-      setProfile({
-        username: user.username || "",
-        nom: user.fullname || "",
-        poste: user.poste || "",
-        email: user.email || "",
-        tel: user.telephone || "",
-        adresse: user.adresse || "",
-        photo:   user?.imageUrl
-            ? user.imageUrl.startsWith("http")
-              ? user.imageUrl
-              : `${API_URL_BASE}${user.imageUrl}`
-            : "https://www.w3schools.com/howto/img_avatar.png"
-      });
-    }
-  }, [user]);
-
-  const handleChange = (field: string, value: string) => {
-    setProfile({ ...profile, [field]: value });
-  };
-
-const uploadImage = async (uri: string) => {
-  const token = await AsyncStorage.getItem("token");
-  if (!userId) return;
-
-  const formData = new FormData();
-
-  const fileName = uri.split("/").pop() || `photo_${Date.now()}.jpg`;
-  const extension = fileName.split(".").pop()?.toLowerCase();
-
-  const mimeType =
-    extension === "png" ? "image/png" : "image/jpeg";
-
-  formData.append("image", {
-    uri,
-    name: fileName,
-    type: mimeType,
-  } as any);
-
-  const response = await fetch(
-    `${API_URL_BASE}/api/v1/auth/users/${userId}/profile`,
-    {
-      method: "PUT",
-      body: formData,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
-
-  if (!response.ok) {
-    throw await response.json();
-  }
-};
-
-
-const handlePickImage = async () => {
-  const permission =
-    await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-  if (!permission.granted) {
-    Alert.alert("Permission refusée", "Autorisez l'accès à la galerie");
-    return;
-  }
-
-const result = await ImagePicker.launchImageLibraryAsync({
-  mediaTypes: ImagePicker.MediaTypeOptions.Images as any, 
-  quality: 0.7,
-  allowsEditing: true,
-});
-
-
-  if (!result.canceled) {
-    const uri = result.assets[0].uri;
-
-    // aperçu immédiat
-    handleChange("photo", uri);
-
-    try {
-      await uploadImage(uri);
-      refetch(); // recharge profil
-      Alert.alert("Succès", "Photo mise à jour !");
-    } catch (err) {
-      Alert.alert("Erreur", "Upload image échoué");
-    }
-  }
-};
-
-
-const handleSave = async () => {
-
-  if (!userId) return;
-
-  try {
-    const formData = new FormData();
-
-    formData.append("username", profile.username);
-    formData.append("fullname", profile.nom);
-    formData.append("poste", profile.poste);
-    formData.append("email", profile.email);
-    formData.append("telephone", profile.tel);
-    formData.append("adresse", profile.adresse);
-
-  
-const res = await updateUser({
-  id: userId,
-  formData
-});
-
-
-if(res){
-   await createHistory({
-  type: "MODIFICATION_PROFIL", // type adapté pour l'historique
-  description: "Votre profil a été mis à jour avec succès.",
-  userId,
-  action: "Profil modifié ✅",
-});
-
-await createNotification({
-  title: "Profil mis à jour",
-  message: "Votre profil a été mis à jour avec succès depuis l'application.",
-  type: "SUCCESS",
-  userId,
-});
-
+/* ─── Hook thème (même pattern) ─────────────────────────────────────── */
+function useTheme() {
+  const scheme = useColorScheme();
+  const isDark = scheme === "dark";
+  return { isDark, t: isDark ? Colors.dark : Colors.light };
 }
 
-
-    
-
-    Alert.alert("Succès", "Profil mis à jour !");
-  } catch (err: any) {
-    await createHistory({
-  type: "MODIFICATION_PROFIL",
-  description: "La mise à jour de votre profil a échoué.",
-  userId,
-  action: "Échec de la modification ❌",
-});
-
-await createNotification({
-  title: "Erreur lors de la mise à jour du profil",
-  message: "Une erreur est survenue lors de la mise à jour de votre profil.",
-  type: "ERREUR", // correspond à ton ENUM
-  userId,
-});
-    console.log("UPLOAD ERROR:", err);
-    Alert.alert(
-      "Erreur",
-      err?.message || "Impossible de mettre à jour le profil"
-    );
-  }
+/* ─── PALETTE BRAND (fixe) ───────────────────────────────────────────── */
+const B = {
+  primary: "#0353CC",
+  violet:  "#3906C7",
+  deep:    "#302E99",
+  accent:  "#4D96FF",
+  gold:    "#FFD700",
+  white:   "#FFFFFF",
 };
 
+/* ─── FIELD CONFIG ───────────────────────────────────────────────────── */
+const FIELDS = [
+  { key: "username", label: "Nom d'utilisateur",  icon: "person-circle-outline", keyboard: "default",       placeholder: "Votre username"    },
+  { key: "nom",      label: "Nom complet",         icon: "person-outline",        keyboard: "default",       placeholder: "Votre nom complet"  },
+  { key: "poste",    label: "Poste / Fonction",    icon: "briefcase-outline",     keyboard: "default",       placeholder: "Votre poste"        },
+  { key: "email",    label: "Adresse email",       icon: "mail-outline",          keyboard: "email-address", placeholder: "Votre email"        },
+  { key: "tel",      label: "Téléphone",           icon: "call-outline",          keyboard: "phone-pad",     placeholder: "Votre numéro"       },
+  { key: "adresse",  label: "Adresse",             icon: "location-outline",      keyboard: "default",       placeholder: "Votre adresse"      },
+] as const;
 
+type FieldKey = typeof FIELDS[number]["key"];
 
+/* ─── ANIMATED INPUT ─────────────────────────────────────────────────── */
+function AnimatedField({
+  fieldKey, label, icon, keyboard, placeholder, value, onChange, isDark, t,
+}: {
+  fieldKey: FieldKey; label: string; icon: any; keyboard: any;
+  placeholder: string; value: string;
+  onChange: (k: FieldKey, v: string) => void;
+  isDark: boolean; t: any;
+}) {
+  const focused = useRef(new Animated.Value(0)).current;
 
-  
+  const focus = () => Animated.timing(focused, { toValue: 1, duration: 200, useNativeDriver: false }).start();
+  const blur  = () => Animated.timing(focused, { toValue: 0, duration: 200, useNativeDriver: false }).start();
 
-  if (isLoading) {
-    return <Text style={{ flex: 1, textAlign: "center", marginTop: 50 }}>Chargement...</Text>;
-  }
-
-  if (isError) {
-    return (
-      <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
-        <Text>Impossible de charger les données</Text>
-      </View>
-    );
-  }
+  const borderColor = focused.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [
+      isDark ? "rgba(77,150,255,0.20)" : "rgba(3,83,204,0.12)",
+      B.primary,
+    ],
+  });
+  const bgColor = focused.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [
+      isDark ? "rgba(30,42,60,0.80)" : "rgba(3,83,204,0.06)",
+      isDark ? "rgba(30,58,110,0.60)" : "rgba(3,83,204,0.10)",
+    ],
+  });
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.container}>
-        {/* ===== HEADER ===== */}
-        <LinearGradient colors={["#302E99", "#3906C7"]} style={styles.header}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={28} color="white" />
+    <View style={s.fieldWrap}>
+      <Text style={[s.label, { color: isDark ? "#93C5FD" : B.primary }]}>
+        {label}
+      </Text>
+      <Animated.View style={[s.inputBox, { borderColor, backgroundColor: bgColor }]}>
+        <Ionicons name={icon} size={18} color={isDark ? "#93C5FD" : B.primary} style={{ opacity: 0.75 }} />
+        <TextInput
+          style={[s.input, { color: isDark ? t.text : "#0D1B3E" }]}
+          value={value}
+          onChangeText={(v) => onChange(fieldKey, v)}
+          placeholder={placeholder}
+          placeholderTextColor={isDark ? "rgba(148,163,184,0.5)" : "#7B8DB0"}
+          keyboardType={keyboard as any}
+          onFocus={focus}
+          onBlur={blur}
+          returnKeyType="next"
+        />
+      </Animated.View>
+    </View>
+  );
+}
+
+/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
+export default function ProfileScreen() {
+  const router = useRouter();
+  const { isDark, t } = useTheme();
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+
+  const [userId,  setUserId]  = useState<string | null>(null);
+  const [profile, setProfile] = useState({
+    username: "", nom: "", poste: "", email: "", tel: "", adresse: "", photo: "",
+  });
+
+  const { data: user, isLoading, isError, refetch } = useGetUserByIdQuery(userId!, { skip: !userId });
+  const [updateUser,         { isLoading: isUpdating }]  = useUpdateUserMutation();
+  const [createHistory,      { isLoading: isLoadHist }]  = useCreateHistoryMutation();
+  const [createNotification, { isLoading: isLoadNotif }] = useCreateNotificationMutation();
+
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    setProfile({
+      username: user.username  || "",
+      nom:      user.fullname  || "",
+      poste:    user.poste     || "",
+      email:    user.email     || "",
+      tel:      user.telephone || "",
+      adresse:  user.adresse   || "",
+      photo:    user.imageUrl
+        ? user.imageUrl.startsWith("http") ? user.imageUrl : `${API_URL_BASE}${user.imageUrl}`
+        : "https://www.w3schools.com/howto/img_avatar.png",
+    });
+  }, [user]);
+
+  const handleChange = (field: FieldKey | "photo", value: string) =>
+    setProfile(p => ({ ...p, [field]: value }));
+
+  /* ── upload image ── */
+  const uploadImage = async (uri: string) => {
+    const token    = await AsyncStorage.getItem("token");
+    if (!userId) return;
+    const fileName = uri.split("/").pop() || `photo_${Date.now()}.jpg`;
+    const ext      = fileName.split(".").pop()?.toLowerCase();
+    const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+    const formData = new FormData();
+    formData.append("image", { uri, name: fileName, type: mimeType } as any);
+    const res = await fetch(`${API_URL_BASE}/api/v1/auth/users/${userId}/profile`, {
+      method: "PUT", body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw await res.json();
+  };
+
+  const handlePickImage = async () => {
+    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!granted) { Alert.alert("Permission refusée", "Autorisez l'accès à la galerie"); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images as any,
+      quality: 0.7, allowsEditing: true,
+    });
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      handleChange("photo", uri);
+      try { await uploadImage(uri); refetch(); Alert.alert("✅ Succès", "Photo mise à jour !"); }
+      catch { Alert.alert("Erreur", "Upload image échoué"); }
+    }
+  };
+
+  /* ── save ── */
+  const handleSave = async () => {
+    if (!userId) return;
+    try {
+      const fd = new FormData();
+      fd.append("username",  profile.username);
+      fd.append("fullname",  profile.nom);
+      fd.append("poste",     profile.poste);
+      fd.append("email",     profile.email);
+      fd.append("telephone", profile.tel);
+      fd.append("adresse",   profile.adresse);
+      const res = await updateUser({ id: userId, formData: fd });
+      if (res) {
+        await createHistory({ type: "MODIFICATION_PROFIL", description: "Profil mis à jour.", userId, action: "Profil modifié ✅" });
+        await createNotification({ title: "Profil mis à jour", message: "Votre profil a été mis à jour avec succès.", type: "SUCCESS", userId });
+      }
+      Alert.alert("✅ Succès", "Profil mis à jour !");
+    } catch (err: any) {
+      await createHistory({ type: "MODIFICATION_PROFIL", description: "Échec de la mise à jour.", userId, action: "Échec ❌" });
+      await createNotification({ title: "Erreur", message: "Mise à jour du profil échouée.", type: "ERREUR", userId });
+      Alert.alert("Erreur", err?.message || "Impossible de mettre à jour");
+    }
+  };
+
+  /* ── header shrink ── */
+  const headerHeight = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [190, 120], extrapolate: "clamp" });
+  const avatarScale  = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [1, 0.7],   extrapolate: "clamp" });
+  const avatarTop    = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [110, 65],   extrapolate: "clamp" });
+
+  /* ── gradient selon thème ── */
+  const headerGradient: [string, string] = isDark
+    ? ["#1A1F3A", "#0A1628"]
+    : [B.deep, B.primary];
+
+  if (isLoading) return (
+    <View style={[s.centerFill, { backgroundColor: isDark ? "#0A1628" : B.primary }]}>
+      <LinearGradient colors={headerGradient} style={StyleSheet.absoluteFill} />
+      <Text style={{ color: B.white, fontSize: 16, fontFamily: "NexaLight" }}>Chargement…</Text>
+    </View>
+  );
+
+  if (isError) return (
+    <View style={[s.centerFill, { backgroundColor: isDark ? t.background : "#f0f4ff" }]}>
+      <Ionicons name="cloud-offline-outline" size={48} color={isDark ? "#4D96FF" : "#7B8DB0"} />
+      <Text style={{ color: isDark ? "#93C5FD" : "#7B8DB0", marginTop: 12, fontFamily: "NexaLight" }}>
+        Impossible de charger le profil
+      </Text>
+    </View>
+  );
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={[s.root, { backgroundColor: isDark ? t.background : B.white }]}>
+
+        {/* ── ANIMATED HEADER ── */}
+        <Animated.View style={[s.header, {
+          height: headerHeight,
+          shadowColor: isDark ? "#000" : B.primary,
+        }]}>
+          <LinearGradient
+            colors={headerGradient}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[s.deco1, {
+            backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(255,255,255,0.06)",
+            borderWidth: isDark ? 1 : 0,
+            borderColor: "rgba(77,150,255,0.15)",
+          }]} />
+          <View style={[s.deco2, {
+            backgroundColor: isDark ? "rgba(57,6,199,0.18)" : "rgba(255,255,255,0.04)",
+          }]} />
+
+          <View style={s.topBar}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={22} color={B.white} />
             </TouchableOpacity>
-
-            <Text style={styles.title}>Mon Profil</Text>
-
-              <TouchableOpacity onPress={() => router.push('/notification')}>
-                                 <Ionicons name="notifications-outline" size={24} color="white" />
-                               </TouchableOpacity>
+            <Text style={s.headerTitle}>Mon Profil</Text>
+            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
+              <Ionicons name="notifications-outline" size={22} color={B.white} />
+              <View style={[s.notifDot, { borderColor: isDark ? "#1A1F3A" : B.deep }]} />
+            </TouchableOpacity>
           </View>
+        </Animated.View>
 
-          <TouchableOpacity style={styles.avatarWrapper} onPress={handlePickImage}>
-            <Image source={{ uri:  profile.photo }} style={styles.avatar} />
-            <View style={styles.cameraIconWrapper}>
-              <Ionicons name="camera" size={20} color="white" />
+        {/* ── FLOATING AVATAR ── */}
+        <Animated.View style={[s.avatarOuter, { top: avatarTop, transform: [{ scale: avatarScale }] }]}>
+          <TouchableOpacity onPress={handlePickImage} activeOpacity={0.85}>
+            <View style={[s.avatarRing, {
+              borderColor: isDark ? "#4D96FF" : B.gold,
+              shadowColor: isDark ? "#4D96FF" : B.primary,
+            }]}>
+              <Image source={{ uri: profile.photo }} contentFit="cover" transition={300} style={s.avatar} />
+            </View>
+            <View style={s.cameraBadge}>
+              <Ionicons name="camera" size={14} color={B.white} />
             </View>
           </TouchableOpacity>
-        </LinearGradient>
 
-        {/* ===== FORMULAIRE PROFIL ===== */}
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
-          {/** Username */}
-          <Text style={styles.label}>Username</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="person-circle-outline" size={20} color="#888" />
-            <TextInput
-            placeholder="Entre un username"
-              style={styles.input}
-              value={profile.username}
-              onChangeText={(text) => handleChange("username", text)}
-              returnKeyType="next"
-            />
-          </BlurView>
+          <Text style={[s.profileName, { color: isDark ? t.text : "#0D1B3E" }]}>
+            {profile.nom || profile.username || "Votre nom"}
+          </Text>
+          <Text style={[s.profilePoste, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>
+            {profile.poste || "Poste non défini"}
+          </Text>
+        </Animated.View>
 
-          {/** Nom */}
-          <Text style={styles.label}>Nom</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="person-outline" size={20} color="#888" />
-            <TextInput
-              placeholder="Entrez votre nom complet"
-              style={styles.input}
-              value={profile.nom}
-              onChangeText={(text) => handleChange("nom", text)}
-              returnKeyType="next"
-            />
-          </BlurView>
+        {/* ── FORM CARD ── */}
+        <Animated.ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={s.scrollContent}
+          showsVerticalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollAnim } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={16}
+        >
+          <View style={[s.card, {
+            backgroundColor: isDark ? t.card : B.white,
+            shadowColor:     isDark ? "#000" : "#000",
+            shadowOpacity:   isDark ? 0.3 : 0.07,
+            // Bordure subtile en dark
+            borderWidth:  isDark ? 1 : 0,
+            borderColor:  isDark ? "rgba(77,150,255,0.15)" : "transparent",
+          }]}>
+            <Text style={[s.sectionTitle, { color: isDark ? t.text : "#0D1B3E" }]}>
+              Informations personnelles
+            </Text>
 
-          {/** Poste */}
-          <Text style={styles.label}>Poste</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="briefcase-outline" size={20} color="#888" />
-            <TextInput
-              placeholder="Entre votre paste"
-              style={styles.input}
-              value={profile.poste}
-              onChangeText={(text) => handleChange("poste", text)}
-              returnKeyType="next"
-            />
-          </BlurView>
+            {FIELDS.map(f => (
+              <AnimatedField
+                key={f.key}
+                fieldKey={f.key}
+                label={f.label}
+                icon={f.icon}
+                keyboard={f.keyboard}
+                placeholder={f.placeholder}
+                value={profile[f.key]}
+                onChange={handleChange}
+                isDark={isDark}
+                t={t}
+              />
+            ))}
 
-          {/** Email */}
-          <Text style={styles.label}>Email</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="mail-outline" size={20} color="#888" />
-            <TextInput
-              placeholder="Entrez votre email"
-              style={styles.input}
-              value={profile.email}
-              onChangeText={(text) => handleChange("email", text)}
-              keyboardType="email-address"
-              returnKeyType="next"
-            />
-          </BlurView>
-
-          {/** Numéro */}
-          <Text style={styles.label}>Numéro de téléphone</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="call-outline" size={20} color="#888" />
-            <TextInput
-              placeholder="Entrez votre Numéro de téléphone"
-              style={styles.input}
-              value={profile.tel}
-              keyboardType="phone-pad"
-              onChangeText={(text) => handleChange("tel", text)}
-              returnKeyType="next"
-            />
-          </BlurView>
-
-          {/** Adresse */}
-          <Text style={styles.label}>Adresse</Text>
-          <BlurView intensity={80} tint="light" style={styles.inputBox}>
-            <Ionicons name="location-outline" size={20} color="#888" />
-            <TextInput
-            placeholder="Entrez votre adresse"
-              style={styles.input}
-              value={profile.adresse}
-              onChangeText={(text) => handleChange("adresse", text)}
-              returnKeyType="done"
-            />
-          </BlurView>
-
-          <View style={{ marginTop: 10 }}>
-            <GradientButton
-            isLoad={isupdated || isLoadingHIstory || isLoadingNotfication}
-              title="Enregistrer les modifications"
-              onPress={handleSave}
-              leftIcon={<ArrowIcon width={20} height={14} color="#3906C7" />}
-              rightIcon={<ArrowRightIcon width={30} height={24} />}
-            />
+            <View style={s.saveBtn}>
+              <GradientButton
+                isLoad={isUpdating || isLoadHist || isLoadNotif}
+                title="Enregistrer les modifications"
+                onPress={handleSave}
+                leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
+                rightIcon={<ArrowRightIcon width={26} height={20} />}
+              />
+            </View>
           </View>
-        </ScrollView>
+
+          <View style={{ height: 60 }} />
+        </Animated.ScrollView>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F6FA" },
+/* ─── STYLES ─────────────────────────────────────────────────────────── */
+const B_bg = "#0353CC";
+
+const s = StyleSheet.create({
+  root: { flex: 1 },
+
+  centerFill: {
+    flex: 1, justifyContent: "center", alignItems: "center",
+  },
 
   header: {
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    alignItems: "center",
-  },
-
-  headerRow: {
-    marginTop: 60,
     width: "100%",
+    overflow: "hidden",
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    elevation: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+  },
+
+  deco1: {
+    position: "absolute", width: 200, height: 200,
+    borderRadius: 100,
+    top: -60, right: -50,
+  },
+  deco2: {
+    position: "absolute", width: 140, height: 140,
+    borderRadius: 70,
+    bottom: -30, left: -20,
+  },
+
+  topBar: {
+    marginTop: Platform.OS === "ios" ? 48 : 32,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
+    paddingHorizontal: 20,
   },
 
-  title: { color: "white", fontSize: 22, fontWeight: "700" },
-
-  avatarWrapper: {
-    marginTop: 20,
-    alignItems: "center",
+  headerTitle: {
+    color: B.white, fontSize: 18,
+    fontFamily: "NexaLight", letterSpacing: 0.3,
   },
 
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  iconBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center", justifyContent: "center",
+  },
+
+  notifDot: {
+    position: "absolute", top: 8, right: 8,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: B.gold, borderWidth: 1.5,
+  },
+
+  avatarOuter: {
+    position: "absolute", left: 0, right: 0,
+    alignItems: "center", zIndex: 10,
+  },
+
+  avatarRing: {
+    width: 96, height: 96, borderRadius: 48,
     borderWidth: 3,
-    borderColor: "#FFD700",
+    overflow: "hidden",
+    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8,
   },
 
-  cameraIconWrapper: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: "#4D96FF",
-    padding: 6,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: "white",
+  avatar: { width: "100%", height: "100%" },
+
+  cameraBadge: {
+    position: "absolute", bottom: 0, right: 0,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: B.accent,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: B.white,
   },
+
+  profileName: {
+    marginTop: 8, fontSize: 16,
+    fontFamily: "NexaLight", letterSpacing: 0.2,
+  },
+  profilePoste: {
+    fontSize: 12, marginTop: 1,
+    fontFamily: "NexaLight",
+  },
+
+  scrollContent: { paddingTop: 140, paddingHorizontal: 14 },
+
+  card: {
+    borderRadius: 24, padding: 16,
+    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 12,
+  },
+
+  sectionTitle: {
+    fontSize: 14, fontFamily: "NexaLight",
+    marginBottom: 12, letterSpacing: 0.3,
+  },
+
+  fieldWrap: { marginBottom: 10 },
 
   label: {
-    marginTop: 20,
-    marginBottom: 6,
-    fontWeight: "600",
-    color: "#333",
+    fontSize: 11, fontFamily: "NexaLight",
+    marginBottom: 4,
+    textTransform: "uppercase", letterSpacing: 0.8,
   },
 
   inputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    gap: 8,
-    height: 50,
+    flexDirection: "row", alignItems: "center",
+    borderRadius: 12, borderWidth: 1.5,
+    paddingHorizontal: 12, height: 46, gap: 8,
   },
 
   input: {
-    flex: 1,
-    color: "#000",
-    fontWeight: "500",
-    fontSize: 14,
+    flex: 1, fontSize: 13, fontFamily: "NexaLight",
   },
+
+  saveBtn: { marginTop: 6 },
 });

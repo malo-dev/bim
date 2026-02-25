@@ -1,271 +1,397 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { BlurView } from "expo-blur";
-import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View, RefreshControl } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  StatusBar,
+  Text,
+  useColorScheme,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
+import { LinearGradient } from "expo-linear-gradient";
+import { useGetAllSectorsQuery } from "@/services/sectorsServices";
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { default as HeaderOFpage } from "@/components/ui/headerHome";
+import HeaderOFpage from "@/components/ui/headerHome";
 import HeaderRow from "@/components/ui/headerTextUi";
+import { API_URL_BASE } from "@/constants/api";
+import { useGetUserByIdQuery } from "@/services/userService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import Modal from "react-native-modal";
-import { useGetUserByIdQuery } from "@/services/userService"; 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import HomeSkeleton from "@/components/skeleton/HomeSkeleton";
-import { API_URL_BASE } from "@/constants/api";
+import { useDispatch } from "react-redux";
+import { setSectors } from "@/services/globalApi";
+import { Ionicons } from "@expo/vector-icons";
+import { C, Colors } from "@/constants/theme";
 
+/* ─── Hook thème (même pattern qu'Onboarding) ───────────────────────── */
+function useTheme() {
+  const scheme = useColorScheme();
+  const isDark = scheme === "dark";
+  return { isDark, t: isDark ? Colors.dark : Colors.light };
+}
 
-// const [createNotification] = useCreateNotificationMutation();
+/* ─── QUICK ACTIONS ──────────────────────────────────────────────────── */
+const QUICK_ACTIONS = [
+  { title: "Recharge",   icon: "circle-plus",        color: C.primary, route: "/recharge"  },
+  { title: "Retrait",    icon: "money-bill-transfer", color: C.red,     route: "/retrait"   },
+  { title: "Transfert",  icon: "right-left",          color: C.primary, route: "/transfert" },
+  { title: "Scanner",    icon: "qrcode",              color: C.violet,  route: "/qrcode"    },
+  { title: "Support",    icon: "headset",             color: C.primary, route: "/support"   },
+  { title: "Actualiser", icon: "arrows-rotate",       color: C.accent,  route: null         },
+] as const;
+
+/* ─── SECTOR COLORS ──────────────────────────────────────────────────── */
+const SECTOR_COLORS = ["#22C55E", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899"];
+
+/* ─── FULL SCREEN LOADER ─────────────────────────────────────────────── */
+const FullScreenLoader = () => (
+  <View style={s.loaderWrap}>
+    <LinearGradient colors={[C.deep, C.primary]} style={StyleSheet.absoluteFill} />
+    <ActivityIndicator size="large" color={C.white} />
+    <Text style={s.loaderText}>Chargement…</Text>
+  </View>
+);
+
+/* ─── ACTION BUTTON ──────────────────────────────────────────────────── */
 type ActionButtonProps = {
   title: string;
   icon: React.ComponentProps<typeof FontAwesome6>["name"];
   color?: string;
-  glass?: boolean;
-  onPress?: () => void; 
+  onPress?: () => void;
+  index?: number;
+  isDark?: boolean;
+  cardBg?: string;
 };
 
 const ActionButton: React.FC<ActionButtonProps> = ({
-  title,
-  icon,
-  color = "#000",
-  glass = false,
-  onPress,
+  title, icon, color = C.primary, onPress, index = 0, isDark = false, cardBg,
 }) => {
-  const Content = () => (
-    <View style={styles.btnContent}>
-      <View style={[styles.iconCircle, { backgroundColor: color + "25" }]}>
-        <FontAwesome6 name={icon} size={22} color={color} />
-      </View>
-      <ThemedText style={styles.actionText}>{title}</ThemedText>
-    </View>
-  );
+  const scale  = useRef(new Animated.Value(1)).current;
+  const slideY = useRef(new Animated.Value(20)).current;
+  const opac   = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideY, { toValue: 0, duration: 300, delay: index * 50, useNativeDriver: true }),
+      Animated.timing(opac,   { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  const pressIn  = () => Animated.spring(scale, { toValue: 0.92, useNativeDriver: true }).start();
+  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
 
   return (
     <TouchableOpacity
-      activeOpacity={0.85}
-      style={styles.btnWrapper}
-      onPress={onPress} // 🔥 ici on passe la fonction
+      style={s.btnWrapper}
+      onPress={onPress}
+      activeOpacity={1}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
     >
-      {glass ? (
-        <BlurView intensity={40} tint="light" style={styles.glassBtn}>
-          <Content />
-        </BlurView>
-      ) : (
-        <View style={styles.normalBtn}>
-          <Content />
+      <Animated.View
+        style={[
+          s.btn,
+          { backgroundColor: cardBg || (isDark ? "#1E2A3A" : C.f4) },
+          { opacity: opac, transform: [{ translateY: slideY }, { scale }] },
+        ]}
+      >
+        <View style={[s.iconCircle, { backgroundColor: color + "22" }]}>
+          <FontAwesome6 name={icon} size={20} color={color} />
         </View>
-      )}
+        <Text style={[s.actionText, { color: isDark ? "#CBD5E1" : C.black }]}>
+          {title}
+        </Text>
+      </Animated.View>
     </TouchableOpacity>
   );
 };
-/* ================================================= */
-/* HOME SCREEN */
-/* ================================================= */
 
-export default function HomeScreen() {
-  const [userId, setUserId] = useState<string | null>(null);
-const [refreshing, setRefreshing] = useState(false);
+/* ─── SECTOR BUTTON ──────────────────────────────────────────────────── */
+const SectorButton = ({
+  sector, index, onPress, isDark,
+}: {
+  sector: any; index: number; onPress: () => void; isDark: boolean;
+}) => {
+  const color  = SECTOR_COLORS[index % SECTOR_COLORS.length];
+  const scale  = useRef(new Animated.Value(1)).current;
+  const slideY = useRef(new Animated.Value(20)).current;
+  const opac   = useRef(new Animated.Value(0)).current;
 
-
-  const router = useRouter()
-
-const {
-  data: user,
-  isLoading,
-  isFetching,
-  isUninitialized,
-  isError,
-  refetch,
-} = useGetUserByIdQuery(userId!, {
-  skip: !userId,
-});
-
-
-const onRefresh = async () => {
-  try {
-    setRefreshing(true);
-    await refetch(); // recharge les données
-  } catch (error) {
-    console.log("Erreur refresh:", error);
-  } finally {
-    setRefreshing(false);
-  }
-};
-
-
-  
-    const [openScanner, setOpenScanner] = useState(false);
-    const [permission, requestPermission] = useCameraPermissions();
-    const [result, setResult] = useState<"success" | "error" | null>(null);
-  
-   useEffect(() => {
-    const loadUserId = async () => {
-      const id = await AsyncStorage.getItem("userId");
-      console.log("USER ID:", id);
-      setUserId(id);
-    };
-
-    loadUserId();
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideY, { toValue: 0, duration: 350, delay: index * 60, useNativeDriver: true }),
+      Animated.timing(opac,   { toValue: 1, duration: 350, delay: index * 60, useNativeDriver: true }),
+    ]).start();
   }, []);
 
-    useEffect(() => {
-      if (!permission?.granted) {
-        requestPermission();
-      }
-    }, [permission?.granted, requestPermission]);
-  
-   const handleBarcodeScanned = ({ data }: any) => {
-    try {
-      const parsed = JSON.parse(data);
+  const pressIn  = () => Animated.spring(scale, { toValue: 0.93, useNativeDriver: true }).start();
+  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
 
-      if (parsed.userId && parsed.bimAccount) {
-        setResult("success");
-      } else {
-        setResult("error");
-      }
-    } catch {
-      setResult("error");
-    }
+  return (
+    <TouchableOpacity
+      style={s.btnWrapper}
+      onPress={onPress}
+      activeOpacity={1}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+    >
+      <Animated.View
+        style={[
+          s.sectorBtn,
+          { backgroundColor: isDark ? "#1E2A3A" : C.f4 },
+          { opacity: opac, transform: [{ translateY: slideY }, { scale }] },
+        ]}
+      >
+        <View style={[s.sectorAccent, { backgroundColor: color }]} />
+        <View style={[s.sectorIconCircle, { backgroundColor: color + "22" }]}>
+          <FontAwesome6 name="layer-group" size={18} color={color} />
+        </View>
+        <Text
+          style={[s.sectionLabel, { color: isDark ? "#CBD5E1" : C.text }]}
+          numberOfLines={2}
+        >
+          {sector.name}
+        </Text>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
-    setOpenScanner(false);
+/* ─── HOME SCREEN ────────────────────────────────────────────────────── */
+export default function HomeScreen() {
+  const router   = useRouter();
+  const dispatch = useDispatch();
+  const { isDark, t } = useTheme();
+
+  const [userId,     setUserId]     = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [openScanner, setOpenScanner] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+
+  const { data: sectorsData } = useGetAllSectorsQuery({
+    page: 1, pageSize: 20, search: "", paginate: false,
+  });
+
+  const {
+    data: user, isLoading, isFetching, isUninitialized, isError, refetch,
+  } = useGetUserByIdQuery(userId!, { skip: !userId });
+
+  useEffect(() => {
+    AsyncStorage.getItem("userId").then(setUserId);
+  }, []);
+
+  useEffect(() => {
+    if (!permission?.granted) requestPermission();
+  }, [permission?.granted, requestPermission]);
+
+  const onRefresh = async () => {
+    try { setRefreshing(true); await refetch(); }
+    finally { setRefreshing(false); }
   };
 
+  const handleGoto = (item: any) => {
+    dispatch(setSectors([item]));
+    router.push(`/service/${item.businessId}`);
+  };
 
-if (isUninitialized || isLoading || isFetching) {
-  return <HomeSkeleton />;
-}
+  const sectors = (sectorsData?.data || []).slice(0, 6);
 
-else if (isError) {
-  return (
-    <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
-      <ThemedText>Impossible de charger les données</ThemedText>
+  if (isUninitialized || isLoading || isFetching) return <FullScreenLoader />;
+
+  if (isError) return (
+    <View style={s.loaderWrap}>
+      <LinearGradient colors={[C.deep, C.primary]} style={StyleSheet.absoluteFill} />
+      <Ionicons name="cloud-offline-outline" size={48} color="rgba(255,255,255,0.5)" />
+      <Text style={s.loaderText}>Impossible de charger les données</Text>
     </View>
   );
-}else{
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[s.safe, { backgroundColor: isDark ? t.background : C.bg }]} edges={["top"]}>
+      <StatusBar barStyle="light-content" />
+
       <ScrollView
-  showsVerticalScrollIndicator={false}
-  refreshControl={
-    <RefreshControl
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-      colors={["#4D96FF"]}   
-      tintColor="#4D96FF"  
-    />
-  }
->
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[C.primary]}
+            tintColor={C.white}
+          />
+        }
+      >
+        {/* ── HEADER ── */}
+        <HeaderOFpage
+          username={user?.username}
+          tokenAbonement={user?.TokenAbonemment}
+          soldNumber={user?.soldNumber}
+          avatar={
+            user?.imageUrl
+              ? user.imageUrl.startsWith("http") ? user.imageUrl : `${API_URL_BASE}${user.imageUrl}`
+              : undefined
+          }
+          accountNumber={user?.accountNumber}
+        />
 
-        <HeaderOFpage username={user?.username} tokenAbonement={user?.TokenAbonemment} soldNumber={user?.soldNumber}  avatar={
-  user?.imageUrl
-    ? user.imageUrl.startsWith("http")
-      ? user.imageUrl
-      : `${API_URL_BASE}${user.imageUrl}`
-    : undefined
-}
- accountNumber={user?.accountNumber}/>
+        {/* ── QUICK ACTIONS CARD ── */}
+        <View style={[
+          s.quickCard,
+          {
+            backgroundColor: isDark ? t.card : C.white,
+            shadowColor: isDark ? "#000" : C.primary,
+          },
+        ]}>
+          <View style={s.sectionHeader}>
+            <View style={[s.sectionDot, { backgroundColor: C.accent }]} />
+            <Text style={[s.sectionLabelHeader, { color: isDark ? t.textSecondary : C.muted }]}>
+              Actions rapides
+            </Text>
+          </View>
 
-        {/* Quick Actions */}
-        <View style={styles.smallCard}>
-          <ActionButton  onPress={()=> router.push('/recharge')}  title="Recharge" icon="circle-plus" color="#4D96FF" glass />
-          <ActionButton onPress={()=> router.push('/retrait')}  title="Retrait" icon="money-bill-transfer" color="#FF6B6B" glass />
-          
-          <ActionButton  onPress={()=> router.push('/transfert')}  title="Transfert" icon="right-left" color="#FFD93D" glass />
-          <ActionButton   onPress={() => setOpenScanner(true)} title="Scaner un qr" icon="qrcode" color="#6BCB77" glass />
-          <ActionButton  onPress={()=> router.push('/support')}  title="Support" icon="headset" color="#845EC2" glass />
-        <ActionButton  
-  onPress={onRefresh}  
-  title="Actualiser" 
-  icon="arrows-rotate" 
-  color="#F9A826" 
-  glass 
-/>
-
+          <View style={s.grid}>
+            {QUICK_ACTIONS.map((action, i) => (
+              <ActionButton
+                key={action.title}
+                title={action.title}
+                icon={action.icon as any}
+                color={action.color}
+                index={i}
+                isDark={isDark}
+                onPress={
+                  action.title === "Actualiser"
+                    ? onRefresh
+                    : () => router.push(action.route as any)
+                }
+              />
+            ))}
+          </View>
         </View>
 
-        {/* Main Section */}
-        <ThemedView style={styles.mainCard}>
-          <HeaderRow/>
+        {/* ── MAIN CARD ── */}
+        <View style={[
+          s.mainCard,
+          {
+            backgroundColor: isDark ? t.card : C.white,
+            shadowColor: isDark ? "#000" : "#000",
+          },
+        ]}>
+          <HeaderRow />
 
-          <Modal isVisible={openScanner} style={{ margin: 0 }}>
-                  <CameraView
-                    style={{ flex: 1 }}
-                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                    onBarcodeScanned={handleBarcodeScanned}
-                  />
-                </Modal>
-          <View style={styles.grid}>
-            <ActionButton onPress={() =>
-                  router.push(`/service/${1}`)
-                } title="BIM Santé" icon="hand-holding-medical" color="#FF6B6B" glass />
-            <ActionButton  onPress={() =>
-                  router.push(`/service/${3}`)
-                }   title="BIM Énergies" icon="bolt" color="#FFD93D"  glass/>
-            <ActionButton   onPress={() =>
-                  router.push(`/service/${6}`)
-                }  title="BIM Gaz" icon="fire-flame-simple" color="#FF7F50"  glass/>
-            <ActionButton   onPress={() =>
-                  router.push(`/service/${5}`)
-                }  title="BIM Hôtellerie" icon="hotel" color="#6BCB77"  glass/>
-            <ActionButton  onPress={() =>
-                  router.push(`/service/${4}`)
-                }  title="BIM Carburant" icon="gas-pump" color="#4D96FF"  glass/>
-            <ActionButton  onPress={() =>
-                  router.push(`/service/${2}`)
-                }  title="BIM Transport" icon="bus" color="#00B4D8" glass />
+          <View style={s.sectionHeader}>
+            <View style={[s.sectionDot, { backgroundColor: C.primary }]} />
+            <Text style={[s.sectionLabelHeader, { color: isDark ? t.textSecondary : C.muted }]}>
+              Nos secteurs
+            </Text>
           </View>
-        </ThemedView>
 
-        <View style={{height:80}}/>
+          {/* Scanner modal */}
+          <Modal
+            isVisible={openScanner}
+            style={{ margin: 0 }}
+            onBackdropPress={() => setOpenScanner(false)}
+          >
+            <View style={{ flex: 1, backgroundColor: "#000" }}>
+              <CameraView
+                style={{ flex: 1 }}
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+              />
+              <TouchableOpacity
+                style={s.closeScanner}
+                onPress={() => setOpenScanner(false)}
+              >
+                <Ionicons name="close" size={28} color={C.white} />
+              </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* Sectors grid */}
+          <View style={s.grid}>
+            {sectors.map((sector: any, i: number) => (
+              <SectorButton
+                key={sector.businessId}
+                sector={sector}
+                index={i}
+                isDark={isDark}
+                onPress={() => handleGoto(sector)}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
-  
 
-  
-}
+/* ─── STYLES ─────────────────────────────────────────────────────────── */
+const s = StyleSheet.create({
+  safe: { flex: 1 },
 
-/* ================================================= */
-/* STYLES */
-/* ================================================= */
-
-const styles = StyleSheet.create({
-  safe: {
+  loaderWrap: {
     flex: 1,
-    backgroundColor: "#F6F7FB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loaderText: {
+    color: C.white,
+    fontFamily: "NexaLight",
+    marginTop: 12,
+    fontSize: 13,
   },
 
-  /* SMALL CARD */
-  smallCard: {
-    marginHorizontal: 20,
-    marginTop: -30,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
+  quickCard: {
+    marginHorizontal: 16,
+    marginTop: -24,
+    borderRadius: 24,
     padding: 16,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-    elevation: 6,
+    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
 
-  /* MAIN CARD */
   mainCard: {
-    marginTop: 25,
-    backgroundColor: "#ffffff",
+    marginTop: 20,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     padding: 20,
     elevation: 4,
-
-    height:'80%'
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    minHeight: "70%",
   },
 
-  sectionTitle: {
-    marginBottom: 18,
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+    marginTop: 4,
+  },
+  sectionDot: {
+    width: 4, height: 16, borderRadius: 2,
+  },
+  sectionLabelHeader: {
+    fontFamily: "NexaLight",
+    fontSize: 13,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontFamily: "NexaLight",
+    textAlign: "center",
+    paddingHorizontal: 4,
   },
 
   grid: {
@@ -274,42 +400,58 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  /* BUTTONS */
-  btnWrapper: {
-    width: "30%",
-    marginBottom: 14,
-  },
+  btnWrapper: { width: "30%", marginBottom: 12 },
 
-  glassBtn: {
+  btn: {
     borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.25)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-
-  normalBtn: {
-    backgroundColor: "#F2F4F8",
-    borderRadius: 18,
-  },
-
-  btnContent: {
     alignItems: "center",
     paddingVertical: 14,
-    gap: 8,
+    paddingHorizontal: 4,
   },
 
   iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44, height: 44, borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 7,
   },
 
   actionText: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 11,
+    fontFamily: "NexaLight",
     textAlign: "center",
+  },
+
+  sectorBtn: {
+    borderRadius: 18,
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    overflow: "hidden",
+  },
+
+  sectorAccent: {
+    position: "absolute", top: 0, left: 0, right: 0,
+    height: 3,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+  },
+
+  sectorIconCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 7,
+    marginTop: 4,
+  },
+
+  closeScanner: {
+    position: "absolute",
+    top: 50, right: 20,
+    width: 44, height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

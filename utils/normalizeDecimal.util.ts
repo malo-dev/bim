@@ -4,7 +4,7 @@ export const normalizeDecimal = (value:string) => {
   const normalized = value.toString().replace(",", ".");
   const numberValue = Number(normalized);
 
-  if (isNaN(numberValue)) return null;
+  if (isNaN(numberValue)) return 0;
 
   return numberValue;
 };

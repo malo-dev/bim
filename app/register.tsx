@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useState, useRef, useEffect } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,315 +9,447 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
+  Animated,
+  Text,
+  StatusBar,
+  useColorScheme,
 } from "react-native";
-
-import {
-  AppleIcon,
-  ArrowIcon,
-  ArrowRightIcon,
-  GoogleLikeIcon,
-} from "@/assets/svg/ArrowIcon";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
+import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
-import { Fonts } from "@/constants/theme";
 import { useRegisterMutation } from "@/services/authService";
 import { generateUsername } from "@/utils/generateUsername.utils";
+import logo from "@/assets/images/logo.jpeg";
+import { C, Colors } from "@/constants/theme";
+
+/* ─── Hook thème ─────────────────────────────────────────────────────── */
+function useTheme() {
+  const scheme = useColorScheme();
+  const isDark  = scheme === "dark";
+  return { isDark, t: isDark ? Colors.dark : Colors.light };
+}
+
+type FocusedField = "email" | "password" | "confirmPassword" | null;
 
 export default function RegisterScreen() {
   const router = useRouter();
+  const [register, { isLoading }] = useRegisterMutation();
+  const { isDark, t } = useTheme();
 
-    const [register, { isLoading }] = useRegisterMutation();
-
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email,           setEmail]           = useState("");
+  const [password,        setPassword]        = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [focusedInput,    setFocusedInput]    = useState<FocusedField>(null);
+  const [showPassword,    setShowPassword]    = useState(false);
+  const [showConfirm,     setShowConfirm]     = useState(false);
 
-  const [focusedInput, setFocusedInput] =
-    useState<"name" | "email" | "password" | "confirmPassword" | null>(null);
+  /* ── Animations ── */
+  const cardSlide = useRef(new Animated.Value(60)).current;
+  const cardOpac  = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.7)).current;
+  const logoOpac  = useRef(new Animated.Value(0)).current;
+  const floatY    = useRef(new Animated.Value(0)).current;
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, friction: 6, useNativeDriver: true }),
+      Animated.timing(logoOpac,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(cardSlide, { toValue: 0, duration: 600, delay: 200, useNativeDriver: true }),
+      Animated.timing(cardOpac,  { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
+    ]).start();
 
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
-   const handleRegister = async () => {
+  const handleRegister = async () => {
+    if (password !== confirmPassword) {
+      Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
+      return;
+    }
     try {
       const response = await register({ username: generateUsername(), email, password }).unwrap();
-     const userId = response?.user?.id
-        // await AsyncStorage.setItem("userId", userId);
-      if(response){
-
-        
-
-      
-
-        router.push("/verify-code");
-      }
+      if (response) router.push("/verify-code");
     } catch (err) {
-
-      const dataMess = err as any
-      
-      Alert.alert( dataMess?.data?.error || 'Une erreur est survenue');
-      console.error(err);
+      const dataMess = err as any;
+      Alert.alert(dataMess?.data?.error || "Une erreur est survenue");
     }
   };
 
+  /* ── Couleurs dynamiques ── */
+  const inputBg      = isDark ? t.surface  : C.f4;
+  const inputBgFocus = isDark ? "#0F1F42" : "#EEF4FF";
+  const inputBorder  = isDark ? t.border   : "#E8EDF5";
+  const dividerColor = isDark ? t.border   : "#E8EDF5";
+
+  /* Couleur bordure champ confirm */
+  const confirmBorderColor =
+    confirmPassword.length > 0
+      ? password === confirmPassword ? "#22C55E" : t.danger
+      : inputBorder;
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
+    <View style={{ flex: 1, backgroundColor: t.gradientEnd }}>
+      <StatusBar barStyle="light-content" />
+
+      {/* Background gradient */}
+      <LinearGradient
+        colors={
+          isDark
+            ? ["#060D1F", "#091528", "#0D1F3C"]
+            : [t.gradientStart, t.gradientEnd, t.accent]
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Cercles décoratifs */}
+      <View style={[s.circle, s.circle1]} />
+      <View style={[s.circle, s.circle2]} />
+      <View style={[s.circle, s.circle3]} />
+      <View style={[s.circle, s.circle4]} />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ThemedView style={styles.container}>
-
-          {/* TITLE */}
-          <ThemedText
-            type="title"
-            style={{ fontFamily: Fonts.rounded, textAlign: "center" }}
-          >
-            Créer un compte
-          </ThemedText>
-
-          <ThemedText style={styles.subtitle}>
-            Rejoignez-nous dès maintenant
-          </ThemedText>
-
-          {/* NAME */}
-          {/* <ThemedText style={styles.label}>Nom complet</ThemedText> */}
-          {/* <View
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Logo flottant ── */}
+          <Animated.View
             style={[
-              styles.inputContainer,
-              focusedInput === "name" && styles.inputFocused,
+              s.logoArea,
+              { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] },
             ]}
           >
-            <Ionicons name="person-outline" size={20} color="#777" />
-            <TextInput
-              style={styles.input}
-              placeholder="Votre nom complet"
-              value={name}
-              onChangeText={setName}
-              onFocus={() => setFocusedInput("name")}
-              onBlur={() => setFocusedInput(null)}
-            />
-          </View> */}
+            <View style={s.logoWrap}>
+              <Image source={logo} style={s.logo} resizeMode="contain" />
+            </View>
+            <View style={s.logoAccentBar}>
+              <View style={[s.logoAccentSeg, { backgroundColor: C.violet, flex: 2 }]} />
+              <View style={[s.logoAccentSeg, { backgroundColor: C.accent, flex: 1 }]} />
+              <View style={[s.logoAccentSeg, { backgroundColor: C.red,    flex: 1 }]} />
+            </View>
+          </Animated.View>
 
-          {/* EMAIL */}
-          <ThemedText style={styles.label}>Adresse email</ThemedText>
-          <View
+          {/* ── Card ── */}
+          <Animated.View
             style={[
-              styles.inputContainer,
-              focusedInput === "email" && styles.inputFocused,
+              s.cardWrap,
+              {
+                opacity: cardOpac,
+                transform: [{ translateY: cardSlide }],
+                backgroundColor: t.card,
+                shadowColor: isDark ? "#000" : C.primary,
+              },
             ]}
           >
-            <Ionicons name="mail-outline" size={20} color="#777" />
-            <TextInput
-              style={styles.input}
-              placeholder="exemple@gmail.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              onFocus={() => setFocusedInput("email")}
-              onBlur={() => setFocusedInput(null)}
-            />
-          </View>
+            {/* Section header */}
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: C.violet }]} />
+              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>INSCRIPTION</Text>
+            </View>
 
-          {/* PASSWORD */}
-          <ThemedText style={styles.label}>Mot de passe</ThemedText>
-          <View
-            style={[
-              styles.inputContainer,
-              focusedInput === "password" && styles.inputFocused,
-            ]}
-          >
-            <Ionicons name="lock-closed-outline" size={20} color="#777" />
-            <TextInput
-              style={styles.input}
-              placeholder="Votre mot de passe"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              onFocus={() => setFocusedInput("password")}
-              onBlur={() => setFocusedInput(null)}
-            />
-            <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-            >
-              <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color="#777"
+            <Text style={[s.title, { color: t.text }]}>Créer un compte</Text>
+            <Text style={[s.subtitle, { color: t.textSecondary }]}>
+              Rejoignez-nous dès maintenant et profitez de tous nos services
+            </Text>
+
+            {/* ── EMAIL ── */}
+            <Text style={[s.label, { color: t.textSecondary }]}>Adresse email</Text>
+            <View style={[
+              s.inputRow,
+              { backgroundColor: inputBg, borderColor: inputBorder },
+              focusedInput === "email" && { borderColor: t.primary, backgroundColor: inputBgFocus },
+            ]}>
+              <View style={[
+                s.iconCircle,
+                { backgroundColor: focusedInput === "email" ? t.primary + "18" : inputBg },
+              ]}>
+                <Ionicons
+                  name="mail-outline"
+                  size={18}
+                  color={focusedInput === "email" ? t.primary : t.textSecondary}
+                />
+              </View>
+              <TextInput
+                style={[s.input, { color: t.text }]}
+                placeholder="exemple@gmail.com"
+                placeholderTextColor={t.textSecondary}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onFocus={() => setFocusedInput("email")}
+                onBlur={() => setFocusedInput(null)}
               />
-            </TouchableOpacity>
-          </View>
+              {email.length > 0 && (
+                <Ionicons name="checkmark-circle" size={18} color="#22C55E" style={{ marginRight: 12 }} />
+              )}
+            </View>
 
-          {/* CONFIRM PASSWORD */}
-          <ThemedText style={styles.label}>Confirmer mot de passe</ThemedText>
-          <View
-            style={[
-              styles.inputContainer,
-              focusedInput === "confirmPassword" && styles.inputFocused,
-            ]}
-          >
-            <Ionicons name="lock-closed-outline" size={20} color="#777" />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmez votre mot de passe"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-              onFocus={() => setFocusedInput("confirmPassword")}
-              onBlur={() => setFocusedInput(null)}
-            />
-            <TouchableOpacity
-              onPress={() =>
-                setShowConfirmPassword(!showConfirmPassword)
-              }
-            >
-              <Ionicons
-                name={showConfirmPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color="#777"
+            {/* ── PASSWORD ── */}
+            <Text style={[s.label, { color: t.textSecondary }]}>Mot de passe</Text>
+            <View style={[
+              s.inputRow,
+              { backgroundColor: inputBg, borderColor: inputBorder },
+              focusedInput === "password" && { borderColor: t.primary, backgroundColor: inputBgFocus },
+            ]}>
+              <View style={[
+                s.iconCircle,
+                { backgroundColor: focusedInput === "password" ? t.primary + "18" : inputBg },
+              ]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={focusedInput === "password" ? t.primary : t.textSecondary}
+                />
+              </View>
+              <TextInput
+                style={[s.input, { color: t.text }]}
+                placeholder="Votre mot de passe"
+                placeholderTextColor={t.textSecondary}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                onFocus={() => setFocusedInput("password")}
+                onBlur={() => setFocusedInput(null)}
               />
+              <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={s.eyeBtn}>
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={t.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* ── CONFIRM PASSWORD ── */}
+            <Text style={[s.label, { color: t.textSecondary }]}>Confirmer le mot de passe</Text>
+            <View style={[
+              s.inputRow,
+              { backgroundColor: inputBg, borderColor: confirmBorderColor },
+              focusedInput === "confirmPassword" && {
+                backgroundColor: inputBgFocus,
+                borderColor: confirmPassword.length > 0 ? confirmBorderColor : t.primary,
+              },
+            ]}>
+              <View style={[
+                s.iconCircle,
+                {
+                  backgroundColor:
+                    confirmPassword.length > 0
+                      ? password === confirmPassword ? "#22C55E18" : t.danger + "18"
+                      : focusedInput === "confirmPassword" ? t.primary + "18" : inputBg,
+                },
+              ]}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={18}
+                  color={
+                    confirmPassword.length > 0
+                      ? password === confirmPassword ? "#22C55E" : t.danger
+                      : focusedInput === "confirmPassword" ? t.primary : t.textSecondary
+                  }
+                />
+              </View>
+              <TextInput
+                style={[s.input, { color: t.text }]}
+                placeholder="Confirmez votre mot de passe"
+                placeholderTextColor={t.textSecondary}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirm}
+                onFocus={() => setFocusedInput("confirmPassword")}
+                onBlur={() => setFocusedInput(null)}
+              />
+              {/* Checkmark si match, sinon œil */}
+              {confirmPassword.length > 0 && password === confirmPassword ? (
+                <Ionicons name="checkmark-circle" size={18} color="#22C55E" style={{ marginRight: 12 }} />
+              ) : (
+                <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={s.eyeBtn}>
+                  <Ionicons
+                    name={showConfirm ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color={t.textSecondary}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Indicateur correspondance */}
+            {password.length > 0 && confirmPassword.length > 0 && (
+              <View style={[
+                s.matchRow,
+                { borderLeftColor: password === confirmPassword ? "#22C55E" : t.danger },
+              ]}>
+                <Ionicons
+                  name={password === confirmPassword ? "checkmark-circle-outline" : "close-circle-outline"}
+                  size={14}
+                  color={password === confirmPassword ? "#22C55E" : t.danger}
+                />
+                <Text style={[s.matchText, {
+                  color: password === confirmPassword ? "#22C55E" : t.danger,
+                }]}>
+                  {password === confirmPassword
+                    ? "Les mots de passe correspondent"
+                    : "Les mots de passe ne correspondent pas"}
+                </Text>
+              </View>
+            )}
+
+            <View style={{ marginTop: 6 }}>
+              <GradientButton
+                isLoad={isLoading}
+                title="Créer un compte"
+                onPress={handleRegister}
+                leftIcon={<ArrowIcon width={20} height={14} />}
+                rightIcon={<ArrowRightIcon width={30} height={24} />}
+              />
+            </View>
+
+            {/* Divider */}
+            <View style={s.divider}>
+              <View style={[s.line, { backgroundColor: dividerColor }]} />
+              <View style={[s.dividerBadge, {
+                backgroundColor: isDark ? t.surface : C.f4,
+                borderColor: dividerColor,
+              }]}>
+                <Text style={[s.dividerText, { color: t.textSecondary }]}>OU</Text>
+              </View>
+              <View style={[s.line, { backgroundColor: dividerColor }]} />
+            </View>
+
+            {/* Bouton Login */}
+            <TouchableOpacity
+              style={[s.loginBtn, { backgroundColor: isDark ? t.surface : C.f4 }]}
+              onPress={() => router.push("/login")}
+              activeOpacity={0.85}
+            >
+              <View style={[s.iconCircle, { backgroundColor: C.primary + "18" }]}>
+                <FontAwesome6 name="arrow-right-to-bracket" size={15} color={t.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.loginMain, { color: t.text }]}>Déjà un compte ?</Text>
+                <Text style={[s.loginSub, { color: t.textSecondary }]}>
+                  Connectez-vous à votre espace
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={t.textSecondary} />
             </TouchableOpacity>
-          </View>
 
-          {/* REGISTER BUTTON */}
-          <GradientButton
-          isLoad={isLoading}
-            title="Créer un compte"
-            onPress={handleRegister}
-            leftIcon={<ArrowIcon width={20} height={14} color="#3A3AB7" />}
-            rightIcon={<ArrowRightIcon width={30} height={24} />}
-          />
-
-          {/* DIVIDER */}
-          <View style={styles.divider}>
-            <View style={styles.line} />
-            <ThemedText>OU</ThemedText>
-            <View style={styles.line} />
-          </View>
-
-          {/* SOCIAL LOGIN */}
-          {/* <TouchableOpacity style={styles.socialButton}>
-            <GoogleLikeIcon width={32} height={32} />
-            <ThemedText style={styles.socialText}>
-              Continuer avec Google
-            </ThemedText>
-          </TouchableOpacity> */}
-
-          {/* <TouchableOpacity style={styles.socialButton}>
-            <AppleIcon width={28} height={28} color="#000" />
-            <ThemedText style={styles.socialText}>
-              Continuer avec Apple
-            </ThemedText>
-          </TouchableOpacity> */}
-
-          {/* LOGIN LINK */}
-          <View style={styles.footer}>
-            <ThemedText>Déjà un compte ?</ThemedText>
-            <TouchableOpacity onPress={() => router.push("/login")}>
-              <ThemedText style={styles.register}>
-                Se connecter
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
-
-        </ThemedView>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          </Animated.View>
+          <View style={{ height: 60 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-RegisterScreen.options = {
-  headerShown: false,
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: "center",
+/* ─── STYLES — uniquement layout/formes, 0 couleur hardcodée ─────────── */
+const s = StyleSheet.create({
+  circle: { position: "absolute", borderRadius: 999 },
+  circle1: {
+    width: 300, height: 300, top: -130, right: -120,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+  },
+  circle2: {
+    width: 150, height: 150, top: 90, right: -40,
+    backgroundColor: "rgba(57,6,199,0.18)",
+  },
+  circle3: {
+    width: 200, height: 200, bottom: 180, left: -90,
+    backgroundColor: "rgba(77,150,255,0.13)",
+  },
+  circle4: {
+    width: 70, height: 70, top: "28%", left: 24,
+    backgroundColor: "rgba(220,3,2,0.10)",
   },
 
-  subtitle: {
-    marginBottom: 25,
-    opacity: 0.7,
-    textAlign: "center",
+  logoArea: {
+    alignItems: "center",
+    paddingTop: Platform.OS === "ios" ? 65 : 46,
+    marginBottom: 20,
   },
+  logoWrap: {
+    width: 90, height: 90, borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center", justifyContent: "center",
+    overflow: "hidden", elevation: 14,
+    shadowColor: "#000", shadowOpacity: 0.3,
+    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+  },
+  logo: { width: 74, height: 74 },
+  logoAccentBar: {
+    flexDirection: "row", width: 56, height: 3,
+    borderRadius: 2, marginTop: 12, overflow: "hidden", gap: 2,
+  },
+  logoAccentSeg: { height: "100%", borderRadius: 2 },
+
+  cardWrap: {
+    marginHorizontal: 16, borderRadius: 28, padding: 22,
+    elevation: 10, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2, shadowRadius: 20,
+  },
+
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  sectionDot:   { width: 4, height: 16, borderRadius: 2 },
+  sectionLabel: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase" },
+
+  title:    { fontFamily: "NexaLight", fontSize: 23, fontWeight: "700", marginBottom: 5 },
+  subtitle: { fontFamily: "NexaLight", fontSize: 13, lineHeight: 19, marginBottom: 22 },
 
   label: {
-    marginBottom: 6,
-    fontSize: 13,
-    opacity: 0.7,
+    fontFamily: "NexaLight", fontSize: 11,
+    letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8,
   },
 
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 50,
-    marginBottom: 15,
-    gap: 10,
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1.5, borderRadius: 18, height: 54,
+    marginBottom: 14, paddingRight: 12,
   },
+  iconCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    justifyContent: "center", alignItems: "center",
+    marginHorizontal: 6,
+  },
+  input: { flex: 1, height: "100%", fontSize: 14, fontFamily: "NexaLight" },
+  eyeBtn: { padding: 4 },
 
-  input: {
-    flex: 1,
-    height: "100%",
+  matchRow: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: -6, marginBottom: 14,
+    paddingLeft: 10, borderLeftWidth: 2, borderRadius: 2,
   },
+  matchText: { fontFamily: "NexaLight", fontSize: 12 },
 
-  inputFocused: {
-    borderColor: "#3A3AB7",
-    borderWidth: 2,
+  divider: { flexDirection: "row", alignItems: "center", marginVertical: 20, gap: 10 },
+  line: { flex: 1, height: 1 },
+  dividerBadge: {
+    paddingHorizontal: 12, paddingVertical: 4,
+    borderRadius: 20, borderWidth: 1,
   },
+  dividerText: { fontFamily: "NexaLight", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
 
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 25,
+  loginBtn: {
+    flexDirection: "row", alignItems: "center",
+    borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, gap: 12,
   },
-
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#ccc",
-  },
-
-  socialButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    height: 50,
-    width: "100%",
-    borderRadius: 10,
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-
-  socialText: {
-    fontSize: 14,
-  },
-
-  footer: {
-    flexDirection: "row",
-    marginTop: 25,
-    gap: 5,
-    justifyContent: "center",
-  },
-
-  register: {
-    color: "#3A3AB7",
-    fontWeight: "bold",
-  },
+  loginMain: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
+  loginSub:  { fontFamily: "NexaLight", fontSize: 11, marginTop: 2 },
 });
