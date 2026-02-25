@@ -4,7 +4,7 @@
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.jpeg",
+    "icon": "./assets/images/icon.png",
     "scheme": "bimnext",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -20,28 +20,28 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/logo.jpeg",
-        "backgroundImage": "./assets/images/logo.jpeg",
-        "monochromeImage": "./assets/images/logo.jpeg"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundImage": "./assets/images/icon.png",
+        "monochromeImage": "./assets/images/icon.png",
+        "backgroundColor": "#E6F4FE"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "CAMERA"
       ],
       "package": "com.anonymous.bim"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/logo.jpeg"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.jpeg",
+          "image": "./assets/images/IMG_3515.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -56,11 +56,12 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/logo.jpeg",
+          "icon": "./assets/images/icon.png",
           "color": "#ffffff",
           "sounds": true
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
