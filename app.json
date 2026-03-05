@@ -7,9 +7,10 @@
     "icon": "./assets/images/icon.png",
     "scheme": "bimnext",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    // "newArchEnabled": true,
     "extra": {
       "API_URL": "https://serverbimnext.masmara-dimajelo.org/api/v1",
+      // "API_URL": "http://10.0.10.81:5000/api/v1",
       "eas": {
         "projectId": "68b578a1-d490-4427-848d-a5e0d8ba1280"
       }
@@ -19,7 +20,8 @@
       "bundleIdentifier": "com.bimnext.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Autoriser l'accès à la caméra pour scanner les QR codes",
-        "NSLocationWhenInUseUsageDescription": "Autoriser l'accès à la localisation"
+        "NSLocationWhenInUseUsageDescription": "Autoriser l'accès à la localisation",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -27,14 +29,15 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#E6F4FE"
       },
-      "edgeToEdgeEnabled": true,
+      // "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.INTERNET",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.bimnext.app"
     },
@@ -74,8 +77,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#0353CC",
-          "sounds": false
+          "color": "#0353CC"
         }
       ]
     ],

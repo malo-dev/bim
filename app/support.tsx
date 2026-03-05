@@ -5,6 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL_BASE } from "@/constants/api";
 import {
@@ -76,14 +77,8 @@ function useTheme() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DATA
+   DATA — built inside component so it can use tr()
 ═══════════════════════════════════════════════════════════════════════ */
-const SUPPORT_TOPICS = [
-  { id: "1", title: "Problème de connexion",   icon: "lock-closed-outline"    },
-  { id: "2", title: "Recharger mon compte",    icon: "wallet-outline"         },
-  { id: "3", title: "Transfert Ecoins",         icon: "swap-horizontal-outline"},
-  { id: "4", title: "Autres questions",         icon: "chatbubble-outline"    },
-];
 
 /* ═══════════════════════════════════════════════════════════════════════
    TOPIC ITEM
@@ -159,6 +154,14 @@ function Card({ children, t }: { children: React.ReactNode; t: typeof TH.light }
 export default function SupportScreen() {
   const router = useRouter();
   const { isDark, t } = useTheme();
+  const { t: tr } = useTranslation();
+
+  const SUPPORT_TOPICS = [
+    { id: "1", title: tr("support.subjectOpts.login"),    icon: "lock-closed-outline"     },
+    { id: "2", title: tr("support.subjectOpts.recharge"), icon: "wallet-outline"          },
+    { id: "3", title: tr("support.subjectOpts.transfer"), icon: "swap-horizontal-outline" },
+    { id: "4", title: tr("support.subjectOpts.other"),    icon: "chatbubble-outline"      },
+  ];
 
   const [userId,        setUserId]        = useState<string | null>(null);
   const [token,         setToken]         = useState<string | null>(null);
@@ -182,7 +185,7 @@ export default function SupportScreen() {
 
   const pickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert("Permission refusée", "L'accès aux photos est nécessaire."); return; }
+    if (!granted) { Alert.alert(tr("common.permDenied"), tr("support.permDenied")); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7,
     });

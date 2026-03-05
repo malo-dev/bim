@@ -28,6 +28,7 @@ import Svg, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGetAllProductsQuery } from "@/services/productServices";
 import NoData from "@/components/ui/noData";
+import { API_URL_BASE } from "@/constants/api";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -192,7 +193,8 @@ function HotelCard({
   const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
 
-  const stars = item.productId ? ((item.productId % 3) + 3) : 4;
+  const stars    = item.productId ? ((item.productId % 3) + 3) : 4;
+  const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
 
   return (
     <Animated.View style={[
@@ -211,8 +213,8 @@ function HotelCard({
 
         {/* ── Image ── */}
         <View style={cs.imageWrap}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={cs.image} contentFit="cover" transition={300} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={cs.image} contentFit="cover" transition={300} />
           ) : (
             <LinearGradient colors={t.imageFallback} style={cs.imageFallback}>
               <Svg width={72} height={72} viewBox="0 0 48 48">
@@ -226,10 +228,12 @@ function HotelCard({
             </LinearGradient>
           )}
 
-          <LinearGradient
-            colors={["transparent", isDark ? "rgba(7,9,26,0.80)" : "rgba(13,27,62,0.62)"]}
-            style={cs.imageOverlay}
-          />
+          {imageUri && (
+            <LinearGradient
+              colors={["transparent", isDark ? "rgba(7,9,26,0.80)" : "rgba(13,27,62,0.62)"]}
+              style={cs.imageOverlay}
+            />
+          )}
 
           <View style={cs.badgePos}>
             <HotelBadge />

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dimensions,
   FlatList,
@@ -31,6 +32,7 @@ const allHistory = [
 
 export default function Historique() {
   const router = useRouter();
+  const { t: tr } = useTranslation();
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"Toutes" | "Transaction" | "Profil" | "Connexion" | "Recharge" | "Retrait">("Toutes");
   const [filterStatus, setFilterStatus] = useState<"toutes" | "réussi" | "échoué">("toutes");
@@ -47,7 +49,7 @@ export default function Historique() {
       <LinearGradient colors={["#302E99", "#3906C7"]} style={styles.header}>
         <View style={styles.headerRow}>
           <Ionicons name="arrow-back" size={26} color="white" onPress={() => router.back()} />
-          <Text style={styles.headerTitle}>Mon historique </Text>
+          <Text style={styles.headerTitle}>{tr("history.title")}</Text>
           <View style={{ width: 26 }} />
         </View>
       </LinearGradient>
@@ -55,7 +57,7 @@ export default function Historique() {
       {/* RECHERCHE */}
       <View style={styles.filterBox}>
         <TextInput
-          placeholder="Rechercher..."
+          placeholder={tr("history.searchPH")}
           placeholderTextColor="#999"
           value={search}
           onChangeText={setSearch}
@@ -74,25 +76,34 @@ export default function Historique() {
     paddingVertical: 10,
   }}
 >
-  {["Toutes","Transaction","Profil","Connexion","Recharge","Retrait"].map((type) => (
+  {(
+    [
+      { value: "Toutes",      label: tr("history.all")         },
+      { value: "Transaction", label: tr("history.transaction")  },
+      { value: "Profil",      label: tr("history.profile")      },
+      { value: "Connexion",   label: tr("history.connection")   },
+      { value: "Recharge",    label: tr("history.recharge")     },
+      { value: "Retrait",     label: tr("history.retrait")      },
+    ] as { value: typeof filterType; label: string }[]
+  ).map(({ value, label }) => (
     <TouchableOpacity
-      key={type}
-      onPress={() => setFilterType(type as any)}
+      key={value}
+      onPress={() => setFilterType(value)}
       style={{
         paddingHorizontal: 16,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: filterType === type ? "#302E99" : "#EEE",
+        backgroundColor: filterType === value ? "#302E99" : "#EEE",
       }}
     >
       <Text
         style={{
-          color: filterType === type ? "white" : "#333",
+          color: filterType === value ? "white" : "#333",
           fontWeight: "600",
           fontSize: 14,
         }}
       >
-        {type}
+        {label}
       </Text>
     </TouchableOpacity>
   ))}

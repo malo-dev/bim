@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useGetUserByIdQuery,
   useUpdateUserMutation,
@@ -46,17 +47,9 @@ const B = {
   white:   "#FFFFFF",
 };
 
-/* ─── FIELD CONFIG ───────────────────────────────────────────────────── */
-const FIELDS = [
-  { key: "username", label: "Nom d'utilisateur",  icon: "person-circle-outline", keyboard: "default",       placeholder: "Votre username"    },
-  { key: "nom",      label: "Nom complet",         icon: "person-outline",        keyboard: "default",       placeholder: "Votre nom complet"  },
-  { key: "poste",    label: "Poste / Fonction",    icon: "briefcase-outline",     keyboard: "default",       placeholder: "Votre poste"        },
-  { key: "email",    label: "Adresse email",       icon: "mail-outline",          keyboard: "email-address", placeholder: "Votre email"        },
-  { key: "tel",      label: "Téléphone",           icon: "call-outline",          keyboard: "phone-pad",     placeholder: "Votre numéro"       },
-  { key: "adresse",  label: "Adresse",             icon: "location-outline",      keyboard: "default",       placeholder: "Votre adresse"      },
-] as const;
+/* ─── FIELD CONFIG is now built inside the component to use tr() ─────── */
 
-type FieldKey = typeof FIELDS[number]["key"];
+type FieldKey = "username" | "nom" | "poste" | "email" | "tel" | "adresse";
 
 /* ─── ANIMATED INPUT ─────────────────────────────────────────────────── */
 function AnimatedField({
@@ -114,6 +107,16 @@ function AnimatedField({
 export default function ProfileScreen() {
   const router = useRouter();
   const { isDark, t } = useTheme();
+  const { t: tr } = useTranslation();
+
+  const FIELDS = [
+    { key: "username", label: tr("profile.username"),  icon: "person-circle-outline", keyboard: "default",       placeholder: tr("profile.usernamePH")    },
+    { key: "nom",      label: tr("profile.fullName"),   icon: "person-outline",        keyboard: "default",       placeholder: tr("profile.fullNamePH")     },
+    { key: "poste",    label: tr("profile.position"),   icon: "briefcase-outline",     keyboard: "default",       placeholder: tr("profile.positionPH")     },
+    { key: "email",    label: tr("profile.email"),      icon: "mail-outline",          keyboard: "email-address", placeholder: tr("profile.emailPH")        },
+    { key: "tel",      label: tr("profile.phone"),      icon: "call-outline",          keyboard: "phone-pad",     placeholder: tr("profile.phonePH")        },
+    { key: "adresse",  label: tr("profile.address"),    icon: "location-outline",      keyboard: "default",       placeholder: tr("profile.addressPH")      },
+  ] as const;
   const scrollAnim = useRef(new Animated.Value(0)).current;
 
   const [userId,  setUserId]  = useState<string | null>(null);
@@ -164,7 +167,7 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert("Permission refusée", "Autorisez l'accès à la galerie"); return; }
+    if (!granted) { Alert.alert(tr("common.permDenied"), tr("profile.permDenied")); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images as any,
       quality: 0.7, allowsEditing: true,
@@ -172,8 +175,8 @@ export default function ProfileScreen() {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       handleChange("photo", uri);
-      try { await uploadImage(uri); refetch(); Alert.alert("✅ Succès", "Photo mise à jour !"); }
-      catch { Alert.alert("Erreur", "Upload image échoué"); }
+      try { await uploadImage(uri); refetch(); Alert.alert("✅ Succès", tr("profile.photoSuccess")); }
+      catch { Alert.alert("Erreur", tr("profile.photoError")); }
     }
   };
 
@@ -193,7 +196,7 @@ export default function ProfileScreen() {
         await createHistory({ type: "MODIFICATION_PROFIL", description: "Profil mis à jour.", userId, action: "Profil modifié ✅" });
         await createNotification({ title: "Profil mis à jour", message: "Votre profil a été mis à jour avec succès.", type: "SUCCESS", userId });
       }
-      Alert.alert("✅ Succès", "Profil mis à jour !");
+      Alert.alert("✅ Succès", tr("profile.profileSuccess"));
     } catch (err: any) {
       await createHistory({ type: "MODIFICATION_PROFIL", description: "Échec de la mise à jour.", userId, action: "Échec ❌" });
       await createNotification({ title: "Erreur", message: "Mise à jour du profil échouée.", type: "ERREUR", userId });
@@ -214,7 +217,7 @@ export default function ProfileScreen() {
   if (isLoading) return (
     <View style={[s.centerFill, { backgroundColor: isDark ? "#0A1628" : B.primary }]}>
       <LinearGradient colors={headerGradient} style={StyleSheet.absoluteFill} />
-      <Text style={{ color: B.white, fontSize: 16, fontFamily: "NexaLight" }}>Chargement…</Text>
+      <Text style={{ color: B.white, fontSize: 16, fontFamily: "NexaLight" }}>{tr("common.loading")}</Text>
     </View>
   );
 
@@ -222,7 +225,7 @@ export default function ProfileScreen() {
     <View style={[s.centerFill, { backgroundColor: isDark ? t.background : "#f0f4ff" }]}>
       <Ionicons name="cloud-offline-outline" size={48} color={isDark ? "#4D96FF" : "#7B8DB0"} />
       <Text style={{ color: isDark ? "#93C5FD" : "#7B8DB0", marginTop: 12, fontFamily: "NexaLight" }}>
-        Impossible de charger le profil
+        {tr("profile.loadError")}
       </Text>
     </View>
   );
@@ -256,7 +259,7 @@ export default function ProfileScreen() {
             <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={22} color={B.white} />
             </TouchableOpacity>
-            <Text style={s.headerTitle}>Mon Profil</Text>
+            <Text style={s.headerTitle}>{tr("profile.title")}</Text>
             <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
               <Ionicons name="notifications-outline" size={22} color={B.white} />
               <View style={[s.notifDot, { borderColor: isDark ? "#1A1F3A" : B.deep }]} />
@@ -282,7 +285,7 @@ export default function ProfileScreen() {
             {profile.nom || profile.username || "Votre nom"}
           </Text>
           <Text style={[s.profilePoste, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>
-            {profile.poste || "Poste non défini"}
+            {profile.poste || tr("profile.defaultPosition")}
           </Text>
         </Animated.View>
 
@@ -306,7 +309,7 @@ export default function ProfileScreen() {
             borderColor:  isDark ? "rgba(77,150,255,0.15)" : "transparent",
           }]}>
             <Text style={[s.sectionTitle, { color: isDark ? t.text : "#0D1B3E" }]}>
-              Informations personnelles
+              {tr("profile.infoSection")}
             </Text>
 
             {FIELDS.map(f => (
@@ -327,7 +330,7 @@ export default function ProfileScreen() {
             <View style={s.saveBtn}>
               <GradientButton
                 isLoad={isUpdating || isLoadHist || isLoadNotif}
-                title="Enregistrer les modifications"
+                title={tr("profile.save")}
                 onPress={handleSave}
                 leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
                 rightIcon={<ArrowRightIcon width={26} height={20} />}

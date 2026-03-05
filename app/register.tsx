@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { useState, useRef, useEffect } from "react";
 import {
@@ -36,6 +37,7 @@ function useTheme() {
 type FocusedField = "email" | "password" | "confirmPassword" | null;
 
 export default function RegisterScreen() {
+  const { t: tr } = useTranslation();
   const router = useRouter();
   const [register, { isLoading }] = useRegisterMutation();
   const { isDark, t } = useTheme();
@@ -72,7 +74,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (password !== confirmPassword) {
-      Alert.alert("Erreur", "Les mots de passe ne correspondent pas.");
+      Alert.alert(tr("common.error"), tr("auth.pwdNoMatch"));
       return;
     }
     try {
@@ -80,7 +82,7 @@ export default function RegisterScreen() {
       if (response) router.push("/verify-code");
     } catch (err) {
       const dataMess = err as any;
-      Alert.alert(dataMess?.data?.error || "Une erreur est survenue");
+      Alert.alert(dataMess?.data?.error || tr("common.error"));
     }
   };
 
@@ -159,16 +161,16 @@ export default function RegisterScreen() {
             {/* Section header */}
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: C.violet }]} />
-              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>INSCRIPTION</Text>
+              <Text style={[s.sectionLabel, { color: t.textSecondary }]}>{tr("auth.registerSection")}</Text>
             </View>
 
-            <Text style={[s.title, { color: t.text }]}>Créer un compte</Text>
+            <Text style={[s.title, { color: t.text }]}>{tr("auth.registerWelcome")}</Text>
             <Text style={[s.subtitle, { color: t.textSecondary }]}>
-              Rejoignez-nous dès maintenant et profitez de tous nos services
+              {tr("auth.registerSub")}
             </Text>
 
             {/* ── EMAIL ── */}
-            <Text style={[s.label, { color: t.textSecondary }]}>Adresse email</Text>
+            <Text style={[s.label, { color: t.textSecondary }]}>{tr("auth.email")}</Text>
             <View style={[
               s.inputRow,
               { backgroundColor: inputBg, borderColor: inputBorder },
@@ -186,7 +188,7 @@ export default function RegisterScreen() {
               </View>
               <TextInput
                 style={[s.input, { color: t.text }]}
-                placeholder="exemple@gmail.com"
+                placeholder={tr("auth.emailPH")}
                 placeholderTextColor={t.textSecondary}
                 value={email}
                 onChangeText={setEmail}
@@ -201,7 +203,7 @@ export default function RegisterScreen() {
             </View>
 
             {/* ── PASSWORD ── */}
-            <Text style={[s.label, { color: t.textSecondary }]}>Mot de passe</Text>
+            <Text style={[s.label, { color: t.textSecondary }]}>{tr("auth.password")}</Text>
             <View style={[
               s.inputRow,
               { backgroundColor: inputBg, borderColor: inputBorder },
@@ -219,7 +221,7 @@ export default function RegisterScreen() {
               </View>
               <TextInput
                 style={[s.input, { color: t.text }]}
-                placeholder="Votre mot de passe"
+                placeholder={tr("auth.passwordPH")}
                 placeholderTextColor={t.textSecondary}
                 value={password}
                 onChangeText={setPassword}
@@ -237,7 +239,7 @@ export default function RegisterScreen() {
             </View>
 
             {/* ── CONFIRM PASSWORD ── */}
-            <Text style={[s.label, { color: t.textSecondary }]}>Confirmer le mot de passe</Text>
+            <Text style={[s.label, { color: t.textSecondary }]}>{tr("auth.confirmPassword")}</Text>
             <View style={[
               s.inputRow,
               { backgroundColor: inputBg, borderColor: confirmBorderColor },
@@ -267,7 +269,7 @@ export default function RegisterScreen() {
               </View>
               <TextInput
                 style={[s.input, { color: t.text }]}
-                placeholder="Confirmez votre mot de passe"
+                placeholder={tr("auth.confirmPH")}
                 placeholderTextColor={t.textSecondary}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -304,8 +306,8 @@ export default function RegisterScreen() {
                   color: password === confirmPassword ? "#22C55E" : t.danger,
                 }]}>
                   {password === confirmPassword
-                    ? "Les mots de passe correspondent"
-                    : "Les mots de passe ne correspondent pas"}
+                    ? tr("auth.pwdMatch")
+                    : tr("auth.pwdNoMatch")}
                 </Text>
               </View>
             )}
@@ -313,7 +315,7 @@ export default function RegisterScreen() {
             <View style={{ marginTop: 6 }}>
               <GradientButton
                 isLoad={isLoading}
-                title="Créer un compte"
+                title={tr("auth.registerBtn")}
                 onPress={handleRegister}
                 leftIcon={<ArrowIcon width={20} height={14} />}
                 rightIcon={<ArrowRightIcon width={30} height={24} />}
@@ -327,7 +329,7 @@ export default function RegisterScreen() {
                 backgroundColor: isDark ? t.surface : C.f4,
                 borderColor: dividerColor,
               }]}>
-                <Text style={[s.dividerText, { color: t.textSecondary }]}>OU</Text>
+                <Text style={[s.dividerText, { color: t.textSecondary }]}>{tr("common.or")}</Text>
               </View>
               <View style={[s.line, { backgroundColor: dividerColor }]} />
             </View>
@@ -342,9 +344,9 @@ export default function RegisterScreen() {
                 <FontAwesome6 name="arrow-right-to-bracket" size={15} color={t.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.loginMain, { color: t.text }]}>Déjà un compte ?</Text>
+                <Text style={[s.loginMain, { color: t.text }]}>{tr("auth.alreadyAccount")}</Text>
                 <Text style={[s.loginSub, { color: t.textSecondary }]}>
-                  Connectez-vous à votre espace
+                  {tr("auth.loginSpace")}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={t.textSecondary} />

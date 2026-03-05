@@ -105,13 +105,13 @@ const PILIERS = [
 const TEAM = [
   {
     name:    "BARAKA KPAVURO JERRY",
-    role:    "Fondateur — Leader réseau BIM",
+    role:    "Fondateur Du réseau BIM",
     detail:  "Concepteur du projet BIM NEXT",
     avatar:  "BJ",
   },
   {
     name:    "Félicien Mafutala",
-    role:    "Co-fondateur — Financier",
+    role:    " Financier",
     detail:  "Pilier stratégique & financier",
     avatar:  "FM",
   },
@@ -130,11 +130,13 @@ const SOCIALS = [
 ];
 
 const OFFICES = [
-  { city: "Bukavu",   code: "14235" },
+  { city: "Bunia",   code: "14235" },
   { city: "Kinshasa", code: "14235" },
+   { city: "Nord-Kivu", code: "14235" },
+   { city: "Lumbumbashi", code: "14235" },
 ];
 
-const SUPPORT_PHONE = "+243 850 846 231";
+const SUPPORT_PHONE = "+243 861166469";
 
 /* ═══════════════════════════════════════════════════════════════════════
    SVG — BimLogo (couleurs fixes : sur fond gradient)

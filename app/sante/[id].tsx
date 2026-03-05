@@ -1,12 +1,15 @@
+import NoData from "@/components/ui/noData";
+import { API_URL_BASE } from "@/constants/api";
+import { useGetAllProductsQuery } from "@/services/productServices";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef, useState, useEffect, useCallback, memo } from "react";
-import { Image } from "expo-image";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  Platform,
   RefreshControl,
   StatusBar,
   StyleSheet,
@@ -17,9 +20,7 @@ import {
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect, Circle, Path } from "react-native-svg";
-import { useGetAllProductsQuery } from "@/services/productServices";
-import NoData from "@/components/ui/noData";
+import Svg, { Circle, Defs, Path, Rect, Stop, LinearGradient as SvgGradient } from "react-native-svg";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -66,8 +67,9 @@ function useTheme() {
   return { isDark, t: isDark ? Colors.dark : Colors.light };
 }
 
+
 /* ─── SVG STABLES ────────────────────────────────────────────────────── */
-const EnergyBadge = memo(() => (
+const HealthBadge = memo(() => (
   <Svg width={44} height={44} viewBox="0 0 48 48">
     <Defs>
       <SvgGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -76,10 +78,12 @@ const EnergyBadge = memo(() => (
       </SvgGradient>
     </Defs>
     <Rect x={0} y={0} width={48} height={48} rx={14} fill="url(#bg)" />
-    <Path d="M27 6L14 26h12l-3 16 17-20H28z" fill={C.gold} opacity={0.95} />
+    {/* Croix médicale */}
+    <Rect x={20} y={10} width={8} height={28} rx={3} fill={C.white} opacity={0.90} />
+    <Rect x={10} y={20} width={28} height={8} rx={3} fill={C.white} opacity={0.90} />
   </Svg>
 ));
-EnergyBadge.displayName = "EnergyBadge";
+HealthBadge.displayName = "HealthBadge";
 
 const CoinIcon = memo(() => (
   <Svg width={18} height={18} viewBox="0 0 20 20">
@@ -103,11 +107,41 @@ const ArrowSvg = memo(() => (
 ));
 ArrowSvg.displayName = "ArrowSvg";
 
+/* ── Icône fallback quand imageUrl est null ── */
+const ImageFallbackIcon = memo(({ isDark }: { isDark: boolean }) => (
+  <Svg width={72} height={72} viewBox="0 0 72 72">
+    <Defs>
+      <SvgGradient id="fallGrad" x1="0" y1="0" x2="1" y2="1">
+        <Stop offset="0" stopColor={isDark ? "#1E2A3A" : "#DDE4F5"} />
+        <Stop offset="1" stopColor={isDark ? "#111827" : "#EEF2FF"} />
+      </SvgGradient>
+    </Defs>
+    {/* Fond carré arrondi */}
+    <Rect x={12} y={12} width={48} height={48} rx={16} fill={`${C.primary}18`} />
+    {/* Stéthoscope simplifié */}
+    {/* Tête du stéthoscope — cercle */}
+    <Circle cx={36} cy={44} r={7} fill="none" stroke={C.primary} strokeWidth={2.2} opacity={0.55} />
+    {/* Tube */}
+    <Path
+      d="M29 44 C20 44 18 36 18 30 M18 30 C18 24 22 22 26 22 M46 44 C54 44 54 36 54 30 M54 30 C54 24 50 22 46 22"
+      fill="none" stroke={C.primary} strokeWidth={2} strokeLinecap="round" opacity={0.40}
+    />
+    {/* Écouteurs */}
+    <Circle cx={26} cy={22} r={3} fill={C.primary} opacity={0.45} />
+    <Circle cx={46} cy={22} r={3} fill={C.primary} opacity={0.45} />
+    {/* Croix médicale au centre */}
+    <Rect x={33} y={28} width={6} height={16} rx={2} fill={C.primary} opacity={0.22} />
+    <Rect x={28} y={33} width={16} height={6} rx={2} fill={C.primary} opacity={0.22} />
+  </Svg>
+));
+ImageFallbackIcon.displayName = "ImageFallbackIcon";
+
 /* ─── PRODUCT CARD ───────────────────────────────────────────────────── */
 type ProductCardProps = { item: any; onPress: () => void; isDark: boolean };
 
 function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
   const t         = isDark ? Colors.dark : Colors.light;
+  const { t: tr } = useTranslation();
   const pressAnim = useRef(new Animated.Value(1)).current;
   const slideY    = useRef(new Animated.Value(20)).current;
   const opac      = useRef(new Animated.Value(0)).current;
@@ -122,6 +156,9 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
   const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
 
+  /* ── URL image — imageUrl peut être null ou string ── */
+  const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
+
   return (
     <Animated.View style={[
       cs.wrapper,
@@ -135,47 +172,71 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
     ]}>
       <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
 
-        {/* ── IMAGE ── */}
+        {/* ── IMAGE ou FALLBACK ── */}
         <View style={cs.imageWrap}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={cs.image} contentFit="cover" />
+          {imageUri ? (
+            /* Image réelle du produit */
+            <Image
+              source={{ uri: imageUri }}
+              style={cs.image}
+              contentFit="cover"
+              transition={300}
+              placeholder={{ thumbhash: "" }}
+            />
           ) : (
+            /* Fallback illustré */
             <LinearGradient
-              colors={isDark ? ["#1E2A3A", "#111827"] : ["#DDE4F5", "#EEF2FF"]}
+              colors={isDark ? ["#1A2238", "#111827"] : ["#DDE4F5", "#EEF2FF"]}
               style={cs.imageFallback}
             >
-             <Svg width={64} height={64} viewBox="0 0 48 48">
-  <Path
-    d="M20 6h8v12h12v8H28v12h-8V26H8v-8h12z"
-    fill={C.primary}
-    opacity={isDark ? 0.15 : 0.2}
-  />
-</Svg>
+              {/* Motif de fond subtil */}
+              <View style={cs.fallbackGrid} />
+              <ImageFallbackIcon isDark={isDark} />
+              <Text style={[cs.fallbackLabel, { color: isDark ? "rgba(255,255,255,0.18)" : "rgba(3,83,204,0.30)" }]}>
+                {tr("common.noImage")}
+              </Text>
             </LinearGradient>
           )}
 
-          {/* Overlay dégradé bas */}
-          <LinearGradient
-            colors={["transparent", isDark ? "rgba(0,0,0,0.75)" : "rgba(13,27,62,0.55)"]}
-            style={cs.imageOverlay}
-          />
+          {/* Overlay dégradé bas (sur image réelle seulement) */}
+          {imageUri && (
+            <LinearGradient
+              colors={["transparent", isDark ? "rgba(0,0,0,0.75)" : "rgba(13,27,62,0.55)"]}
+              style={cs.imageOverlay}
+            />
+          )}
 
           {/* Badge Santé */}
           <View style={cs.badgePos}>
-            <EnergyBadge />
+            <HealthBadge />
           </View>
 
           {/* Tag */}
-          <View style={[cs.tagPos, { backgroundColor: isDark ? "rgba(17,24,39,0.9)" : "rgba(255,255,255,0.92)" }]}>
-            <Text style={[cs.tagText, { color: t.text }]}>⚡ Santé</Text>
+          <View style={[cs.tagPos, {
+            backgroundColor: isDark ? "rgba(17,24,39,0.90)" : "rgba(255,255,255,0.92)",
+          }]}>
+            <Text style={[cs.tagText, { color: t.text }]}>{tr("sectors.santeTag")}</Text>
           </View>
 
-          {/* Prix flottant sur image */}
-          <View style={cs.priceOverlay}>
+          {/* Prix flottant — affiché même sur le fallback */}
+          <View style={[cs.priceOverlay, {
+            backgroundColor: imageUri
+              ? "rgba(255,255,255,0.15)"
+              : (isDark ? "rgba(3,83,204,0.22)" : "rgba(3,83,204,0.10)"),
+            borderColor: imageUri
+              ? "transparent"
+              : (isDark ? "rgba(77,150,255,0.22)" : "rgba(3,83,204,0.15)"),
+          }]}>
             <CoinIcon />
-            <Text style={cs.priceOverlayText}>
+            <Text style={[cs.priceOverlayText, {
+              color: imageUri ? C.white : (isDark ? "#93C5FD" : C.primary),
+            }]}>
               {item.price}{" "}
-              <Text style={cs.priceOverlayCurrency}>{item.currency?.code || "EC"}</Text>
+              <Text style={[cs.priceOverlayCurrency, {
+                color: imageUri ? "rgba(255,255,255,0.7)" : (isDark ? "rgba(147,197,253,0.65)" : "rgba(3,83,204,0.60)"),
+              }]}>
+                {item.currency?.code || "EC"}
+              </Text>
             </Text>
           </View>
         </View>
@@ -193,16 +254,28 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
 
           {/* Footer */}
           <View style={cs.footer}>
-            {/* Meta chips */}
             <View style={cs.metaRow}>
-              <View style={[cs.metaChip, { backgroundColor: isDark ? "rgba(3,83,204,0.2)" : "rgba(3,83,204,0.08)" }]}>
+              <View style={[cs.metaChip, {
+                backgroundColor: isDark ? "rgba(3,83,204,0.20)" : "rgba(3,83,204,0.08)",
+              }]}>
                 <Ionicons name="medical-outline" size={11} color={C.primary} />
-                <Text style={[cs.metaText, { color: C.primary }]}>Santé</Text>
+                <Text style={[cs.metaText, { color: C.primary }]}>{tr("sectors.santeTag")}</Text>
               </View>
               {item.currency?.code && (
-                <View style={[cs.metaChip, { backgroundColor: isDark ? "rgba(255,215,0,0.12)" : "rgba(255,215,0,0.15)" }]}>
+                <View style={[cs.metaChip, {
+                  backgroundColor: isDark ? "rgba(255,215,0,0.12)" : "rgba(255,215,0,0.15)",
+                }]}>
                   <Ionicons name="cash-outline" size={11} color={C.gold} />
                   <Text style={[cs.metaText, { color: C.gold }]}>{item.currency.code}</Text>
+                </View>
+              )}
+              {/* Badge "Sans image" discret */}
+              {!imageUri && (
+                <View style={[cs.metaChip, {
+                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(3,83,204,0.05)",
+                }]}>
+                  <Ionicons name="image-outline" size={11} color={t.textSecondary} />
+                  <Text style={[cs.metaText, { color: t.textSecondary }]}>{tr("common.noImage")}</Text>
                 </View>
               )}
             </View>
@@ -214,7 +287,7 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={cs.btn}
               >
-                <Text style={cs.btnText}>Voir</Text>
+                <Text style={cs.btnText}>{tr("common.see")}</Text>
                 <ArrowSvg />
               </LinearGradient>
             </TouchableOpacity>
@@ -229,9 +302,10 @@ ProductCard.displayName = "ProductCard";
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function EnergyProductsList() {
-  const router         = useRouter();
-  const { id }         = useLocalSearchParams();
-  const { isDark, t }  = useTheme();
+  const router        = useRouter();
+  const { id }        = useLocalSearchParams();
+  const { isDark, t } = useTheme();
+  const { t: tr }     = useTranslation();
 
   const [page,       setPage]       = useState(1);
   const [search,     setSearch]     = useState("");
@@ -264,33 +338,29 @@ export default function EnergyProductsList() {
     <View style={[s.root, { backgroundColor: t.background }]}>
       <StatusBar barStyle="light-content" />
 
-      {/* ── HEADER PLEINE LARGEUR ── */}
+      {/* ── HEADER ── */}
       <View style={[s.header, { shadowColor: isDark ? "#000" : C.primary }]}>
         <LinearGradient
           colors={t.headerGrad}
           start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        {/* Décos */}
-        <View style={s.deco1} />
-        <View style={s.deco2} />
-        <View style={s.deco3} />
+        <View style={s.deco1} /><View style={s.deco2} /><View style={s.deco3} />
 
         <SafeAreaView edges={["top"]}>
           <View style={s.topBar}>
             <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={20} color={C.white} />
             </TouchableOpacity>
-
             <View style={s.titleWrap}>
               <View style={s.titleBadge}>
-                <Svg width={13} height={13} viewBox="0 0 48 48">
-                  <Path d="M27 6L14 26h12l-3 16 17-20H28z" fill={C.gold} />
+                <Svg width={13} height={13} viewBox="0 0 24 24">
+                  <Rect x={10} y={3} width={4} height={18} rx={1.5} fill={C.gold} />
+                  <Rect x={3}  y={10} width={18} height={4} rx={1.5} fill={C.gold} />
                 </Svg>
               </View>
-              <Text style={s.headerTitle}>BIM SANTE</Text>
+              <Text style={s.headerTitle}>{tr("sectors.sante")}</Text>
             </View>
-
             <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
               <Ionicons name="notifications-outline" size={20} color={C.white} />
             </TouchableOpacity>
@@ -298,10 +368,9 @@ export default function EnergyProductsList() {
 
           <Text style={s.headerSub}>Trouvez votre offre santé idéale</Text>
 
-          {/* Search */}
           <View style={[s.searchWrap, {
             backgroundColor: t.inputBg,
-            borderColor: isDark ? "rgba(255,255,255,0.1)" : "transparent",
+            borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
             shadowColor: isDark ? "#000" : "#000",
           }]}>
             <View style={[s.searchIconWrap, { backgroundColor: isDark ? "rgba(3,83,204,0.25)" : C.inputBg }]}>
@@ -311,10 +380,8 @@ export default function EnergyProductsList() {
               style={[s.searchInput, { color: t.text }]}
               placeholder="Rechercher un produit Santé…"
               placeholderTextColor={t.textSecondary}
-              value={search}
-              onChangeText={handleSearchChange}
-              blurOnSubmit={false}
-              autoCorrect={false}
+              value={search} onChangeText={handleSearchChange}
+              blurOnSubmit={false} autoCorrect={false}
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={handleSearchClear}>
@@ -327,9 +394,7 @@ export default function EnergyProductsList() {
 
       {/* ── LISTE ── */}
       {dataList.length === 0 && !isFetching ? (
-        <View style={s.noData}>
-          <NoData />
-        </View>
+        <View style={s.noData}><NoData /></View>
       ) : (
         <FlatList
           data={dataList}
@@ -339,14 +404,8 @@ export default function EnergyProductsList() {
           onEndReachedThreshold={0.5}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={C.violet}
-              colors={[C.violet]}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.violet} colors={[C.violet]} />
           }
-          // ── Compteur résultats ──
           ListHeaderComponent={
             <View style={s.countRow}>
               <View style={[s.countDot, { backgroundColor: C.accent }]} />
@@ -371,148 +430,53 @@ export default function EnergyProductsList() {
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
   root: { flex: 1 },
-
-  /* Header — pleine largeur, position static (pas absolute ici car pas de FlatList avec ListHeader animé) */
   header: {
     overflow: "hidden",
     borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    paddingBottom: 20,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3, shadowRadius: 16,
+    paddingBottom: 20, elevation: 12,
+    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16,
   },
-  deco1: {
-    position: "absolute", width: 220, height: 220,
-    borderRadius: 110, backgroundColor: "rgba(255,255,255,0.05)",
-    top: -70, right: -60,
-  },
-  deco2: {
-    position: "absolute", width: 130, height: 130,
-    borderRadius: 65, backgroundColor: "rgba(255,255,255,0.04)",
-    bottom: -30, left: -30,
-  },
-  deco3: {
-    position: "absolute", width: 60, height: 60,
-    borderRadius: 30, backgroundColor: "rgba(255,215,0,0.07)",
-    bottom: 30, right: 80,
-  },
-
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
+  deco1: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.05)", top: -70, right: -60 },
+  deco2: { position: "absolute", width: 130, height: 130, borderRadius: 65,  backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -30 },
+  deco3: { position: "absolute", width: 60,  height: 60,  borderRadius: 30,  backgroundColor: "rgba(255,215,0,0.07)",  bottom: 30, right: 80 },
+  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8 },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
   titleWrap:  { flexDirection: "row", alignItems: "center", gap: 8 },
-  titleBadge: {
-    width: 26, height: 26, borderRadius: 8,
-    backgroundColor: "rgba(255,215,0,0.2)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: {
-    color: C.white, fontSize: 15,
-    fontFamily: "NexaLight", letterSpacing: 2,
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.6)",
-    fontFamily: "NexaLight", fontSize: 12,
-    paddingHorizontal: 20, marginTop: 6, marginBottom: 14,
-  },
-
-  searchWrap: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 16, marginHorizontal: 16,
-    paddingHorizontal: 10, paddingVertical: 9,
-    gap: 10, borderWidth: 1,
-    elevation: 3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
-  },
-  searchIconWrap: {
-    width: 30, height: 30, borderRadius: 10,
-    alignItems: "center", justifyContent: "center",
-  },
-  searchInput: {
-    flex: 1, fontFamily: "NexaLight",
-    fontSize: 13,
-  },
-
-  countRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 4, paddingTop: 16, paddingBottom: 8,
-  },
-  countDot: { width: 4, height: 16, borderRadius: 2 },
+  titleBadge: { width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(255,215,0,0.2)", alignItems: "center", justifyContent: "center" },
+  headerTitle: { color: C.white, fontSize: 15, fontFamily: "NexaLight", letterSpacing: 2 },
+  headerSub:   { color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight", fontSize: 12, paddingHorizontal: 20, marginTop: 6, marginBottom: 14 },
+  searchWrap:  { flexDirection: "row", alignItems: "center", borderRadius: 16, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 9, gap: 10, borderWidth: 1, elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
+  searchIconWrap: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
+  countRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4, paddingTop: 16, paddingBottom: 8 },
+  countDot:  { width: 4, height: 16, borderRadius: 2 },
   countText: { fontFamily: "NexaLight", fontSize: 12 },
-
   list:   { padding: 16, paddingTop: 4, paddingBottom: 60 },
   noData: { flex: 1, justifyContent: "center", alignItems: "center" },
 });
 
-/* ─── CARD STYLES ────────────────────────────────────────────────────── */
 const cs = StyleSheet.create({
-  wrapper: {
-    borderRadius: 22, marginBottom: 18,
-    overflow: "hidden", borderWidth: 1,
-    elevation: 5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10, shadowRadius: 12,
-  },
-
+  wrapper: { borderRadius: 22, marginBottom: 18, overflow: "hidden", borderWidth: 1, elevation: 5, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12 },
   imageWrap:     { width: "100%", height: 200, position: "relative" },
   image:         { width: "100%", height: "100%" },
-  imageFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
+  imageFallback: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
+  fallbackGrid:  { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
+  fallbackLabel: { fontFamily: "NexaLight", fontSize: 10, letterSpacing: 0.5 },
   imageOverlay:  { ...StyleSheet.absoluteFillObject, top: "40%" },
-
-  badgePos: {
-    position: "absolute", top: 12, left: 12,
-    elevation: 4,
-    shadowColor: C.deep,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3, shadowRadius: 6,
-  },
-  tagPos: {
-    position: "absolute", top: 14, right: 12,
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
-  },
-  tagText: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
-
-  /* Prix flottant en bas de l'image */
-  priceOverlay: {
-    position: "absolute", bottom: 12, left: 12,
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-  },
-  priceOverlayText:     { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-  priceOverlayCurrency: { color: "rgba(255,255,255,0.7)", fontSize: 11 },
-
+  badgePos: { position: "absolute", top: 12, left: 12, elevation: 4, shadowColor: C.deep, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  tagPos:   { position: "absolute", top: 14, right: 12, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  tagText:  { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
+  priceOverlay: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
+  priceOverlayText:     { fontFamily: "NexaLight", fontSize: 15 },
+  priceOverlayCurrency: { fontSize: 11 },
   content: { padding: 16 },
-
-  name: { fontFamily: "NexaLight", fontSize: 16, letterSpacing: 0.2, marginBottom: 5 },
-  desc: { fontFamily: "NexaLight", fontSize: 12, lineHeight: 18, marginBottom: 12 },
-
+  name:    { fontFamily: "NexaLight", fontSize: 16, letterSpacing: 0.2, marginBottom: 5 },
+  desc:    { fontFamily: "NexaLight", fontSize: 12, lineHeight: 18, marginBottom: 12 },
   divider: { height: 1, marginBottom: 12 },
-
   footer:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  metaRow: { flexDirection: "row", gap: 8 },
-  metaChip: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
-  },
+  metaRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", flex: 1, marginRight: 8 },
+  metaChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   metaText: { fontFamily: "NexaLight", fontSize: 11 },
-
-  btn: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: 14,
-    elevation: 4,
-    shadowColor: C.violet,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28, shadowRadius: 6,
-  },
-  btnText: { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
+  btn:      { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, elevation: 4, shadowColor: C.violet, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 6 },
+  btnText:  { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
 });

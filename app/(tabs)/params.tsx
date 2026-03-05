@@ -8,7 +8,9 @@ import {
   Alert,
   Animated,
   LayoutAnimation,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,18 +18,13 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { useLogOutMutation } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/theme";
-
-/* ─── Hook thème (même pattern) ─────────────────────────────────────── */
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
+import { useAppTheme } from "@/app/_layout";
+import { useTranslation } from "react-i18next";
+import { changeLanguage } from "@/i18n";
 
 /* ─── PALETTE BRAND (fixe) ───────────────────────────────────────────── */
 const B = {
@@ -40,20 +37,11 @@ const B = {
   red:     "#EF4444",
 };
 
-/* ─── DATA ───────────────────────────────────────────────────────────── */
-const MENU_ITEMS = [
-  { id: "profile",       title: "Mon profil",                  icon: "person-outline",             route: "/profile"      },
-  { id: "notifications", title: "Notifications",               icon: "notifications-outline",       route: "/notification" },
-  { id: "history",       title: "Historique des transactions", icon: "time-outline",                route: "/scan"         },
-  { id: "support",       title: "Support",                     icon: "help-circle-outline",         route: "/support"      },
-  { id: "terms",         title: "Termes d'utilisation",        icon: "document-text-outline",       route: "/terms"        },
-  { id: "about",         title: "À propos de BIM",             icon: "information-circle-outline",  route: "/apropos"      },
-];
-
-const FAQS = [
-  { q: "Comment envoyer de l'argent ?",            a: "Scannez simplement le QR code du bénéficiaire pour envoyer instantanément."       },
-  { q: "Comment recevoir un paiement ?",           a: "Partagez votre QR code personnel avec vos clients via l'onglet Transactions."     },
-  { q: "Mes transactions sont-elles sécurisées ?", a: "Oui, toutes les opérations sont protégées par des protocoles de sécurité avancés." },
+const LANGUAGES = [
+  { code: "fr", label: "🇫🇷 Français"  },
+  { code: "en", label: "🇬🇧 English"   },
+  { code: "ln", label: "🇨🇩 Lingala"   },
+  { code: "sw", label: "🇹🇿 Swahili"   },
 ];
 
 /* ─── SECTION LABEL ──────────────────────────────────────────────────── */
@@ -68,10 +56,11 @@ function SectionLabel({ title, icon }: { title: string; icon: string }) {
 
 /* ─── MENU ITEM ──────────────────────────────────────────────────────── */
 function MenuItem({
-  item, onPress, isLast, isDark, t,
+  item, onPress, isLast, isDark, theme,
 }: {
-  item: typeof MENU_ITEMS[number]; onPress: () => void;
-  isLast: boolean; isDark: boolean; t: any;
+  item: { id: string; title: string; icon: string; route: string };
+  onPress: () => void;
+  isLast: boolean; isDark: boolean; theme: any;
 }) {
   const scale    = useRef(new Animated.Value(1)).current;
   const pressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
@@ -89,10 +78,10 @@ function MenuItem({
         }]}>
           <Ionicons name={item.icon as any} size={18} color={isDark ? "#93C5FD" : B.primary} />
         </View>
-        <Text style={[ms.title, { color: isDark ? t.text : "#0D1B3E" }]}>
+        <Text style={[ms.title, { color: isDark ? theme.text : "#0D1B3E" }]}>
           {item.title}
         </Text>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? t.textSecondary : "#7B8DB0"} />
+        <Ionicons name="chevron-forward" size={16} color={isDark ? theme.textSecondary : "#7B8DB0"} />
       </Animated.View>
     </TouchableOpacity>
   );
@@ -100,16 +89,16 @@ function MenuItem({
 
 /* ─── FAQ ITEM ───────────────────────────────────────────────────────── */
 function FaqItem({
-  item, index, active, onToggle, isDark, t,
+  item, index, total, active, onToggle, isDark, theme,
 }: {
-  item: typeof FAQS[number]; index: number; active: boolean;
-  onToggle: () => void; isDark: boolean; t: any;
+  item: { q: string; a: string }; index: number; total: number; active: boolean;
+  onToggle: () => void; isDark: boolean; theme: any;
 }) {
   return (
     <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
       <View style={[
         fs.item,
-        index < FAQS.length - 1 && {
+        index < total - 1 && {
           borderBottomWidth: 1,
           borderBottomColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.10)",
         },
@@ -120,13 +109,13 @@ function FaqItem({
           }]}>
             <Text style={[fs.qLetter, { color: isDark ? "#93C5FD" : B.primary }]}>Q</Text>
           </View>
-          <Text style={[fs.question, { color: isDark ? t.text : "#0D1B3E" }]} numberOfLines={active ? undefined : 2}>
+          <Text style={[fs.question, { color: isDark ? theme.text : "#0D1B3E" }]} numberOfLines={active ? undefined : 2}>
             {item.q}
           </Text>
           <Ionicons
             name={active ? "chevron-up" : "chevron-down"}
             size={16}
-            color={isDark ? t.textSecondary : "#7B8DB0"}
+            color={isDark ? theme.textSecondary : "#7B8DB0"}
           />
         </View>
         {active && (
@@ -134,7 +123,7 @@ function FaqItem({
             backgroundColor: isDark ? "rgba(30,42,60,0.80)" : "rgba(3,83,204,0.06)",
             borderLeftColor: isDark ? "#4D96FF" : B.primary,
           }]}>
-            <Text style={[fs.answer, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>
+            <Text style={[fs.answer, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
               {item.a}
             </Text>
           </View>
@@ -147,25 +136,50 @@ function FaqItem({
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function Params() {
   const router = useRouter();
-  const { isDark, t } = useTheme();
+  const { isDark, toggleTheme } = useAppTheme();
+  const theme = isDark ? Colors.dark : Colors.light;
+  const { t, i18n } = useTranslation();
   const [logOut, { isLoading }] = useLogOutMutation();
 
-  const [language,  setLanguage]  = useState("fr");
-  const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const [langModalVisible, setLangModalVisible] = useState(false);
+  const [activeFaq, setActiveFaq]               = useState<number | null>(null);
+
+  const currentLang = i18n.language ?? "fr";
+  const currentLangLabel = LANGUAGES.find(l => l.code === currentLang)?.label ?? "🇫🇷 Français";
+
+  const MENU_ITEMS = [
+    { id: "profile",       title: t("params.profile"),       icon: "person-outline",            route: "/profile"      },
+    { id: "notifications", title: t("params.notifications"), icon: "notifications-outline",      route: "/notification" },
+    { id: "history",       title: t("params.history"),       icon: "time-outline",               route: "/scan"         },
+    { id: "support",       title: t("params.support"),       icon: "help-circle-outline",        route: "/support"      },
+    { id: "terms",         title: t("params.terms"),         icon: "document-text-outline",      route: "/terms"        },
+    { id: "about",         title: t("params.about"),         icon: "information-circle-outline", route: "/apropos"      },
+  ];
+
+  const FAQS = [
+    { q: t("params.faq1q"), a: t("params.faq1a") },
+    { q: t("params.faq2q"), a: t("params.faq2a") },
+    { q: t("params.faq3q"), a: t("params.faq3a") },
+  ];
 
   const toggleFaq = (i: number) => {
     LayoutAnimation.easeInEaseOut();
     setActiveFaq(activeFaq === i ? null : i);
   };
 
+  const handleSelectLanguage = async (code: string) => {
+    setLangModalVisible(false);
+    await changeLanguage(code);
+  };
+
   const handleLogout = async () => {
     Alert.alert(
-      "Déconnexion",
-      "Voulez-vous vraiment vous déconnecter ?",
+      t("params.logoutTitle"),
+      t("params.logoutMsg"),
       [
-        { text: "Annuler", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Déconnecter", style: "destructive",
+          text: t("params.logoutConfirm"), style: "destructive",
           onPress: async () => {
             try {
               const email = await AsyncStorage.getItem("email");
@@ -176,7 +190,7 @@ export default function Params() {
                 router.replace("/login");
               }
             } catch (err: any) {
-              Alert.alert(err?.data?.error || "Une erreur est survenue");
+              Alert.alert(err?.data?.error || t("common.error"));
             }
           },
         },
@@ -188,12 +202,52 @@ export default function Params() {
     ? ["#1A1F3A", "#0A1628"]
     : [B.deep, B.primary];
 
-  const cardBg      = isDark ? t.card    : "#FFFFFF";
+  const cardBg       = isDark ? theme.card    : "#FFFFFF";
   const dividerColor = isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.10)";
 
   return (
-    <View style={[s.root, { backgroundColor: isDark ? t.background : B.primary }]}>
+    <View style={[s.root, { backgroundColor: isDark ? theme.background : B.primary }]}>
       <StatusBar barStyle="light-content" />
+
+      {/* ── LANGUAGE PICKER MODAL ── */}
+      <Modal
+        visible={langModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLangModalVisible(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => setLangModalVisible(false)}>
+          <Pressable style={[s.modalBox, { backgroundColor: isDark ? "#1A2340" : "#FFFFFF" }]}>
+            <Text style={[s.modalTitle, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}>
+              {t("language.select")}
+            </Text>
+            {LANGUAGES.map((lang) => {
+              const isSelected = lang.code === currentLang;
+              return (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[s.langOption, {
+                    backgroundColor: isSelected
+                      ? (isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.08)")
+                      : "transparent",
+                    borderColor: isSelected
+                      ? (isDark ? "#4D96FF" : B.primary)
+                      : (isDark ? "rgba(77,150,255,0.12)" : "rgba(3,83,204,0.10)"),
+                  }]}
+                  onPress={() => handleSelectLanguage(lang.code)}
+                >
+                  <Text style={[s.langOptionText, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}>
+                    {lang.label}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark-circle" size={18} color={isDark ? "#4D96FF" : B.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
 
@@ -217,16 +271,16 @@ export default function Params() {
             <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={22} color={B.white} />
             </TouchableOpacity>
-            <Text style={s.headerTitle}>Paramètres</Text>
+            <Text style={s.headerTitle}>{t("params.title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
-          <Text style={s.headerSub}>Gérez votre compte et préférences</Text>
+          <Text style={s.headerSub}>{t("params.subtitle")}</Text>
         </View>
 
         {/* ── PREFERENCES CARD ── */}
         <View style={s.section}>
-          <SectionLabel title="Préférences" icon="settings-outline" />
+          <SectionLabel title={t("params.preferences")} icon="settings-outline" />
 
           <View style={[s.card, {
             backgroundColor: cardBg,
@@ -241,25 +295,28 @@ export default function Params() {
                 }]}>
                   <Ionicons name="language-outline" size={16} color={isDark ? "#93C5FD" : B.primary} />
                 </View>
-                <Text style={[s.prefLabel, { color: isDark ? t.text : "#0D1B3E" }]}>Langue</Text>
+                <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
+                  {t("params.language")}
+                </Text>
               </View>
               <TouchableOpacity
                 style={[s.langBtn, {
                   backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.06)",
                   borderColor:     isDark ? "rgba(77,150,255,0.20)" : "rgba(3,83,204,0.10)",
                 }]}
-                onPress={() => setLanguage(language === "fr" ? "en" : "fr")}
+                onPress={() => setLangModalVisible(true)}
               >
                 <Ionicons name="globe-outline" size={13} color={isDark ? "#93C5FD" : B.primary} />
                 <Text style={[s.langText, { color: isDark ? "#93C5FD" : B.primary }]}>
-                  {language === "fr" ? "🇫🇷 Français" : "🇬🇧 English"}
+                  {currentLangLabel}
                 </Text>
+                <Ionicons name="chevron-down" size={12} color={isDark ? "#93C5FD" : B.primary} />
               </TouchableOpacity>
             </View>
 
             <View style={[s.divider, { backgroundColor: dividerColor }]} />
 
-            {/* Mode sombre (informatif — système) */}
+            {/* Mode sombre — Switch interactif */}
             <View style={s.prefRow}>
               <View style={s.prefLeft}>
                 <View style={[s.prefIcon, {
@@ -271,26 +328,24 @@ export default function Params() {
                     color="#8B5CF6"
                   />
                 </View>
-                <Text style={[s.prefLabel, { color: isDark ? t.text : "#0D1B3E" }]}>
-                  Mode sombre
+                <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
+                  {t("params.darkMode")}
                 </Text>
               </View>
-              {/* Reflect actual system theme — read only indicator */}
-              <View style={[s.themeIndicator, {
-                backgroundColor: isDark ? "rgba(139,92,246,0.18)" : "#8B5CF615",
-                borderColor:     isDark ? "rgba(139,92,246,0.35)" : "#8B5CF630",
-              }]}>
-                <Text style={[s.themeIndicatorText, { color: "#8B5CF6" }]}>
-                  {isDark ? "Activé" : "Désactivé"}
-                </Text>
-              </View>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{ false: "rgba(139,92,246,0.20)", true: "#8B5CF6" }}
+                thumbColor={isDark ? "#FFFFFF" : "#8B5CF6"}
+                ios_backgroundColor="rgba(139,92,246,0.20)"
+              />
             </View>
           </View>
         </View>
 
         {/* ── MENU ── */}
         <View style={s.section}>
-          <SectionLabel title="Navigation" icon="grid-outline" />
+          <SectionLabel title={t("params.navigation")} icon="grid-outline" />
           <View style={[s.card, {
             backgroundColor: cardBg,
             borderWidth: isDark ? 1 : 0,
@@ -302,7 +357,7 @@ export default function Params() {
                 item={item}
                 isLast={i === MENU_ITEMS.length - 1}
                 isDark={isDark}
-                t={t}
+                theme={theme}
                 onPress={() => router.push(item.route as any)}
               />
             ))}
@@ -311,7 +366,7 @@ export default function Params() {
 
         {/* ── FAQ ── */}
         <View style={s.section}>
-          <SectionLabel title="FAQ" icon="help-buoy-outline" />
+          <SectionLabel title={t("params.faq")} icon="help-buoy-outline" />
           <View style={[s.card, {
             backgroundColor: cardBg,
             borderWidth: isDark ? 1 : 0,
@@ -322,10 +377,11 @@ export default function Params() {
                 key={i}
                 item={item}
                 index={i}
+                total={FAQS.length}
                 active={activeFaq === i}
                 onToggle={() => toggleFaq(i)}
                 isDark={isDark}
-                t={t}
+                theme={theme}
               />
             ))}
           </View>
@@ -335,14 +391,14 @@ export default function Params() {
         <View style={s.logoutWrap}>
           <GradientButton
             isLoad={isLoading}
-            title="Déconnexion"
+            title={t("params.logout")}
             onPress={handleLogout}
             leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
             rightIcon={<ArrowRightIcon width={26} height={20} />}
           />
         </View>
 
-        <Text style={s.version}>BIM NEXT · v1.0.0</Text>
+        <Text style={s.version}>{t("common.version")}</Text>
         <View style={{ height: 80 }} />
       </ScrollView>
     </View>
@@ -414,19 +470,36 @@ const s = StyleSheet.create({
   },
   langText: { fontFamily: "NexaLight", fontSize: 12 },
 
-  /* Indicateur mode sombre (système) */
-  themeIndicator: {
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1,
-  },
-  themeIndicatorText: { fontFamily: "NexaLight", fontSize: 12 },
-
   logoutWrap: { paddingHorizontal: 16, marginBottom: 16 },
 
   version: {
     textAlign: "center", fontFamily: "NexaLight",
     fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4,
   },
+
+  modalOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center", alignItems: "center",
+  },
+  modalBox: {
+    width: "80%", borderRadius: 20,
+    padding: 20, gap: 8,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3, shadowRadius: 16,
+  },
+  modalTitle: {
+    fontFamily: "NexaLight", fontSize: 15,
+    marginBottom: 8, textAlign: "center",
+  },
+  langOption: {
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 12, borderWidth: 1,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  langOptionText: { fontFamily: "NexaLight", fontSize: 14 },
 });
 
 const ms = StyleSheet.create({

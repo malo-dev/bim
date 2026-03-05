@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect, Circle, Path } from "react-native-svg";
 import { useGetAllProductsQuery } from "@/services/productServices";
 import NoData from "@/components/ui/noData";
+import { API_URL_BASE } from "@/constants/api";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -122,6 +123,8 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
   const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
 
+  const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
+
   return (
     <Animated.View style={[
       cs.wrapper,
@@ -137,8 +140,8 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
 
         {/* ── IMAGE ── */}
         <View style={cs.imageWrap}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={cs.image} contentFit="cover" />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={cs.image} contentFit="cover" transition={300} />
           ) : (
             <LinearGradient
               colors={isDark ? ["#1E2A3A", "#111827"] : ["#DDE4F5", "#EEF2FF"]}
@@ -150,10 +153,12 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
             </LinearGradient>
           )}
 
-          <LinearGradient
-            colors={["transparent", isDark ? "rgba(0,0,0,0.75)" : "rgba(13,27,62,0.55)"]}
-            style={cs.imageOverlay}
-          />
+          {imageUri && (
+            <LinearGradient
+              colors={["transparent", isDark ? "rgba(0,0,0,0.75)" : "rgba(13,27,62,0.55)"]}
+              style={cs.imageOverlay}
+            />
+          )}
 
           <View style={cs.badgePos}>
             <EnergyBadge />
@@ -164,11 +169,22 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
           </View>
 
           {/* Prix flottant sur image */}
-          <View style={cs.priceOverlay}>
+          <View style={[cs.priceOverlay, {
+            backgroundColor: imageUri
+              ? "rgba(255,255,255,0.15)"
+              : (isDark ? "rgba(3,83,204,0.22)" : "rgba(3,83,204,0.10)"),
+            borderColor: imageUri
+              ? "transparent"
+              : (isDark ? "rgba(77,150,255,0.22)" : "rgba(3,83,204,0.15)"),
+          }]}>
             <CoinIcon />
-            <Text style={cs.priceOverlayText}>
+            <Text style={[cs.priceOverlayText, {
+              color: imageUri ? C.white : (isDark ? "#93C5FD" : C.primary),
+            }]}>
               {item.price}{" "}
-              <Text style={cs.priceOverlayCurrency}>{item.currency?.code || "EC"}</Text>
+              <Text style={[cs.priceOverlayCurrency, {
+                color: imageUri ? "rgba(255,255,255,0.7)" : (isDark ? "rgba(147,197,253,0.65)" : "rgba(3,83,204,0.60)"),
+              }]}>{item.currency?.code || "EC"}</Text>
             </Text>
           </View>
         </View>
@@ -195,6 +211,12 @@ function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
                 <View style={[cs.metaChip, { backgroundColor: isDark ? "rgba(255,215,0,0.12)" : "rgba(255,215,0,0.15)" }]}>
                   <Ionicons name="cash-outline" size={11} color={C.gold} />
                   <Text style={[cs.metaText, { color: C.gold }]}>{item.currency.code}</Text>
+                </View>
+              )}
+              {!imageUri && (
+                <View style={[cs.metaChip, { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(3,83,204,0.05)" }]}>
+                  <Ionicons name="image-outline" size={11} color={t.textSecondary} />
+                  <Text style={[cs.metaText, { color: t.textSecondary }]}>Sans image</Text>
                 </View>
               )}
             </View>
@@ -419,9 +441,9 @@ const cs = StyleSheet.create({
   tagPos:   { position: "absolute", top: 14, right: 12, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   tagText:  { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
 
-  priceOverlay: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  priceOverlayText:     { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-  priceOverlayCurrency: { color: "rgba(255,255,255,0.7)", fontSize: 11 },
+  priceOverlay: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
+  priceOverlayText:     { fontFamily: "NexaLight", fontSize: 15 },
+  priceOverlayCurrency: { fontSize: 11 },
 
   content: { padding: 16 },
   name:    { fontFamily: "NexaLight", fontSize: 16, letterSpacing: 0.2, marginBottom: 5 },

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { useRouter } from "expo-router";
@@ -29,12 +30,12 @@ import { useAskPasswordResetMutation } from "@/services/authService";
 
 /* ─── ÉTAPES — pattern sectionHeader du home ─────────────────────────── */
 const STEPS = [
-  { icon: "mail-outline",      label: "Email",  key: "email"  },
-  { icon: "keypad-outline",    label: "Code",   key: "code"   },
-  { icon: "lock-open-outline", label: "Reset",  key: "reset"  },
+  { icon: "mail-outline",      key: "email"  },
+  { icon: "keypad-outline",    key: "code"   },
+  { icon: "lock-open-outline", key: "reset"  },
 ];
 
-function Steps() {
+function Steps({ labels }: { labels: string[] }) {
   return (
     <View style={st.row}>
       {STEPS.map((step, i) => (
@@ -49,7 +50,7 @@ function Steps() {
               color={i === 0 ? C.white : C.muted}
             />
           </View>
-          <Text style={[st.label, i === 0 && st.labelActive]}>{step.label}</Text>
+          <Text style={[st.label, i === 0 && st.labelActive]}>{labels[i]}</Text>
         </View>
       ))}
     </View>
@@ -58,6 +59,7 @@ function Steps() {
 
 /* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function ForgotPasswordScreen() {
+  const { t: tr } = useTranslation();
   function useTheme() {
     const scheme = useColorScheme();
     const isDark  = scheme === "dark";
@@ -115,7 +117,7 @@ export default function ForgotPasswordScreen() {
     } catch (err) {
       shake();
       const dataMess = err as any;
-      Alert.alert("Erreur", dataMess?.data?.error || "Une erreur est survenue");
+      Alert.alert(tr("common.error"), dataMess?.data?.error || tr("common.error"));
     }
   };
 
@@ -160,9 +162,9 @@ export default function ForgotPasswordScreen() {
               <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 1 }]} />
             </View>
 
-            <Text style={s.heroTitle}>Mot de passe oublié ?</Text>
+            <Text style={s.heroTitle}>{tr("auth.forgotTitle")}</Text>
             <Text style={s.heroSub}>
-              Entrez votre email — nous vous enverrons un code de réinitialisation
+              {tr("auth.forgotSub")}
             </Text>
           </Animated.View>
 
@@ -172,7 +174,7 @@ export default function ForgotPasswordScreen() {
             {/* Section header — copie exacte du home */}
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: C.gold }]} />
-              <Text style={s.sectionLabel}>RÉINITIALISATION</Text>
+              <Text style={s.sectionLabel}>{tr("auth.resetSection")}</Text>
             </View>
 
             {/* Étapes + icône mail */}
@@ -183,14 +185,14 @@ export default function ForgotPasswordScreen() {
                 {/* Point doré — badge style home */}
                 <View style={s.goldDot} />
               </View>
-              <Steps />
+              <Steps labels={[tr("auth.emailStep"), tr("auth.codeStep"), tr("auth.resetStep")]} />
             </View>
 
             {/* Séparateur */}
             <View style={s.sep} />
 
             {/* Label */}
-            <Text style={s.label}>Adresse email</Text>
+            <Text style={s.label}>{tr("auth.email")}</Text>
 
             {/* Input row — même style LoginScreen / RegisterScreen */}
             <View style={[s.inputRow, focused && s.inputFocused]}>
@@ -199,7 +201,7 @@ export default function ForgotPasswordScreen() {
               </View>
               <TextInput
                 style={s.input}
-                placeholder="exemple@gmail.com"
+                placeholder={tr("auth.emailPH")}
                 placeholderTextColor={C.muted}
                 value={email}
                 onChangeText={setEmail}
@@ -221,7 +223,7 @@ export default function ForgotPasswordScreen() {
                 <Ionicons name="information-circle-outline" size={15} color={C.primary} />
               </View>
               <Text style={s.infoText}>
-                Un code à 6 chiffres sera envoyé à cette adresse email
+                {tr("auth.emailCodeHint")}
               </Text>
             </View>
 
@@ -229,7 +231,7 @@ export default function ForgotPasswordScreen() {
             <View style={{ marginTop: 22 }}>
               <GradientButton
                 isLoad={isLoading}
-                title="Envoyer le code"
+                title={tr("auth.sendCode")}
                 onPress={handleSend}
                 leftIcon={<ArrowIcon width={18} height={12} />}
                 rightIcon={<ArrowRightIcon width={26} height={20} />}
@@ -241,7 +243,7 @@ export default function ForgotPasswordScreen() {
               <View style={[s.iconCircle, { backgroundColor: C.f4, width: 36, height: 36, borderRadius: 18 }]}>
                 <FontAwesome6 name="arrow-left" size={13} color={C.muted} />
               </View>
-              <Text style={s.backText}>Retour à la connexion</Text>
+              <Text style={s.backText}>{tr("auth.backToLogin")}</Text>
             </TouchableOpacity>
 
           </Animated.View>

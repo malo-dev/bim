@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
 import { useRouter } from "expo-router";
@@ -67,6 +68,7 @@ const OtpDisplay = ({ code }: { code: string }) => {
 
 /* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function VerifyCode() {
+  const { t: tr } = useTranslation();
   const router = useRouter();
   const [verifyOtp,       { isLoading }]           = useVerifyOtpMutation();
   const [askPasswordReset, { isLoading: isValue }] = useAskPasswordResetMutation();

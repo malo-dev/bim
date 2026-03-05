@@ -1,42 +1,42 @@
+import { C, Colors } from "@/constants/theme";
+import { Ionicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
-import { useState, useRef, useEffect } from "react";
-import { C, Colors} from "@/constants/theme";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Animated,
+  Dimensions,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
+  useColorScheme,
   View,
-  Image,
-  Animated,
-  Dimensions,
-  Text,
-  StatusBar,
-   useColorScheme,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 
 import logo from "@/assets/images/logo.jpeg";
 import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
 import { API_URL_BASE } from "@/constants/api";
 import { useLoginMutation } from "@/services/authService";
+import { useTranslation } from "react-i18next";
 import { useCreateHistoryMutation } from "@/services/historyService";
 import { useCreateNotificationMutation } from "@/services/notificationService";
 import {
-  registerForPushNotificationsAsync,
-  sendLocalNotification,
+  registerForPushNotificationsAsync
 } from "@/services/pushNotifications";
 
 const {height } = Dimensions.get("window");
@@ -85,12 +85,13 @@ export default function LoginScreen() {
     ).start();
   }, [cardOpac, cardSlide, floatY, logoOpac, logoScale]);
 
-   const { isDark,t }             = useTheme();
+  const { isDark, t }  = useTheme();
+  const { t: tr }      = useTranslation();
 
   /* ── Handlers ── */
   const handleLogin = async () => {
 
-    console.log(API_URL_BASE)
+  
     try {
       const deviceName = Device.deviceName || "Unknown device";
       const osName     = Device.osName || Platform.OS;
@@ -143,13 +144,7 @@ export default function LoginScreen() {
           userId: userId || null,
           action: "Échec de la connexion ❌",
         });
-        await createNotification({
-          title: "Échec de connexion",
-          message: "Une tentative de connexion a échoué.",
-          type: "ERREUR",
-          userId: userId || null,
-        });
-        await sendLocalNotification("Échec de connexion ❌", "Une tentative de connexion a échoué.");
+      
       } catch {
         Alert.alert("Une erreur est survenue");
       }
@@ -217,18 +212,15 @@ export default function LoginScreen() {
             {/* Section header — copie exacte du home */}
             <View style={s.sectionHeader}>
               <View style={[s.sectionDot, { backgroundColor: C.accent }]} />
-              <Text style={s.sectionLabel}>CONNEXION</Text>
+              <Text style={s.sectionLabel}>{tr("auth.loginSection")}</Text>
             </View>
 
-            <Text style={s.title}>Bon retour parmi nous !</Text>
-            <Text style={s.subtitle}>
-              Connectez-vous et plongez dans une expérience unique
-            </Text>
+            <Text style={s.title}>{tr("auth.loginWelcome")}</Text>
+            <Text style={s.subtitle}>{tr("auth.loginSub")}</Text>
 
             {/* ── EMAIL ── */}
-            <Text style={s.label}>Adresse email</Text>
+            <Text style={s.label}>{tr("auth.email")}</Text>
             <View style={[s.inputRow, focusedInput === "email" && s.inputFocused]}>
-              {/* iconCircle — copie de home */}
               <View style={[s.iconCircle, { backgroundColor: focusedInput === "email" ? C.primary + "18" : C.f4 }]}>
                 <Ionicons
                   name="mail-outline"
@@ -238,7 +230,7 @@ export default function LoginScreen() {
               </View>
               <TextInput
                 style={s.input}
-                placeholder="exemple@gmail.com"
+                placeholder={tr("auth.emailPH")}
                 placeholderTextColor={C.muted}
                 value={email}
                 onChangeText={setEmail}
@@ -253,7 +245,7 @@ export default function LoginScreen() {
             </View>
 
             {/* ── PASSWORD ── */}
-            <Text style={s.label}>Mot de passe</Text>
+            <Text style={s.label}>{tr("auth.password")}</Text>
             <View style={[s.inputRow, focusedInput === "password" && s.inputFocused]}>
               <View style={[s.iconCircle, { backgroundColor: focusedInput === "password" ? C.primary + "18" : C.f4 }]}>
                 <Ionicons
@@ -264,7 +256,7 @@ export default function LoginScreen() {
               </View>
               <TextInput
                 style={s.input}
-                placeholder="Votre mot de passe"
+                placeholder={tr("auth.passwordPH")}
                 placeholderTextColor={C.muted}
                 value={password}
                 onChangeText={setPassword}
@@ -287,13 +279,13 @@ export default function LoginScreen() {
               style={s.forgotRow}
             >
               <FontAwesome6 name="circle-question" size={12} color={C.red} />
-              <Text style={s.forgot}>Mot de passe oublié ?</Text>
+              <Text style={s.forgot}>{tr("auth.forgotPwd")}</Text>
             </TouchableOpacity>
 
             {/* Login button */}
             <GradientButton
               isLoad={isLoading}
-              title="Se connecter"
+              title={tr("auth.loginBtn")}
               onPress={handleLogin}
               leftIcon={<ArrowIcon width={20} height={14} />}
               rightIcon={<ArrowRightIcon width={30} height={24} />}
@@ -303,7 +295,7 @@ export default function LoginScreen() {
             <View style={s.divider}>
               <View style={s.line} />
               <View style={s.dividerBadge}>
-                <Text style={s.dividerText}>OU</Text>
+                <Text style={s.dividerText}>{tr("common.or")}</Text>
               </View>
               <View style={s.line} />
             </View>
@@ -318,8 +310,8 @@ export default function LoginScreen() {
                 <FontAwesome6 name="user-plus" size={16} color={C.violet} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.registerMain}>Créer un compte</Text>
-                <Text style={s.registerSub}>Rejoignez-nous en quelques secondes</Text>
+                <Text style={s.registerMain}>{tr("auth.registerBtn")}</Text>
+                <Text style={s.registerSub}>{tr("auth.joinUs")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </TouchableOpacity>

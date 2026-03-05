@@ -113,6 +113,14 @@ export const authApi = createApi({
         data: userData,
       }),
     }),
+
+    storeExpoPushToken: builder.mutation({
+      query: ({ userId, expoPushToken }) => ({
+        url: `/auth/users/${userId}/expoPushToken`,
+        method: 'POST',
+        data: { expoPushToken },
+      }),
+    }),
   }),
 });
 
@@ -126,4 +134,5 @@ export const {
   useVerifyOtpMutation,
   useVerifyPassMutation,
   useRefreshMutation,
+  useStoreExpoPushTokenMutation,
 } = authApi;

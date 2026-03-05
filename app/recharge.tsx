@@ -1,6 +1,7 @@
 import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -200,6 +201,7 @@ function Keypad({
 export default function RechargeEcoinsScreen() {
   const router = useRouter();
   const { isDark, t } = useTheme();
+  const { t: tr } = useTranslation();
 
   const [amount,         setAmount]         = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
@@ -244,15 +246,15 @@ export default function RechargeEcoinsScreen() {
   /* ── Step 1 : validate fields → open PIN modal ── */
   const handleConfirmPress = () => {
     if (!amount || !selectedMethod || !phone) {
-      Alert.alert("Champs manquants", "Veuillez remplir tous les champs.");
+      Alert.alert(tr("common.missingFields"), tr("common.fillAllFields"));
       return;
     }
     if (!phone.startsWith("243")) {
-      Alert.alert("Numéro invalide", "Le numéro doit commencer par 243.");
+      Alert.alert(tr("recharge.invalidNumber"), tr("recharge.numberHint"));
       return;
     }
     if (!userId) {
-      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter.");
+      Alert.alert(tr("common.error"), "Utilisateur introuvable. Veuillez vous reconnecter.");
       return;
     }
     setPinValue("");

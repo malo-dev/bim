@@ -1,3 +1,4 @@
+import "@/i18n";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -8,9 +9,10 @@ import "react-native-reanimated";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, createContext, useContext, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, Appearance } from "react-native";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import SocketProvider from "@/components/SocketProvider";
 
 export const unstable_settings = { anchor: "(tabs)" };
 
@@ -54,6 +56,7 @@ export default function RootLayout() {
   const toggleTheme = async () => {
     const next = !isDark;
     setIsDark(next);
+    Appearance.setColorScheme(next ? "dark" : "light");
     await AsyncStorage.setItem("themeMode", next ? "dark" : "light");
   };
 
@@ -88,6 +91,7 @@ export default function RootLayout() {
             </View>
           }
         >
+          <SocketProvider>
           {/* ThemeProvider react-navigation branché sur isDark */}
           <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
             <Stack>
@@ -124,6 +128,7 @@ export default function RootLayout() {
 
             <StatusBar style={isDark ? "light" : "dark"} />
           </ThemeProvider>
+          </SocketProvider>
         </PersistGate>
       </Provider>
     </AppThemeContext.Provider>

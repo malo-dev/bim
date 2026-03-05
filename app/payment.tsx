@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Animated,
@@ -124,6 +125,7 @@ export default function Payment() {
   const router = useRouter();
   const { productId, companyId } = useLocalSearchParams();
   const { isDark, t } = useTheme();
+  const { t: tr } = useTranslation();
 
   const [payAmount,      setPayAmount]      = useState("");
   const [loadingPayment, setLoadingPayment] = useState(false);
@@ -172,11 +174,11 @@ export default function Payment() {
   const handlePayPress = () => {
     const amount = Number(normalizeDecimal(payAmount));
     if (isNaN(amount) || amount <= 0) {
-      showResult("error", "Montant invalide", "Veuillez entrer un montant valide.");
+      showResult("error", tr("common.error"), "Veuillez entrer un montant valide.");
       return;
     }
     if (!userId) {
-      showResult("error", "Utilisateur non trouvé", "Veuillez vous reconnecter.");
+      showResult("error", tr("common.error"), "Veuillez vous reconnecter.");
       return;
     }
     setPinValue("");
@@ -205,7 +207,7 @@ export default function Payment() {
 
   /* ─── ÉTAPE 2 : vérifier PIN → ÉTAPE 3 : paiement ───────────────── */
   const handleConfirmPin = async () => {
-    if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
+    if (pinValue.length < 6) { setPinError(tr("common.pinInvalid")); return; }
     if (!userId) return;
 
     /* ── Vérification mot de passe ── */
@@ -214,7 +216,7 @@ export default function Payment() {
       await verifyPass({ userId, password: pinValue }).unwrap();
     } catch {
       shakePin();
-      setPinError("Mot de passe incorrect. Réessayez.");
+      setPinError(tr("common.pinWrong"));
       setPinValue("");
       setLoadingVerify(false);
       return;
@@ -242,13 +244,13 @@ export default function Payment() {
       }).unwrap();
 
       /* ✅ Succès */
-      showResult("success", `Paiement réussi de ${payAmount} EC !`);
+      showResult("success", tr("payment.successTitle"), tr("payment.successMsg", { amount: payAmount }));
     } catch (err: any) {
       /* ❌ Erreur paiement */
       showResult(
         "error",
-        "Erreur lors du paiement",
-        err?.data?.message || "Une erreur est survenue. Veuillez réessayer."
+        tr("payment.failedTitle"),
+        err?.data?.message || tr("common.error")
       );
     } finally {
       setLoadingPayment(false);
@@ -279,7 +281,7 @@ export default function Payment() {
               <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
                 <Ionicons name="arrow-back" size={22} color={C.white} />
               </TouchableOpacity>
-              <Text style={s.headerTitle}>Paiement</Text>
+              <Text style={s.headerTitle}>{tr("payment.title")}</Text>
               <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
                 <Ionicons name="notifications-outline" size={22} color={C.white} />
               </TouchableOpacity>
@@ -288,7 +290,7 @@ export default function Payment() {
           <View style={s.headerIcon}>
             <Ionicons name="wallet-outline" size={32} color={C.white} />
           </View>
-          <Text style={s.headerSub}>Entrez le montant à payer</Text>
+          <Text style={s.headerSub}>{tr("payment.enterAmount")}</Text>
         </View>
 
         {/* ── CARD ── */}
@@ -304,7 +306,7 @@ export default function Payment() {
 
           <View style={s.labelRow}>
             <Ionicons name="cash-outline" size={16} color={C.primary} />
-            <Text style={[s.label, { color: C.primary }]}>MONTANT (EC)</Text>
+            <Text style={[s.label, { color: C.primary }]}>{tr("payment.amountLabel")}</Text>
           </View>
 
           <Animated.View style={[s.inputBox, { borderColor, backgroundColor: bgColor }]}>
@@ -327,7 +329,7 @@ export default function Payment() {
             )}
           </Animated.View>
 
-          <Text style={[s.shortcutLabel, { color: t.textSecondary }]}>Montants rapides</Text>
+          <Text style={[s.shortcutLabel, { color: t.textSecondary }]}>{tr("payment.quickAmounts")}</Text>
           <View style={s.shortcuts}>
             {SHORTCUTS.map((v, i) => {
               const active = cleanAmount(payAmount) === v;
@@ -345,15 +347,15 @@ export default function Payment() {
           {payAmount.length > 0 && Number(cleanAmount(payAmount)) > 0 && (
             <View style={[s.recap, { backgroundColor: t.recapBg, borderColor: t.border }]}>
               <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                <Text style={[s.recapLabel, { color: t.textSecondary }]}>Montant</Text>
+                <Text style={[s.recapLabel, { color: t.textSecondary }]}>{tr("payment.amount")}</Text>
                 <Text style={[s.recapVal,   { color: t.text }]}>{formatDisplay(cleanAmount(payAmount))} EC</Text>
               </View>
               <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                <Text style={[s.recapLabel, { color: t.textSecondary }]}>Méthode</Text>
+                <Text style={[s.recapLabel, { color: t.textSecondary }]}>{tr("payment.method")}</Text>
                 <Text style={[s.recapVal,   { color: t.text }]}>BIM NEXT APP</Text>
               </View>
               <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                <Text style={[s.recapLabel, { color: t.text }]}>Total</Text>
+                <Text style={[s.recapLabel, { color: t.text }]}>{tr("payment.total")}</Text>
                 <Text style={[s.recapVal,   { color: C.primary }]}>{formatDisplay(cleanAmount(payAmount))} EC</Text>
               </View>
             </View>
@@ -366,12 +368,12 @@ export default function Payment() {
                 {loadingPayment ? (
                   <>
                     <ActivityIndicator color={C.white} size="small" />
-                    <Text style={s.payText}>Traitement en cours…</Text>
+                    <Text style={s.payText}>{tr("common.processing")}</Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="shield-checkmark-outline" size={18} color={C.white} />
-                    <Text style={s.payText}>Confirmer le paiement</Text>
+                    <Text style={s.payText}>{tr("payment.confirm")}</Text>
                   </>
                 )}
               </LinearGradient>
@@ -380,7 +382,7 @@ export default function Payment() {
 
           <View style={s.secureRow}>
             <Ionicons name="lock-closed-outline" size={12} color={t.textSecondary} />
-            <Text style={[s.secureText, { color: t.textSecondary }]}>Paiement sécurisé par BIM</Text>
+            <Text style={[s.secureText, { color: t.textSecondary }]}>{tr("payment.secured")}</Text>
           </View>
         </Animated.View>
       </ScrollView>
@@ -409,9 +411,9 @@ export default function Payment() {
             <Ionicons name="lock-closed" size={28} color={C.primary} />
           </View>
 
-          <Text style={[s.passTitle, { color: t.text }]}>Mot de passe requis</Text>
+          <Text style={[s.passTitle, { color: t.text }]}>{tr("common.pinRequired")}</Text>
           <Text style={[s.passSub, { color: t.textSecondary }]}>
-            Entrez votre code à 6 chiffres pour confirmer le paiement
+            {tr("payment.pinTitle")}
           </Text>
 
           {payAmount.length > 0 && (
@@ -446,19 +448,19 @@ export default function Payment() {
               {loadingVerify ? (
                 <>
                   <ActivityIndicator color={C.white} size="small" />
-                  <Text style={s.confirmText}>Vérification…</Text>
+                  <Text style={s.confirmText}>{tr("common.processing")}</Text>
                 </>
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                  <Text style={s.confirmText}>Valider</Text>
+                  <Text style={s.confirmText}>{tr("common.confirm")}</Text>
                 </>
               )}
             </LinearGradient>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => { if (!loadingVerify) setShowPassModal(false); }} style={s.cancelBtn}>
-            <Text style={[s.cancelText, { color: t.textSecondary }]}>Annuler</Text>
+            <Text style={[s.cancelText, { color: t.textSecondary }]}>{tr("common.cancel")}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -504,7 +506,7 @@ export default function Payment() {
           <Text style={[s.resultTitle, {
             color: resultData?.type === "success" ? C.success : C.error,
           }]}>
-            {resultData?.type === "success" ? "Paiement réussi !" : "Échec du paiement"}
+            {resultData?.type === "success" ? tr("payment.successTitle") : tr("payment.failedTitle")}
           </Text>
 
           {/* Description */}
@@ -520,7 +522,7 @@ export default function Payment() {
             >
               <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.resultBtnGrad}>
                 <Ionicons name="home-outline" size={16} color={C.white} />
-                <Text style={s.resultBtnText}>{"Retour à l'accueil"}</Text>
+                <Text style={s.resultBtnText}>{tr("common.back")}</Text>
               </LinearGradient>
             </TouchableOpacity>
           ) : (
@@ -529,13 +531,13 @@ export default function Payment() {
                 style={[s.resultBtnErr, { backgroundColor: C.error }]}
                 onPress={() => { setShowResultModal(false); router.back(); }}
               >
-                <Text style={s.resultBtnErrText}>Retour</Text>
+                <Text style={s.resultBtnErrText}>{tr("common.back")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.resultBtnErr, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "#6B7280" }]}
                 onPress={() => setShowResultModal(false)}
               >
-                <Text style={s.resultBtnErrText}>Réessayer</Text>
+                <Text style={s.resultBtnErrText}>{tr("payment.errorMsg")}</Text>
               </TouchableOpacity>
             </View>
           )}

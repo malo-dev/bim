@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { useTranslation } from "react-i18next";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -39,25 +40,28 @@ function useTheme() {
 
 /* ─── QUICK ACTIONS ──────────────────────────────────────────────────── */
 const QUICK_ACTIONS = [
-  { title: "Recharge",   icon: "circle-plus",        color: C.primary, route: "/recharge"  },
-  { title: "Retrait",    icon: "money-bill-transfer", color: C.red,     route: "/retrait"   },
-  { title: "Transfert",  icon: "right-left",          color: C.primary, route: "/transfert" },
-  { title: "Scanner",    icon: "qrcode",              color: C.violet,  route: "/qrcode"    },
-  { title: "Support",    icon: "headset",             color: C.primary, route: "/support"   },
-  { title: "Actualiser", icon: "arrows-rotate",       color: C.accent,  route: null         },
+  { titleKey: "home.recharge",  icon: "circle-plus",        color: C.primary, route: "/recharge"  },
+  { titleKey: "home.withdraw",  icon: "money-bill-transfer", color: C.red,     route: "/retrait"   },
+  { titleKey: "home.transfer",  icon: "right-left",          color: C.primary, route: "/transfert" },
+  { titleKey: "home.scanner",   icon: "qrcode",              color: C.violet,  route: "/qrcode"    },
+  { titleKey: "home.support",   icon: "headset",             color: C.primary, route: "/support"   },
+  { titleKey: "home.refresh",   icon: "arrows-rotate",       color: C.accent,  route: null         },
 ] as const;
 
 /* ─── SECTOR COLORS ──────────────────────────────────────────────────── */
 const SECTOR_COLORS = ["#22C55E", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899"];
 
 /* ─── FULL SCREEN LOADER ─────────────────────────────────────────────── */
-const FullScreenLoader = () => (
-  <View style={s.loaderWrap}>
-    <LinearGradient colors={[C.deep, C.primary]} style={StyleSheet.absoluteFill} />
-    <ActivityIndicator size="large" color={C.white} />
-    <Text style={s.loaderText}>Chargement…</Text>
-  </View>
-);
+const FullScreenLoader = () => {
+  const { t: tr } = useTranslation();
+  return (
+    <View style={s.loaderWrap}>
+      <LinearGradient colors={[C.deep, C.primary]} style={StyleSheet.absoluteFill} />
+      <ActivityIndicator size="large" color={C.white} />
+      <Text style={s.loaderText}>{tr("common.loading")}</Text>
+    </View>
+  );
+};
 
 /* ─── ACTION BUTTON ──────────────────────────────────────────────────── */
 type ActionButtonProps = {
@@ -169,6 +173,7 @@ export default function HomeScreen() {
   const router   = useRouter();
   const dispatch = useDispatch();
   const { isDark, t } = useTheme();
+  const { t: tr } = useTranslation();
 
   const [userId,     setUserId]     = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -209,7 +214,7 @@ export default function HomeScreen() {
     <View style={s.loaderWrap}>
       <LinearGradient colors={[C.deep, C.primary]} style={StyleSheet.absoluteFill} />
       <Ionicons name="cloud-offline-outline" size={48} color="rgba(255,255,255,0.5)" />
-      <Text style={s.loaderText}>Impossible de charger les données</Text>
+      <Text style={s.loaderText}>{tr("common.internet")}</Text>
     </View>
   );
 
@@ -252,21 +257,21 @@ export default function HomeScreen() {
           <View style={s.sectionHeader}>
             <View style={[s.sectionDot, { backgroundColor: C.accent }]} />
             <Text style={[s.sectionLabelHeader, { color: isDark ? t.textSecondary : C.muted }]}>
-              Actions rapides
+              {tr("home.quickActions")}
             </Text>
           </View>
 
           <View style={s.grid}>
             {QUICK_ACTIONS.map((action, i) => (
               <ActionButton
-                key={action.title}
-                title={action.title}
+                key={action.titleKey}
+                title={tr(action.titleKey)}
                 icon={action.icon as any}
                 color={action.color}
                 index={i}
                 isDark={isDark}
                 onPress={
-                  action.title === "Actualiser"
+                  action.route === null
                     ? onRefresh
                     : () => router.push(action.route as any)
                 }
@@ -288,7 +293,7 @@ export default function HomeScreen() {
           <View style={s.sectionHeader}>
             <View style={[s.sectionDot, { backgroundColor: C.primary }]} />
             <Text style={[s.sectionLabelHeader, { color: isDark ? t.textSecondary : C.muted }]}>
-              Nos secteurs
+              {tr("home.sectors")}
             </Text>
           </View>
 
