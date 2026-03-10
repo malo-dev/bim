@@ -41,6 +41,8 @@ const fr = {
     errorNetwork:   "Erreur réseau",
     checkConnection:"Vérifiez votre connexion et réessayez.",
     permDenied:     "Permission refusée",
+    readMore:       "Lire plus",
+    readLess:       "Lire moins",
   },
 
   /* ── ONBOARDING ── */

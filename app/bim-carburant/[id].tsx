@@ -134,6 +134,7 @@ function FuelCardBase({ item, onPress, isDark }: FuelCardProps) {
   const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
 
+  const [expanded, setExpanded] = useState(false);
   const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
 
   return (
@@ -207,7 +208,12 @@ function FuelCardBase({ item, onPress, isDark }: FuelCardProps) {
         {/* ── CONTENU ── */}
         <View style={cs.content}>
           <Text style={[cs.name, { color: t.text }]} numberOfLines={1}>{item.name}</Text>
-          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={2}>{item.description}</Text>
+          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={expanded ? undefined : 2}>{item.description}</Text>
+          {item.description && item.description.length > 80 && (
+            <TouchableOpacity onPress={() => setExpanded(e => !e)} style={cs.readMoreBtn}>
+              <Text style={[cs.readMoreText, { color: C.orange }]}>{expanded ? "Lire moins" : "Lire plus"}</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Disponibilité */}
           <View style={[cs.availRow, { backgroundColor: isDark ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.08)", borderColor: isDark ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.2)" }]}>
@@ -477,6 +483,8 @@ const cs = StyleSheet.create({
   metaChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   metaText: { fontFamily: "NexaLight", fontSize: 11 },
 
-  btn:     { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, elevation: 4, shadowColor: C.violet, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 6 },
-  btnText: { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
+  btn:          { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, elevation: 4, shadowColor: C.violet, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 6 },
+  btnText:      { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
+  readMoreBtn:  { marginTop: 2, marginBottom: 6, alignSelf: "flex-start" },
+  readMoreText: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
 });

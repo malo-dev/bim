@@ -9,6 +9,7 @@ import { Image } from "expo-image";
 import {
   Animated,
   Platform,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -172,18 +173,40 @@ export default function Reseaux() {
   const [page,     setPage]     = useState(1);
   const [dataList, setDataList] = useState<Sector[]>([]);
 
-  const { data, isLoading, isFetching } = useGetAllSectorsQuery({
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data, isLoading, isFetching, refetch } = useGetAllSectorsQuery({
     page, pageSize: 10, search, paginate: true,
   });
 
+  const onRefresh = useCallback(async () => {
+    isFirstPage.current = true;
+    setRefreshing(true);
+    setPage(1);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  const isFirstPage = useRef(true);
+
+  useEffect(() => {
+    isFirstPage.current = true;
+    setPage(1);
+  }, [search]);
+
   useEffect(() => {
     if (data?.data) {
-      if (page === 1) setDataList(data.data);
-      else setDataList((prev) => [...prev, ...data.data]);
+      if (isFirstPage.current) {
+        setDataList(data.data);
+        isFirstPage.current = false;
+      } else {
+        setDataList((prev) => {
+          const existingIds = new Set(prev.map((s) => s.businessId));
+          return [...prev, ...data.data.filter((s: Sector) => !existingIds.has(s.businessId))];
+        });
+      }
     }
-  }, [data, page]);
-
-  useEffect(() => { setPage(1); }, [search]);
+  }, [data]);
 
   const loadMore = useCallback(() => {
     if (data?.totalPages && page < data.totalPages && !isFetching) setPage(p => p + 1);
@@ -300,12 +323,20 @@ export default function Reseaux() {
       ) : (
         <Animated.FlatList
           data={dataList}
-          keyExtractor={(item, index) => `${item.businessId}-${index}`}
+          keyExtractor={(item) => String(item.businessId)}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[s.list, { backgroundColor: t.background }]}
           ListHeaderComponent={ListHeader}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[C.primary]}
+              tintColor={C.accent}
+            />
+          }
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: false }

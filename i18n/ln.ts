@@ -42,6 +42,8 @@ const ln: Translations = {
     errorNetwork:   "Likambo ya réseau",
     checkConnection:"Tala connexion na yo mpe luka lisusu.",
     permDenied:     "Nzela ezila",
+    readMore:       "Tanga lisusu",
+    readLess:       "Suka kotanga",
   },
 
   onboarding: {

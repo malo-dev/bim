@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function Index() {
   const [tokenValue, setTokenValue] = useState<string | null>(null);
@@ -18,7 +20,12 @@ export default function Index() {
   }, []);
 
   if (loading) {
-    return null;
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={["#302E99", "#0353CC"]} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator size="large" color="#FFFFFF" />
+      </View>
+    );
   }
 
   if (tokenValue) {
@@ -27,3 +34,11 @@ export default function Index() {
 
   return <Redirect href="/onboarding" />;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});

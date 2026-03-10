@@ -42,6 +42,8 @@ const en: Translations = {
     errorNetwork:   "Network error",
     checkConnection:"Check your connection and try again.",
     permDenied:     "Permission denied",
+    readMore:       "Read more",
+    readLess:       "Read less",
   },
 
   onboarding: {

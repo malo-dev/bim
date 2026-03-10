@@ -180,7 +180,11 @@ export default function HomeScreen() {
   const [openScanner, setOpenScanner] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
-  const { data: sectorsData } = useGetAllSectorsQuery({
+  const {
+    data: sectorsData,
+    isLoading: isSectorsLoading,
+    isFetching: isSectorsFetching,
+  } = useGetAllSectorsQuery({
     page: 1, pageSize: 20, search: "", paginate: false,
   });
 
@@ -318,17 +322,23 @@ export default function HomeScreen() {
           </Modal>
 
           {/* Sectors grid */}
-          <View style={s.grid}>
-            {sectors.map((sector: any, i: number) => (
-              <SectorButton
-                key={sector.businessId}
-                sector={sector}
-                index={i}
-                isDark={isDark}
-                onPress={() => handleGoto(sector)}
-              />
-            ))}
-          </View>
+          {isSectorsLoading || isSectorsFetching ? (
+            <View style={s.sectorsLoader}>
+              <ActivityIndicator size="small" color={C.primary} />
+            </View>
+          ) : (
+            <View style={s.grid}>
+              {sectors.map((sector: any, i: number) => (
+                <SectorButton
+                  key={sector.businessId}
+                  sector={sector}
+                  index={i}
+                  isDark={isDark}
+                  onPress={() => handleGoto(sector)}
+                />
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={{ height: 100 }} />
@@ -456,6 +466,12 @@ const s = StyleSheet.create({
     width: 44, height: 44,
     borderRadius: 22,
     backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sectorsLoader: {
+    paddingVertical: 32,
     alignItems: "center",
     justifyContent: "center",
   },

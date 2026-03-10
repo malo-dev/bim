@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Image } from "expo-image";
 import {
+  ActivityIndicator,
   Animated,
   Modal,
   Platform,
@@ -456,11 +457,13 @@ export default function ServiceDetails() {
   const [company,    setCompany]    = useState<any[]>([]);
   const [sectorCat,  setSectorCat]  = useState<any>();
   const [searchText, setSearchText] = useState("");
+  const [dataReady,  setDataReady]  = useState(false);
 
   useEffect(() => {
     const data = sectorSingle as any;
     setSectorCat(data[0]);
     setCompany(data[0]?.companies || []);
+    setDataReady(true);
   }, [sectorSingle]);
 
   const gotToSelectedMenu = useCallback((value: string, id: string) => {
@@ -562,7 +565,11 @@ export default function ServiceDetails() {
       </Animated.View>
 
       {/* ── FLAT LIST ── */}
-      {company.length === 0 ? (
+      {!dataReady ? (
+        <View style={[s.center, { paddingTop: Platform.OS === "ios" ? 260 : 240 }]}>
+          <ActivityIndicator size="large" color={C.accent} />
+        </View>
+      ) : company.length === 0 ? (
         <>
           {ListHeader}
           <View style={s.center}><NoData /></View>

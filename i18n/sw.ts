@@ -42,6 +42,8 @@ const sw: Translations = {
     errorNetwork:   "Hitilafu ya mtandao",
     checkConnection:"Angalia muunganisho wako na ujaribu tena.",
     permDenied:     "Ruhusa imekataliwa",
+    readMore:       "Soma zaidi",
+    readLess:       "Soma kidogo",
   },
 
   onboarding: {

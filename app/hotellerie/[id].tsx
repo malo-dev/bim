@@ -193,6 +193,7 @@ function HotelCard({
   const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
   const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
 
+  const [expanded, setExpanded] = useState(false);
   const stars    = item.productId ? ((item.productId % 3) + 3) : 4;
   const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
 
@@ -250,9 +251,14 @@ function HotelCard({
 
         {/* ── Content ── */}
         <View style={cs.content}>
-          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={2}>
+          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={expanded ? undefined : 2}>
             {item.description}
           </Text>
+          {item.description && item.description.length > 80 && (
+            <TouchableOpacity onPress={() => setExpanded(e => !e)} style={cs.readMoreBtn}>
+              <Text style={[cs.readMoreText, { color: C.primary }]}>{expanded ? "Lire moins" : "Lire plus"}</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={cs.amenities}>
             <AmenityChip icon="wifi-outline"       label="Wi-Fi"      isDark={isDark} t={t} />
@@ -595,6 +601,8 @@ const cs = StyleSheet.create({
     color: C.white, fontFamily: "NexaLight",
     fontSize: 13, letterSpacing: 0.3,
   },
+  readMoreBtn:  { marginTop: 2, marginBottom: 6, alignSelf: "flex-start" },
+  readMoreText: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
 });
 
 const ac = StyleSheet.create({
