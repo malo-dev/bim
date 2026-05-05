@@ -9,8 +9,6 @@ const BASE_URL =
   Constants.manifest?.extra?.API_URL ||
   '';
 
-console.log('✅ API_URL =', BASE_URL);
-
 // ✅ Instance axios
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -34,8 +32,6 @@ const axiosBaseQuery =
 
       return { data: result.data };
     } catch (err) {
-      console.log('❌ API ERROR:', err?.response || err?.message);
-
       return {
         error: {
           status: err.response?.status || 500,

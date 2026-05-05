@@ -16,10 +16,12 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useLogOutMutation } from "@/services/authService";
+import { useDeleteAccountMutation } from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors } from "@/constants/theme";
 import { useAppTheme } from "@/app/_layout";
@@ -136,13 +138,17 @@ function FaqItem({
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function Params() {
   const router = useRouter();
-  const { isDark, toggleTheme } = useAppTheme();
+  const { isDark, followSystem, toggleTheme, setFollowSystem } = useAppTheme();
   const theme = isDark ? Colors.dark : Colors.light;
   const { t, i18n } = useTranslation();
-  const [logOut, { isLoading }] = useLogOutMutation();
+  const [logOut,         { isLoading }]          = useLogOutMutation();
+  const [deleteAccount,  { isLoading: isDeleting }] = useDeleteAccountMutation();
 
-  const [langModalVisible, setLangModalVisible] = useState(false);
-  const [activeFaq, setActiveFaq]               = useState<number | null>(null);
+  const [langModalVisible,   setLangModalVisible]   = useState(false);
+  const [activeFaq,          setActiveFaq]           = useState<number | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible]  = useState(false);
+  const [deletePassword,     setDeletePassword]      = useState("");
+  const [showDeletePwd,      setShowDeletePwd]       = useState(false);
 
   const currentLang = i18n.language ?? "fr";
   const currentLangLabel = LANGUAGES.find(l => l.code === currentLang)?.label ?? "🇫🇷 Français";
@@ -198,6 +204,22 @@ export default function Params() {
     );
   };
 
+  const handleDeleteAccount = async () => {
+    if (!deletePassword.trim()) {
+      Alert.alert(t("common.error"), t("params.deleteAccountPwdPlaceholder"));
+      return;
+    }
+    try {
+      await deleteAccount({ password: deletePassword }).unwrap();
+      setDeleteModalVisible(false);
+      setDeletePassword("");
+      await AsyncStorage.clear();
+      router.replace("/login");
+    } catch (err: any) {
+      Alert.alert(t("common.error"), err?.data?.message || t("common.error"));
+    }
+  };
+
   const headerGradient: [string, string] = isDark
     ? ["#1A1F3A", "#0A1628"]
     : [B.deep, B.primary];
@@ -245,6 +267,84 @@ export default function Params() {
                 </TouchableOpacity>
               );
             })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── DELETE ACCOUNT MODAL ── */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setDeleteModalVisible(false); setDeletePassword(""); }}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => { setDeleteModalVisible(false); setDeletePassword(""); }}>
+          <Pressable style={[s.modalBox, { backgroundColor: isDark ? "#1A2340" : "#FFFFFF" }]}>
+
+            {/* Icône danger */}
+            <View style={dm.iconWrap}>
+              <Ionicons name="warning" size={32} color="#EF4444" />
+            </View>
+
+            <Text style={[s.modalTitle, { color: "#EF4444" }]}>
+              {t("params.deleteAccountTitle")}
+            </Text>
+
+            <Text style={[dm.warning, { color: isDark ? "#CBD5E1" : "#475569" }]}>
+              {t("params.deleteAccountMsg")}
+            </Text>
+
+            <Text style={[dm.danger, { color: isDark ? "#FCA5A5" : "#DC2626" }]}>
+              {t("params.deleteAccountWarning")}
+            </Text>
+
+            {/* Champ mot de passe */}
+            <View style={[dm.inputRow, {
+              backgroundColor: isDark ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.05)",
+              borderColor:     isDark ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.20)",
+            }]}>
+              <Ionicons name="lock-closed-outline" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+              <TextInput
+                style={[dm.input, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}
+                placeholder={t("params.deleteAccountPwdPlaceholder")}
+                placeholderTextColor={isDark ? "rgba(255,255,255,0.35)" : "rgba(13,27,62,0.35)"}
+                secureTextEntry={!showDeletePwd}
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={() => setShowDeletePwd(v => !v)}>
+                <Ionicons
+                  name={showDeletePwd ? "eye-off-outline" : "eye-outline"}
+                  size={16}
+                  color={isDark ? "rgba(255,255,255,0.4)" : "rgba(13,27,62,0.4)"}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Boutons */}
+            <View style={dm.btnRow}>
+              <TouchableOpacity
+                style={[dm.btnCancel, { borderColor: isDark ? "rgba(77,150,255,0.25)" : "rgba(3,83,204,0.15)" }]}
+                onPress={() => { setDeleteModalVisible(false); setDeletePassword(""); }}
+              >
+                <Text style={[dm.btnCancelText, { color: isDark ? "#93C5FD" : B.primary }]}>
+                  {t("common.cancel")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[dm.btnDelete, isDeleting && { opacity: 0.6 }]}
+                onPress={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting
+                  ? <Ionicons name="hourglass-outline" size={16} color="#FFFFFF" />
+                  : <Text style={dm.btnDeleteText}>{t("params.deleteAccountConfirm")}</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
           </Pressable>
         </Pressable>
       </Modal>
@@ -316,8 +416,40 @@ export default function Params() {
 
             <View style={[s.divider, { backgroundColor: dividerColor }]} />
 
-            {/* Mode sombre — Switch interactif */}
+            {/* Suivre le thème du système */}
             <View style={s.prefRow}>
+              <View style={s.prefLeft}>
+                <View style={[s.prefIcon, {
+                  backgroundColor: isDark ? "rgba(6,182,212,0.18)" : "#06B6D415",
+                }]}>
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={16}
+                    color="#06B6D4"
+                  />
+                </View>
+                <View>
+                  <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
+                    {t("params.followSystem")}
+                  </Text>
+                  <Text style={[s.prefSub, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
+                    {followSystem ? t("params.followSystemOn") : t("params.followSystemOff")}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={followSystem}
+                onValueChange={setFollowSystem}
+                trackColor={{ false: "rgba(6,182,212,0.20)", true: "#06B6D4" }}
+                thumbColor={followSystem ? "#FFFFFF" : "#06B6D4"}
+                ios_backgroundColor="rgba(6,182,212,0.20)"
+              />
+            </View>
+
+            <View style={[s.divider, { backgroundColor: dividerColor }]} />
+
+            {/* Mode sombre — Switch (désactivé si followSystem actif) */}
+            <View style={[s.prefRow, followSystem && { opacity: 0.4 }]}>
               <View style={s.prefLeft}>
                 <View style={[s.prefIcon, {
                   backgroundColor: isDark ? "rgba(139,92,246,0.18)" : "#8B5CF615",
@@ -328,18 +460,27 @@ export default function Params() {
                     color="#8B5CF6"
                   />
                 </View>
-                <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
-                  {t("params.darkMode")}
-                </Text>
+                <View>
+                  <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
+                    {t("params.darkMode")}
+                  </Text>
+                  {followSystem && (
+                    <Text style={[s.prefSub, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
+                      {t("params.darkModeAuto")}
+                    </Text>
+                  )}
+                </View>
               </View>
               <Switch
                 value={isDark}
-                onValueChange={toggleTheme}
+                onValueChange={followSystem ? undefined : toggleTheme}
+                disabled={followSystem}
                 trackColor={{ false: "rgba(139,92,246,0.20)", true: "#8B5CF6" }}
                 thumbColor={isDark ? "#FFFFFF" : "#8B5CF6"}
                 ios_backgroundColor="rgba(139,92,246,0.20)"
               />
             </View>
+
           </View>
         </View>
 
@@ -384,6 +525,51 @@ export default function Params() {
                 theme={theme}
               />
             ))}
+          </View>
+        </View>
+
+        {/* ── DANGER ZONE ── */}
+        <View style={s.section}>
+          <SectionLabel title={t("params.deleteAccountSection")} icon="warning-outline" />
+          <View style={[
+            s.card,
+            isDark
+              ? { backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.28)" }
+              : { backgroundColor: "#FFF5F5",              borderWidth: 1, borderColor: "#FECACA" },
+          ]}>
+            <TouchableOpacity
+              style={dm.dangerRow}
+              onPress={() => setDeleteModalVisible(true)}
+              activeOpacity={0.75}
+            >
+              {/* Icône avec fond rouge visible en light ET dark */}
+              <View style={[
+                dm.dangerIconWrap,
+                isDark
+                  ? { backgroundColor: "rgba(239,68,68,0.18)" }
+                  : { backgroundColor: "#FEE2E2" },
+              ]}>
+                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={[dm.dangerTitle, { color: isDark ? "#FCA5A5" : "#DC2626" }]}>
+                  {t("params.deleteAccount")}
+                </Text>
+                <Text style={[dm.dangerSub, { color: isDark ? "#FDA4AF" : "#EF4444" }]}>
+                  {t("params.deleteAccountWarning")}
+                </Text>
+              </View>
+
+              <View style={[
+                dm.dangerArrow,
+                isDark
+                  ? { backgroundColor: "rgba(239,68,68,0.15)" }
+                  : { backgroundColor: "#FEE2E2" },
+              ]}>
+                <Ionicons name="chevron-forward" size={14} color="#EF4444" />
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -460,6 +646,7 @@ const s = StyleSheet.create({
   prefLeft:  { flexDirection: "row", alignItems: "center", gap: 10 },
   prefIcon:  { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   prefLabel: { fontFamily: "NexaLight", fontSize: 14 },
+  prefSub:   { fontFamily: "NexaLight", fontSize: 11, marginTop: 1 },
 
   divider: { height: 1, marginHorizontal: 16 },
 
@@ -527,4 +714,71 @@ const fs = StyleSheet.create({
 const sl = StyleSheet.create({
   row:  { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 4 },
   text: { fontFamily: "NexaLight", fontSize: 11, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8 },
+});
+
+const dm = StyleSheet.create({
+  /* ── Danger zone row ── */
+  dangerRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
+  },
+  dangerIconWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  dangerTitle: {
+    fontFamily: "NexaLight", fontSize: 14, color: "#EF4444", marginBottom: 2,
+  },
+  dangerSub: {
+    fontFamily: "NexaLight", fontSize: 11, lineHeight: 15,
+  },
+  dangerArrow: {
+    width: 28, height: 28, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+  },
+
+  /* ── Modal ── */
+  iconWrap: {
+    alignSelf: "center",
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: "rgba(239,68,68,0.12)",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 12,
+  },
+  warning: {
+    fontFamily: "NexaLight", fontSize: 13, textAlign: "center",
+    lineHeight: 19, marginBottom: 8,
+  },
+  danger: {
+    fontFamily: "NexaLight", fontSize: 12, textAlign: "center",
+    lineHeight: 17, marginBottom: 16,
+  },
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    borderWidth: 1, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12,
+    marginBottom: 16,
+  },
+  input: {
+    flex: 1, fontFamily: "NexaLight", fontSize: 14,
+  },
+  btnRow: {
+    flexDirection: "row", gap: 10,
+  },
+  btnCancel: {
+    flex: 1, borderWidth: 1, borderRadius: 14,
+    paddingVertical: 12, alignItems: "center",
+  },
+  btnCancelText: {
+    fontFamily: "NexaLight", fontSize: 14,
+  },
+  btnDelete: {
+    flex: 1, borderRadius: 14,
+    paddingVertical: 12, alignItems: "center",
+    backgroundColor: "#EF4444",
+  },
+  btnDeleteText: {
+    fontFamily: "NexaLight", fontSize: 14, color: "#FFFFFF",
+  },
 });

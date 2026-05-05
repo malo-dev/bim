@@ -19,7 +19,7 @@ import {
   ActivityIndicator,
   useColorScheme,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -168,6 +168,7 @@ export default function Reseaux() {
   const dispatch = useDispatch();
   const scrollY  = useRef(new Animated.Value(0)).current;
   const { isDark, t } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const [search,   setSearch]   = useState("");
   const [page,     setPage]     = useState(1);
@@ -325,7 +326,7 @@ export default function Reseaux() {
           data={dataList}
           keyExtractor={(item) => String(item.businessId)}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[s.list, { backgroundColor: t.background }]}
+          contentContainerStyle={[s.list, { backgroundColor: t.background, paddingBottom: 49 + insets.bottom + 16 }]}
           ListHeaderComponent={ListHeader}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
@@ -354,8 +355,6 @@ export default function Reseaux() {
           )}
         />
       )}
-
-      <View style={{ height: 100 }} />
     </View>
   );
 }
@@ -440,7 +439,7 @@ const s = StyleSheet.create({
   countText: { fontFamily: "NexaLight", fontSize: 12, letterSpacing: 0.3 },
 
   /* List */
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
+  list: { paddingHorizontal: 16 },
 
   /* Empty */
   empty: { alignItems: "center", paddingTop: 60, gap: 10 },

@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install i18next react-i18next --legacy-peer-deps)",
+      "Bash(npm install i18next react-i18next)",
+      "Bash(find /media/malo/New Volume/MALO/BIM/bimsecond/bim -type f -name VoiceNavigator* -o -name useVoiceNavigation*)",
+      "Bash(grep -r trys*{ /media/malo/New Volume/MALO/BIM/bimsecond/bim/app --include=*.tsx --include=*.ts)",
+      "Bash(grep -r catch /media/malo/New Volume/MALO/BIM/bimsecond/bim/app --include=*.tsx --include=*.ts)",
+      "Bash(grep -r http:// /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.js --include=*.ts --include=*.tsx --include=*.json)",
+      "Bash(grep -r \"password\\\\|apiKey\\\\|secretKey\\\\|Authorization\" /media/malo/New Volume/MALO/BIM/bimsecond/bim/app --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"isDevelop\\\\|isDebug\\\\|DEV_MODE\\\\|__DEV__\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.js --include=*.ts --include=*.tsx --include=*.json)",
+      "Bash(grep -r expo-dev-client /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.tsx --include=*.ts)",
+      "Bash(wc -l /media/malo/New Volume/MALO/BIM/bimsecond/bim/app/*.tsx)",
+      "Bash(ls /media/malo/New Volume/MALO/BIM/bimsecond/bim/app/*.tsx)",
+      "Bash(grep -r \"localhost\\\\|127.0.0.1\\\\|192.168\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.js --include=*.ts --include=*.tsx --include=*.json)",
+      "Bash(grep -r \"buildNumber\\\\|versionCode\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.json)",
+      "Bash(grep -r \"JSON.parse\\\\|eval\\\\|Function\\(\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.js --include=*.ts --include=*.tsx)",
+      "Bash(grep -r \"sentry\\\\|amplitude\\\\|firebase\\\\|analytics\\\\|crash\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.json --include=*.js --include=*.ts)",
+      "Bash(grep -r useEffect.*[] /media/malo/New Volume/MALO/BIM/bimsecond/bim/app --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"Promise.all\\\\|Promise.race\" /media/malo/New Volume/MALO/BIM/bimsecond/bim --include=*.tsx --include=*.ts)",
+      "Bash(npm install:*)",
+      "Bash(npx expo:*)",
+      "Bash(node_modules/.bin/expo export:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(node_modules/.bin/expo-doctor)",
+      "Bash(node_modules/.bin/expo doctor:*)",
+      "Bash(node node_modules/expo-doctor/build/index.js)",
+      "Bash(node_modules/.bin/expo install:*)",
+      "Bash(node_modules/.bin/expo prebuild:*)",
+      "Bash(node node_modules/.bin/expo install react-native-svg@15.12.1 @react-native-picker/picker@2.11.1)"
+    ]
+  }
+}

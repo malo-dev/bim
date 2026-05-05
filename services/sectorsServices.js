@@ -31,7 +31,7 @@ const axiosBaseQuery =
 export const sectorApi = createApi({
   reducerPath: "sectorApi",
   baseQuery: axiosBaseQuery(),
-  tagTypes: ["Sector"],
+  tagTypes: ["Sector", "sector"],
 
   endpoints: (builder) => ({
     /* GET ALL */

@@ -1,35 +1,34 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
+import HeaderOFpage from "@/components/ui/headerHome";
+import HeaderRow from "@/components/ui/headerTextUi";
+import { API_URL_BASE } from "@/constants/api";
+import { C, Colors } from "@/constants/theme";
+import { setSectors } from "@/services/globalApi";
+import { useGetAllSectorsQuery } from "@/services/sectorsServices";
+import { useGetUserByIdQuery } from "@/services/userService";
+import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Animated,
   RefreshControl,
   ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
   StatusBar,
+  StyleSheet,
   Text,
+  TouchableOpacity,
   useColorScheme,
+  View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { useGetAllSectorsQuery } from "@/services/sectorsServices";
-import { ThemedText } from "@/components/themed-text";
-import HeaderOFpage from "@/components/ui/headerHome";
-import HeaderRow from "@/components/ui/headerTextUi";
-import { API_URL_BASE } from "@/constants/api";
-import { useGetUserByIdQuery } from "@/services/userService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRouter } from "expo-router";
 import Modal from "react-native-modal";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
-import { setSectors } from "@/services/globalApi";
-import { Ionicons } from "@expo/vector-icons";
-import { C, Colors } from "@/constants/theme";
 
 /* ─── Hook thème (même pattern qu'Onboarding) ───────────────────────── */
 function useTheme() {
@@ -183,7 +182,6 @@ export default function HomeScreen() {
   const {
     data: sectorsData,
     isLoading: isSectorsLoading,
-    isFetching: isSectorsFetching,
   } = useGetAllSectorsQuery({
     page: 1, pageSize: 20, search: "", paginate: false,
   });
@@ -322,7 +320,7 @@ export default function HomeScreen() {
           </Modal>
 
           {/* Sectors grid */}
-          {isSectorsLoading || isSectorsFetching ? (
+          {isSectorsLoading && sectors.length === 0 ? (
             <View style={s.sectorsLoader}>
               <ActivityIndicator size="small" color={C.primary} />
             </View>
@@ -340,8 +338,6 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-
-        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );

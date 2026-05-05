@@ -1,7 +1,7 @@
 import NoData from "@/components/ui/noData";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Image } from "expo-image";
 import {
@@ -18,7 +18,9 @@ import {
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useSelector } from "react-redux";
+import { useGetsectorByIdQuery } from "@/services/sectorsServices";
+import { useGetNotesByCompanyQuery, useCreateNoteMutation } from "@/services/notesService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Svg, {
   Defs,
   LinearGradient as SvgGradient,
@@ -91,26 +93,6 @@ interface RatingData {
   userRating: number | null;
 }
 
-/* ─── RATING STORE (mémoire) ─────────────────────────────────────────── */
-const ratingsStore: Record<string, RatingData> = {};
-
-function getRating(companyId: string): RatingData {
-  return ratingsStore[companyId] ?? { average: 0, count: 0, userRating: null };
-}
-
-function submitRating(companyId: string, stars: number, prev: RatingData): RatingData {
-  let newCount = prev.count, newAverage = prev.average;
-  if (prev.userRating !== null) {
-    newAverage = (prev.average * prev.count - prev.userRating + stars) / prev.count;
-  } else {
-    newCount   = prev.count + 1;
-    newAverage = (prev.average * prev.count + stars) / newCount;
-  }
-  const next = { average: newAverage, count: newCount, userRating: stars };
-  ratingsStore[companyId] = next;
-  return next;
-}
-
 /* ─── STAR SVG ───────────────────────────────────────────────────────── */
 function StarSvg({ size = 20, filled = 1, color = C.gold }: { size?: number; filled?: number; color?: string }) {
   const id = `clip_${size}_${Math.round(filled * 100)}`;
@@ -156,10 +138,10 @@ function StarsDisplay({ value, size = 14, showValue = true, count, textColor }: 
 type RatingModalProps = {
   visible: boolean; companyName: string; current: RatingData;
   onSubmit: (stars: number, comment: string) => void; onClose: () => void;
-  isDark: boolean;
+  isDark: boolean; isSubmitting?: boolean;
 };
 
-function RatingModal({ visible, companyName, current, onSubmit, onClose, isDark }: RatingModalProps) {
+function RatingModal({ visible, companyName, current, onSubmit, onClose, isDark, isSubmitting }: RatingModalProps) {
   const t          = isDark ? Colors.dark : Colors.light;
   const [hovered,  setHovered]  = useState(0);
   const [selected, setSelected] = useState(current.userRating ?? 0);
@@ -253,17 +235,20 @@ function RatingModal({ visible, companyName, current, onSubmit, onClose, isDark 
               <Text style={[rm.cancelText, { color: t.textSecondary }]}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[rm.submitBtn, selected === 0 && rm.submitBtnDisabled]}
-              onPress={() => { if (selected === 0) return; onSubmit(selected, comment); setComment(""); }}
-              disabled={selected === 0}
+              style={[rm.submitBtn, (selected === 0 || isSubmitting) && rm.submitBtnDisabled]}
+              onPress={() => { if (selected === 0 || isSubmitting) return; onSubmit(selected, comment); setComment(""); }}
+              disabled={selected === 0 || isSubmitting}
             >
               <LinearGradient
                 colors={selected > 0 ? [C.deep, C.violet] : ["#aaa", "#888"]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={rm.submitGrad}
               >
-                <Ionicons name="checkmark" size={16} color={C.white} />
-                <Text style={rm.submitText}>Valider</Text>
+                {isSubmitting
+                  ? <ActivityIndicator size="small" color={C.white} />
+                  : <Ionicons name="checkmark" size={16} color={C.white} />
+                }
+                <Text style={rm.submitText}>{isSubmitting ? "Envoi…" : "Valider"}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -274,9 +259,9 @@ function RatingModal({ visible, companyName, current, onSubmit, onClose, isDark 
 }
 
 /* ─── COMPANY CARD ───────────────────────────────────────────────────── */
-type CompanyCardProps = { item: any; sectorName: string; onPress: () => void; index: number; isDark: boolean };
+type CompanyCardProps = { item: any; sectorName: string; onPress: () => void; index: number; isDark: boolean; userId: string | null };
 
-function CompanyCardBase({ item, sectorName, onPress, index, isDark }: CompanyCardProps) {
+function CompanyCardBase({ item, sectorName, onPress, index, isDark, userId }: CompanyCardProps) {
   const t   = isDark ? Colors.dark : Colors.light;
   const cid = String(item?.companyId);
 
@@ -284,9 +269,23 @@ function CompanyCardBase({ item, sectorName, onPress, index, isDark }: CompanyCa
   const opacAnim  = useRef(new Animated.Value(0)).current;
   const scaleBtn  = useRef(new Animated.Value(1)).current;
 
-  const [rating,      setRating]      = useState<RatingData>(getRating(cid));
   const [modalOpen,   setModalOpen]   = useState(false);
   const [ratingFlash, setRatingFlash] = useState(false);
+
+  /* ── API notes ── */
+  const { data: notesData, refetch: refetchNotes } = useGetNotesByCompanyQuery(cid);
+  const [createNote, { isLoading: isSubmitting }]  = useCreateNoteMutation();
+
+  /* Extraire average, count, userRating depuis la réponse API */
+  const notesList: any[]     = notesData?.data?.notes ?? notesData?.notes ?? [];
+  const averageStars: number = notesData?.data?.averageStars ?? notesData?.averageStars ?? 0;
+  const userNote             = userId ? notesList.find((n: any) => String(n.userId) === String(userId)) : null;
+
+  const rating: RatingData = {
+    average:    averageStars,
+    count:      notesList.length,
+    userRating: userNote ? userNote.totalStars : null,
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -298,13 +297,17 @@ function CompanyCardBase({ item, sectorName, onPress, index, isDark }: CompanyCa
   const btnIn  = () => Animated.spring(scaleBtn, { toValue: 0.94, useNativeDriver: true }).start();
   const btnOut = () => Animated.spring(scaleBtn, { toValue: 1,    useNativeDriver: true }).start();
 
-  const handleSubmitRating = useCallback((stars: number, _comment: string) => {
-    const next = submitRating(cid, stars, rating);
-    setRating(next);
-    setModalOpen(false);
-    setRatingFlash(true);
-    setTimeout(() => setRatingFlash(false), 1500);
-  }, [cid, rating]);
+  const handleSubmitRating = useCallback(async (stars: number, comment: string) => {
+    try {
+      await createNote({ companyId: Number(cid), totalStars: stars, notes: comment }).unwrap();
+      setModalOpen(false);
+      setRatingFlash(true);
+      setTimeout(() => setRatingFlash(false), 1500);
+      refetchNotes();
+    } catch (_e) {
+      // silently ignore — modal reste ouvert
+    }
+  }, [cid, createNote, refetchNotes]);
 
   return (
     <>
@@ -440,6 +443,7 @@ function CompanyCardBase({ item, sectorName, onPress, index, isDark }: CompanyCa
         onSubmit={handleSubmitRating}
         onClose={() => setModalOpen(false)}
         isDark={isDark}
+        isSubmitting={isSubmitting}
       />
     </>
   );
@@ -449,22 +453,23 @@ CompanyCard.displayName = "CompanyCard";
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function ServiceDetails() {
-  const sectorSingle = useSelector<any>((state) => state.global.sectors);
+  const { id }       = useLocalSearchParams<{ id: string }>();
   const router       = useRouter();
   const scrollY      = useRef(new Animated.Value(0)).current;
   const { isDark, t } = useTheme();
 
-  const [company,    setCompany]    = useState<any[]>([]);
-  const [sectorCat,  setSectorCat]  = useState<any>();
   const [searchText, setSearchText] = useState("");
-  const [dataReady,  setDataReady]  = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    const data = sectorSingle as any;
-    setSectorCat(data[0]);
-    setCompany(data[0]?.companies || []);
-    setDataReady(true);
-  }, [sectorSingle]);
+    AsyncStorage.getItem("userId").then(setUserId);
+  }, []);
+
+  const { data: sectorData, isLoading } = useGetsectorByIdQuery(id, { skip: !id });
+
+  const sectorCat = sectorData?.data ?? sectorData;
+  const company: any[] = sectorCat?.companies || [];
+  const dataReady = !isLoading;
 
   const gotToSelectedMenu = useCallback((value: string, id: string) => {
     const routes: Record<string, string> = {
@@ -593,6 +598,7 @@ export default function ServiceDetails() {
               index={index}
               isDark={isDark}
               sectorName={sectorCat?.name || ""}
+              userId={userId}
               onPress={() => gotToSelectedMenu(sectorCat?.name, item?.companyId)}
             />
           )}

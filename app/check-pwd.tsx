@@ -207,22 +207,18 @@ export default function VerifyCode() {
             {/* OTP visual — clique pour focus le vrai input */}
             <OtpDisplay code={code} onPress={focusInput} />
 
-            {/* ✅ VRAI INPUT — visible mais stylisé de façon transparente SOUS les boxes */}
-            {/* On utilise height:0 overflow:hidden pour qu'il existe dans le DOM sans prendre de place */}
-            <View style={s.realInputWrap}>
-              <TextInput
-                ref={inputRef}
-                value={code}
-                onChangeText={v => setCode(v.replace(/\D/g, "").slice(0, 6))}
-                keyboardType="number-pad"
-                maxLength={6}
-                returnKeyType="done"
-                onSubmitEditing={handleVerify}
-                style={s.realInput}
-                caretHidden
-                showSoftInputOnFocus
-              />
-            </View>
+            {/* Input invisible positionné sur la zone OTP */}
+            <TextInput
+              ref={inputRef}
+              value={code}
+              onChangeText={v => setCode(v.replace(/\D/g, "").slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+              returnKeyType="done"
+              onSubmitEditing={handleVerify}
+              style={s.hiddenInput}
+              caretHidden
+            />
 
             {/* Séparateur */}
             <View style={s.sep} />
@@ -354,17 +350,13 @@ const s = StyleSheet.create({
     color: C.muted, letterSpacing: 1.2, textTransform: "uppercase",
   },
 
-  /* ✅ Vrai input — height 1px pour exister sans être visible */
-  realInputWrap: {
-    height: 1,
-    overflow: "hidden",
-    marginTop: 4,
-  },
-  realInput: {
-    height: 48,
-    fontSize: 24,
-    color: "transparent",
-    backgroundColor: "transparent",
+  /* Input invisible — couvre la zone OTP pour capter les taps */
+  hiddenInput: {
+    position: "absolute",
+    width: "100%",
+    height: 72,
+    top: 52,           // aligné sur les boxes OTP
+    opacity: 0,
   },
 
   sep: { height: 1, backgroundColor: "#E8EDF5", marginVertical: 20 },

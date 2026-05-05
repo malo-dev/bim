@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import Constants from 'expo-constants';
 
-// const API_URL = 'http://10.0.10.81:5000/api/v1';
+// const API_URL = 'http://192.168.1.39/api/v1';
 const API_URL = 'https://serverbimnext.masmara-dimajelo.org/api/v1';
 // Retire /api/v1 pour obtenir l'URL racine du serveur Socket.io
 const SOCKET_URL = API_URL.replace('/api/v1', '');

@@ -2,12 +2,12 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { DeviceEventEmitter } from "react-native";
 
 let isRefreshing = false;
 let subscribers = [];
 
 function onRefreshed(token) {
-  console.log("🔁 Token rafraîchi, mise à jour des requêtes...");
   subscribers.forEach((callback) => callback(token));
   subscribers = [];
 }
@@ -34,8 +34,6 @@ instance.interceptors.request.use(
     if (token) {
       // console.log("📌 Token envoyé:", token);
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.log("⚠️ Aucun token trouvé");
     }
 
     return config;
@@ -58,15 +56,12 @@ instance.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    console.log("⛔ Token expiré, tentative de refresh...");
-
     if (!originalRequest._retry) {
       originalRequest._retry = true;
 
       const refreshToken = await AsyncStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        console.log("❌ Aucun refreshToken trouvé");
         return Promise.reject(error);
       }
 
@@ -79,18 +74,14 @@ instance.interceptors.response.use(
             { refreshToken }
           );
 
-          console.log("✅ Nouveau token reçu:", data.token);
-
           await AsyncStorage.setItem("token", data.token);
 
           onRefreshed(data.token);
         } catch (err) {
-          console.log("❌ Erreur refresh token");
-
-          await AsyncStorage.removeItem("token");
-          await AsyncStorage.removeItem("refreshToken");
-
+          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+          subscribers = [];
           isRefreshing = false;
+          DeviceEventEmitter.emit("auth:forceLogout");
           return Promise.reject(err);
         }
 

@@ -74,6 +74,7 @@ export default function VerifyCode() {
   const [askPasswordReset, { isLoading: isValue }] = useAskPasswordResetMutation();
 
   const [code, setCode] = useState("");
+  const inputRef = useRef<TextInput>(null);
 
   /* ── Animations ── */
   const cardSlide = useRef(new Animated.Value(60)).current;
@@ -99,6 +100,9 @@ export default function VerifyCode() {
         Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
       ])
     ).start();
+
+    // Auto-focus pour ouvrir le clavier dès l'arrivée sur l'écran
+    setTimeout(() => inputRef.current?.focus(), 600);
   }, []);
 
   useEffect(() => {
@@ -216,11 +220,17 @@ export default function VerifyCode() {
               </Text>
             </View>
 
-            {/* OTP visual display */}
-            <OtpDisplay code={code} />
+            {/* OTP visual display — tap anywhere to focus */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => inputRef.current?.focus()}
+            >
+              <OtpDisplay code={code} />
+            </TouchableOpacity>
 
-            {/* Hidden real input — covers the OTP boxes */}
+            {/* Input invisible — reçoit la saisie */}
             <TextInput
+              ref={inputRef}
               style={s.hiddenInput}
               value={code}
               onChangeText={v => setCode(v.replace(/\D/g, "").slice(0, 6))}

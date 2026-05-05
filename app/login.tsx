@@ -61,6 +61,10 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [focusedInput, setFocusedInput] = useState<"email" | "password" | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const scrollViewRef = useRef<any>(null);
+  const loginBtnRef   = useRef<View>(null);
 
   /* ── Animations ── */
   const cardSlide = useRef(new Animated.Value(60)).current;
@@ -75,7 +79,12 @@ export default function LoginScreen() {
       Animated.timing(logoOpac,  { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.timing(cardSlide, { toValue: 0, duration: 600, delay: 200, useNativeDriver: true }),
       Animated.timing(cardOpac,  { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
-    ]).start();
+    ]).start(() => {
+      // Après l'animation, scroll vers le bouton "Se connecter"
+      loginBtnRef.current?.measure((_x, _y, _w, _h, _px, py) => {
+        scrollViewRef.current?.scrollTo({ y: py - 20, animated: true });
+      });
+    });
 
     Animated.loop(
       Animated.sequence([
@@ -90,8 +99,8 @@ export default function LoginScreen() {
 
   /* ── Handlers ── */
   const handleLogin = async () => {
-
-  
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const deviceName = Device.deviceName || "Unknown device";
       const osName     = Device.osName || Platform.OS;
@@ -144,11 +153,13 @@ export default function LoginScreen() {
           userId: userId || null,
           action: "Échec de la connexion ❌",
         });
-      
+
       } catch {
         Alert.alert("Une erreur est survenue");
       }
       Alert.alert(dataMess?.data?.message || "Une erreur est survenue");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -180,6 +191,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -283,13 +295,15 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             {/* Login button */}
-            <GradientButton
-              isLoad={isLoading}
-              title={tr("auth.loginBtn")}
-              onPress={handleLogin}
-              leftIcon={<ArrowIcon width={20} height={14} />}
-              rightIcon={<ArrowRightIcon width={30} height={24} />}
-            />
+            <View ref={loginBtnRef}>
+              <GradientButton
+                isLoad={isSubmitting}
+                title={tr("auth.loginBtn")}
+                onPress={handleLogin}
+                leftIcon={<ArrowIcon width={20} height={14} />}
+                rightIcon={<ArrowRightIcon width={30} height={24} />}
+              />
+            </View>
 
             {/* Divider */}
             <View style={s.divider}>

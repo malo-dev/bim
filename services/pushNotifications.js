@@ -35,7 +35,6 @@ export const registerForPushNotificationsAsync = async () => {
     // Récupère le token Expo
     const expoPushTokenData = await Notifications.getExpoPushTokenAsync();
     token = expoPushTokenData.data;
-    console.log('Expo Push Token:', token);
 
     // Configure le channel Android
     if (Platform.OS === 'android') {

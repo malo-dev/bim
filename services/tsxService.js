@@ -1,7 +1,7 @@
 // services/transactionService.js
 import { createApi } from '@reduxjs/toolkit/query/react';
 import Constants from 'expo-constants';
-import axiosInstance from "./axiosInstance"; 
+import axiosInstance from "./axiosInstance";
 const BASE_URL = Constants.expoConfig.extra.API_URL;
 
 
@@ -51,6 +51,14 @@ export const transactionApi = createApi({
     recharge: builder.mutation({
       query: (payload) => ({
         url: '/tsx/recharge',
+        method: 'POST',
+        data: payload,
+      }),
+      invalidatesTags: ['Recharge'],
+    }),
+    verifyPayment: builder.mutation({
+      query: (payload) => ({
+        url: '/tsx/recharge/verify',
         method: 'POST',
         data: payload,
       }),
@@ -120,7 +128,7 @@ export const transactionApi = createApi({
     createRetrait: builder.mutation({
       query: (payload) => ({
         url: '/tsx/retrait',
-        method: 'POST',
+        method :'POST',
         data: payload,
       }),
       invalidatesTags: ['Paiement'],
@@ -132,6 +140,7 @@ export const {
   useCreateRechargeMutation,
   useCheckRechargeStatusMutation,
   useRechargeMutation,
+  useVerifyPaymentMutation,
   useCreatePaiementMutation,
   useCreateTransfertMutation,
   useGetAllTransactionsQuery,
@@ -139,5 +148,5 @@ export const {
   useCreateTransactionMutation,
   useUpdateTransactionMutation,
   useDeleteTransactionMutation,
-   useCreateRetraitMutation,
+  useCreateRetraitMutation,
 } = transactionApi;

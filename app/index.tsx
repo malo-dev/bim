@@ -10,10 +10,14 @@ export default function Index() {
 
   useEffect(() => {
     const fetchToken = async () => {
-      const token = await AsyncStorage.getItem("token");
-      setTokenValue(token);
-      setLoading(false);
-      console.log("Mon token :", token);
+      try {
+        const token = await AsyncStorage.getItem("token");
+        setTokenValue(token);
+      } catch {
+        setTokenValue(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchToken();
@@ -29,7 +33,7 @@ export default function Index() {
   }
 
   if (tokenValue) {
-    return <Redirect href="/login" />; 
+    return <Redirect href="/(tabs)" />;
   }
 
   return <Redirect href="/onboarding" />;

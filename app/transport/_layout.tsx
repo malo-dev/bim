@@ -8,7 +8,7 @@ export default function TRansportLayout() {
         headerShown: false, // désactive le header natif
       }}
     >
-      <Stack.Screen name="[id]" options={{ headerShown: false }} /> {/* <- chaque page du dossier */}
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

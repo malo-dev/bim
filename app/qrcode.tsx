@@ -392,7 +392,7 @@ export default function ScannerPage() {
       <Text style={g.permTitle}>Accès caméra requis</Text>
       <Text style={g.permSub}>Pour scanner les QR codes BIM, autorisez l'accès à la caméra.</Text>
       <TouchableOpacity style={g.permBtn} onPress={requestPermission}>
-        <Text style={g.permBtnText}>Autoriser la caméra</Text>
+        <Text style={g.permBtnText}>Continuer</Text>
       </TouchableOpacity>
       <TouchableOpacity style={g.permBack} onPress={() => router.back()}>
         <Text style={g.permBackText}>Retour</Text>

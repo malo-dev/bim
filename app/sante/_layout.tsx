@@ -8,7 +8,7 @@ export default function SanteLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="[id]" options={{ headerShown: false }} /> {/* <- chaque page du dossier */}
+      <Stack.Screen name="[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

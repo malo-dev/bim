@@ -1,14 +1,15 @@
-import React, { useEffect, useRef } from "react";
-import { Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
-import * as Device from "expo-device";
-import Constants from "expo-constants";
-import { useDispatch } from "react-redux";
 import axiosInstance from "@/services/axiosInstance";
 import { notificationApi } from "@/services/notificationService";
-import { userApi } from "@/services/userService";
 import { connectSocket, disconnectSocket } from "@/services/socketService";
+import { userApi } from "@/services/userService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import React, { useEffect, useRef } from "react";
+import { AppState, AppStateStatus, DeviceEventEmitter, Platform } from "react-native";
+import { useDispatch } from "react-redux";
+import { getSocket } from "@/services/socketService";
 
 /* ─── Configuration du handler de notifications ─────────────────────── */
 Notifications.setNotificationHandler({
@@ -59,7 +60,7 @@ async function registerPushToken(userId: string) {
       }
     }
   } catch (e) {
-    console.warn("Expo push token error:", e);
+    // console.warn("Expo push token error:", e);
   }
 }
 
@@ -70,8 +71,9 @@ export default function SocketProvider({
   children: React.ReactNode;
 }) {
   const dispatch = useDispatch();
-  const socketRef = useRef<ReturnType<typeof connectSocket> | null>(null);
+  const socketRef   = useRef<ReturnType<typeof connectSocket> | null>(null);
   const notifListenerRef = useRef<Notifications.Subscription | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
     let mounted = true;
@@ -80,26 +82,42 @@ export default function SocketProvider({
       const userId = await AsyncStorage.getItem("userId");
       if (!userId || !mounted) return;
 
-      // Enregistrement push notifications
-      await registerPushToken(userId);
-
-      // Connexion Socket.io
+      /* Connecter le socket en premier (avant registerPushToken qui est lent) */
       const socket = connectSocket(userId);
       socketRef.current = socket;
 
-      // Ecouter l'événement "notification" émis par le serveur après
-      // chaque retrait / recharge / transfert / paiement
       socket.on("notification", () => {
-        // Invalider le cache notifications pour forcer un refetch
         dispatch(notificationApi.util.invalidateTags(["Notifications"]));
-        // Invalider le cache utilisateur pour mettre à jour le solde
         dispatch(userApi.util.invalidateTags(["User"]));
       });
+
+      /* Enregistrement push notifications (async, ne bloque plus le socket) */
+      registerPushToken(userId);
     }
 
     setup();
 
-    // Listener pour les notifications reçues au premier plan
+    /* ── AppState : reconnexion socket quand l'app revient au premier plan ── */
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextState === "active"
+      ) {
+        const socket = getSocket();
+        if (socket && !socket.connected) {
+          socket.connect();
+        }
+      }
+      appStateRef.current = nextState;
+    });
+
+    /* ── Logout forcé (token refresh échoué dans axiosInstance) ── */
+    const logoutSub = DeviceEventEmitter.addListener("auth:forceLogout", () => {
+      socketRef.current?.off("notification");
+      disconnectSocket();
+    });
+
+    /* Listener notifications reçues au premier plan */
     notifListenerRef.current =
       Notifications.addNotificationReceivedListener(() => {
         dispatch(notificationApi.util.invalidateTags(["Notifications"]));
@@ -111,6 +129,8 @@ export default function SocketProvider({
       socketRef.current?.off("notification");
       disconnectSocket();
       notifListenerRef.current?.remove();
+      appStateSub.remove();
+      logoutSub.remove();
     };
   }, [dispatch]);
 
