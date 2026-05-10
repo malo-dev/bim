@@ -1,29 +1,44 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Redirect } from "expo-router";
+import { jwtDecode } from "jwt-decode";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 export default function Index() {
-  const [tokenValue, setTokenValue] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [target, setTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchToken = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        setTokenValue(token);
-      } catch {
-        setTokenValue(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+    (async () => {
+      const [[, token], [, refreshToken], [, onboardingDone]] =
+        await AsyncStorage.multiGet(["token", "refreshToken", "onboardingDone"]);
 
-    fetchToken();
+      if (token) {
+        try {
+          const decoded: any = jwtDecode(token);
+          const expired = decoded.exp * 1000 < Date.now();
+
+          if (!expired) {
+            setTarget("/(tabs)");
+            return;
+          }
+          // token expiré mais refresh présent → intercepteur axios renouvellera
+          if (refreshToken) {
+            setTarget("/(tabs)");
+            return;
+          }
+          // token expiré + pas de refresh → nettoyer
+          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+        } catch {
+          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+        }
+      }
+
+      setTarget(onboardingDone ? "/login" : "/onboarding");
+    })();
   }, []);
 
-  if (loading) {
+  if (!target) {
     return (
       <View style={styles.container}>
         <LinearGradient colors={["#302E99", "#0353CC"]} style={StyleSheet.absoluteFill} />
@@ -32,11 +47,7 @@ export default function Index() {
     );
   }
 
-  if (tokenValue) {
-    return <Redirect href="/(tabs)" />;
-  }
-
-  return <Redirect href="/onboarding" />;
+  return <Redirect href={target as any} />;
 }
 
 const styles = StyleSheet.create({

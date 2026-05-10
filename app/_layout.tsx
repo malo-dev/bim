@@ -10,10 +10,12 @@ import "react-native-reanimated";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, createContext, useContext, useState } from "react";
-import { View, ActivityIndicator, Appearance, DeviceEventEmitter } from "react-native";
+import { Animated, AppState, AppStateStatus, Image, StyleSheet, View, ActivityIndicator, Appearance, DeviceEventEmitter } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SocketProvider from "@/components/SocketProvider";
+import logo from "@/assets/images/logo.jpeg";
 
 export const unstable_settings = { anchor: "(tabs)" };
 
@@ -63,6 +65,28 @@ export default function RootLayout() {
   const [isDark,       setIsDark]       = useState<boolean>(systemScheme === "dark");
   const [followSystem, setFollowSystemState] = useState<boolean>(true);
   const [themeLoaded,  setThemeLoaded]  = useState(false);
+
+  /* ── Écran de reprise (arrière-plan → premier plan) ── */
+  const [showResume, setShowResume] = useState(false);
+  const resumeOpacity = useRef(new Animated.Value(1)).current;
+  const appStateRef   = useRef<AppStateStatus>(AppState.currentState);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+      if (appStateRef.current === "background" && next === "active") {
+        resumeOpacity.setValue(1);
+        setShowResume(true);
+        Animated.timing(resumeOpacity, {
+          toValue: 0,
+          duration: 500,
+          delay: 800,
+          useNativeDriver: true,
+        }).start(() => setShowResume(false));
+      }
+      appStateRef.current = next;
+    });
+    return () => sub.remove();
+  }, [resumeOpacity]);
 
   /* ── Charger les préférences sauvegardées ── */
   useEffect(() => {
@@ -181,6 +205,36 @@ export default function RootLayout() {
 
               </AuthGuard>
               <StatusBar style={isDark ? "light" : "dark"} />
+
+              {/* Écran de reprise — logo + dégradé, 800ms puis fondu */}
+              {showResume && (
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { opacity: resumeOpacity, zIndex: 9999, justifyContent: "center", alignItems: "center" },
+                  ]}
+                  pointerEvents="none"
+                >
+                  <LinearGradient
+                    colors={["#060D1F", "#091528", "#0353CC"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={{
+                    width: 96, height: 96, borderRadius: 26,
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+                    alignItems: "center", justifyContent: "center",
+                    overflow: "hidden",
+                    elevation: 14,
+                    shadowColor: "#000", shadowOpacity: 0.3,
+                    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+                  }}>
+                    <Image source={logo} style={{ width: 78, height: 78 }} resizeMode="contain" />
+                  </View>
+                </Animated.View>
+              )}
             </ThemeProvider>
           </SocketProvider>
         </PersistGate>

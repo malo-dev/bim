@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { slides } from "@/assets/mockdata/slidersOnboarding.mock";
 import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
 import GradientButton from "@/components/ui/GradientButton";
@@ -353,7 +354,10 @@ function SlideItem({ item }: any) {
 
         <GradientButton
           title="Commencer"
-          onPress={() => router.push("/login")}
+          onPress={async () => {
+            await AsyncStorage.setItem("onboardingDone", "true");
+            router.replace("/login");
+          }}
           leftIcon={<ArrowIcon width={20} height={14} color={B.violet} />}
           rightIcon={<ArrowRightIcon width={30} height={24} />}
         />

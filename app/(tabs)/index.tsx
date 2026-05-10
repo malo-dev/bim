@@ -174,8 +174,9 @@ export default function HomeScreen() {
   const { isDark, t } = useTheme();
   const { t: tr } = useTranslation();
 
-  const [userId,     setUserId]     = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [userId,      setUserId]      = useState<string | null>(null);
+  const [userIdReady, setUserIdReady] = useState(false);
+  const [refreshing,  setRefreshing]  = useState(false);
   const [openScanner, setOpenScanner] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -187,11 +188,14 @@ export default function HomeScreen() {
   });
 
   const {
-    data: user, isLoading, isFetching, isUninitialized, isError, refetch,
+    data: user, isLoading, isFetching, isError, refetch,
   } = useGetUserByIdQuery(userId!, { skip: !userId });
 
   useEffect(() => {
-    AsyncStorage.getItem("userId").then(setUserId);
+    AsyncStorage.getItem("userId").then((id) => {
+      setUserId(id);
+      setUserIdReady(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -210,7 +214,12 @@ export default function HomeScreen() {
 
   const sectors = (sectorsData?.data || []).slice(0, 6);
 
-  if (isUninitialized || isLoading || isFetching) return <FullScreenLoader />;
+  if (!userIdReady || isLoading || isFetching) return <FullScreenLoader />;
+
+  if (userIdReady && !userId) {
+    router.replace("/login");
+    return <FullScreenLoader />;
+  }
 
   if (isError) return (
     <View style={s.loaderWrap}>

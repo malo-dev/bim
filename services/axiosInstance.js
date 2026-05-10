@@ -20,6 +20,7 @@ const BASE_URL = Constants.expoConfig.extra.API_URL;
 
 const instance = axios.create({
   baseURL: BASE_URL,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -62,6 +63,8 @@ instance.interceptors.response.use(
       const refreshToken = await AsyncStorage.getItem("refreshToken");
 
       if (!refreshToken) {
+        await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+        DeviceEventEmitter.emit("auth:forceLogout");
         return Promise.reject(error);
       }
 
