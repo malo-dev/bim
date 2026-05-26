@@ -12,10 +12,8 @@ const BRAND = {
   deep: "#302E99",
   accent: "#4D96FF",
   gold: "#FFD700",
-
   white: "#FFFFFF",
   black: "#000000",
-
   text: "#0D1B3E",
   muted: "#7B8DB0",
   gray: "#F4F6FA",

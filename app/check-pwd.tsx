@@ -275,6 +275,14 @@ export default function VerifyCode() {
               <Ionicons name="chevron-forward" size={16} color={C.muted} />
             </TouchableOpacity>
 
+            {/* Retour */}
+            <TouchableOpacity style={s.backBtn} onPress={() => router.push("/forgot-password")} activeOpacity={0.85}>
+              <View style={[s.iconCircle, { backgroundColor: C.f4, width: 36, height: 36, borderRadius: 18 }]}>
+                <FontAwesome6 name="arrow-left" size={13} color={C.muted} />
+              </View>
+              <Text style={s.backText}>Retour</Text>
+            </TouchableOpacity>
+
           </Animated.View>
 
           <Text style={s.version}>BIM NEXT · v1.0.0</Text>
@@ -389,6 +397,17 @@ const s = StyleSheet.create({
   },
   resendMain: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700", color: C.text },
   resendSub:  { fontFamily: "NexaLight", fontSize: 11, color: C.muted, marginTop: 2 },
+
+  backBtn: {
+    flexDirection: "row", alignItems: "center",
+    gap: 10, marginTop: 14,
+    backgroundColor: C.f4, borderRadius: 18,
+    paddingVertical: 12, paddingHorizontal: 14,
+  },
+  backText: {
+    fontFamily: "NexaLight", fontSize: 13,
+    color: C.muted, flex: 1,
+  },
 
   version: {
     textAlign: "center", fontFamily: "NexaLight",

@@ -1,4 +1,3 @@
-import { ThemedText } from "@/components/themed-text";
 import { checkAbonnementAndExpiry } from "@/utils/checkAbonnementAndExpiry.util";
 import { formatNumber } from "@/utils/formatNUmber.util";
 import { Ionicons } from "@expo/vector-icons";

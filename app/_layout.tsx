@@ -1,7 +1,7 @@
 import "@/i18n";
 import React from "react";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Provider } from "react-redux";
 import { store, persistor } from "@/store/store";
@@ -16,6 +16,11 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SocketProvider from "@/components/SocketProvider";
 import logo from "@/assets/images/logo.jpeg";
+import axios from "axios";
+import { jwtDecode } from "jwt-decode";
+import Constants from "expo-constants";
+
+const BASE_URL = Constants.expoConfig?.extra?.API_URL as string;
 
 export const unstable_settings = { anchor: "(tabs)" };
 
@@ -71,9 +76,16 @@ export default function RootLayout() {
   const resumeOpacity = useRef(new Animated.Value(1)).current;
   const appStateRef   = useRef<AppStateStatus>(AppState.currentState);
 
+  const pathname    = usePathname();
+  const pathnameRef = useRef(pathname);
+  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
+
+  const AUTH_RECOVERY_ROUTES = ["/forgot-password", "/check-pwd", "/reset-password"];
+
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
+    const sub = AppState.addEventListener("change", async (next: AppStateStatus) => {
       if (appStateRef.current === "background" && next === "active") {
+        // Écran de reprise visuel
         resumeOpacity.setValue(1);
         setShowResume(true);
         Animated.timing(resumeOpacity, {
@@ -82,6 +94,29 @@ export default function RootLayout() {
           delay: 800,
           useNativeDriver: true,
         }).start(() => setShowResume(false));
+
+        // Ne pas vérifier le token pendant le flux de récupération de mot de passe
+        if (!AUTH_RECOVERY_ROUTES.includes(pathnameRef.current)) {
+          try {
+            const [[, token], [, refreshToken]] = await AsyncStorage.multiGet(["token", "refreshToken"]);
+            if (!token || !refreshToken) {
+              appStateRef.current = next;
+              return;
+            }
+
+            const decoded = jwtDecode<{ exp: number }>(token);
+            const isExpiredOrSoon = decoded.exp * 1000 < Date.now() + 5 * 60 * 1000;
+
+            if (isExpiredOrSoon) {
+              const { data } = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
+              await AsyncStorage.setItem("token", data.token);
+            }
+          } catch {
+            // refresh échoué → déconnexion propre
+            await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+            DeviceEventEmitter.emit("auth:forceLogout");
+          }
+        }
       }
       appStateRef.current = next;
     });
@@ -181,6 +216,8 @@ export default function RootLayout() {
                 <Stack.Screen name="bim-energie"      options={{ headerShown: false }} />
                 <Stack.Screen name="hotellerie"       options={{ headerShown: false }} />
                 <Stack.Screen name="bim-gaz"          options={{ headerShown: false }} />
+                <Stack.Screen name="bim-supermarche" options={{ headerShown: false }} />
+                <Stack.Screen name="company-portal"  options={{ headerShown: false }} />
                 <Stack.Screen name="apropos"          options={{ headerShown: false }} />
                 <Stack.Screen name="terms"            options={{ headerShown: false }} />
                 <Stack.Screen name="transfert"        options={{ headerShown: false }} />

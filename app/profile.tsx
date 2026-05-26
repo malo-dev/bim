@@ -338,6 +338,22 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* ── Mes commandes ── */}
+          <TouchableOpacity
+            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.10)" }]}
+            onPress={() => router.push("/bim-supermarche/my-orders")}
+            activeOpacity={0.82}
+          >
+            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(3,83,204,0.15)" : "rgba(3,83,204,0.08)" }]}>
+              <Ionicons name="receipt-outline" size={20} color={B.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.ordersTitle, { color: isDark ? t.text : "#0D1B3E" }]}>Mes commandes</Text>
+              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Suivre et consulter vos commandes</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
+          </TouchableOpacity>
+
           <View style={{ height: 60 }} />
         </Animated.ScrollView>
       </View>
@@ -468,4 +484,15 @@ const s = StyleSheet.create({
   },
 
   saveBtn: { marginTop: 6 },
+
+  ordersRow: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    marginHorizontal: 16, marginTop: 14,
+    borderRadius: 20, padding: 16,
+    borderWidth: 1,
+    elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+  },
+  ordersIcon:  { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  ordersTitle: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
+  ordersSub:   { fontFamily: "NexaLight", fontSize: 11, marginTop: 2 },
 });

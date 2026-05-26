@@ -473,12 +473,13 @@ export default function ServiceDetails() {
 
   const gotToSelectedMenu = useCallback((value: string, id: string) => {
     const routes: Record<string, string> = {
-      "BIM Santé":     `/sante/${id}`,
-      "BIM Transport": `/transport/${id}`,
-      "BIM Énergies":  `/bim-energie/${id}`,
-      "BIM Carburant": `/bim-carburant/${id}`,
-      "BIM Hôtellerie":`/hotellerie/${id}`,
-      "BIM Gaz":       `/bim-gaz/${id}`,
+      "BIM Santé":        `/sante/${id}`,
+      "BIM Transport":    `/transport/${id}`,
+      "BIM Énergies":     `/bim-energie/${id}`,
+      "BIM Carburant":    `/bim-carburant/${id}`,
+      "BIM Hôtellerie":   `/hotellerie/${id}`,
+      "BIM Gaz":          `/bim-gaz/${id}`,
+      "BIM SUPERMARCHE":  `/bim-supermarche/${id}`,
     };
     const route = routes[value];
     if (route) router.push(route);

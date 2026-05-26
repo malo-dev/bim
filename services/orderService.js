@@ -1,18 +1,11 @@
-
 import { createApi } from "@reduxjs/toolkit/query/react";
-import axiosInstance from "./axiosInstance"; 
+import axiosInstance from "./axiosInstance";
 
 const axiosBaseQuery =
   () =>
   async ({ url, method, data, params }) => {
     try {
-      const result = await axiosInstance({
-        url,
-        method,
-        data,
-        params,
-      });
-
+      const result = await axiosInstance({ url, method, data, params });
       return { data: result.data };
     } catch (err) {
       return {
@@ -24,69 +17,73 @@ const axiosBaseQuery =
     }
   };
 
-
-
 export const orderApi = createApi({
   reducerPath: "orderApi",
   baseQuery: axiosBaseQuery(),
   tagTypes: ["order"],
 
   endpoints: (builder) => ({
-    getAllHistories: builder.query({
-      query: (params) => ({
-        url: "/order",
-        method: "GET",
-        params,
-      }),
+    getAllOrders: builder.query({
+      query: (params) => ({ url: "/order", method: "GET", params }),
       providesTags: ["order"],
     }),
 
-    /* GET BY ID */
     getorderById: builder.query({
-      query: (id) => ({
-        url: `/order/${id}`,
-        method: "GET",
-      }),
+      query: (id) => ({ url: `/order/${id}`, method: "GET" }),
       providesTags: ["order"],
     }),
 
-    /* CREATE */
-    createorder: builder.mutation({
-      query: (data) => ({
-        url: "/order/create",
-        method: "POST",
-        data,
-      }),
+    /* Mes commandes (client) — groupées par orderNumber */
+    getUserOrders: builder.query({
+      query: (params) => ({ url: "/order/mine", method: "GET", params }),
+      providesTags: ["order"],
+    }),
+
+    /* Commandes de l'entreprise (admin entreprise) */
+    getCompanyOrders: builder.query({
+      query: (params) => ({ url: "/order/my-orders", method: "GET", params }),
+      providesTags: ["order"],
+    }),
+
+    /* Créer une commande depuis le panier */
+    createOrder: builder.mutation({
+      query: (data) => ({ url: "/order/create", method: "POST", data }),
       invalidatesTags: ["order"],
     }),
 
-    /* UPDATE */
-    updateorder: builder.mutation({
-      query: ({ id, data }) => ({
-        url: `/order/update/${id}`,
+    /* Mettre à jour le statut d'une commande */
+    updateOrderStatus: builder.mutation({
+      query: ({ id, status }) => ({
+        url: `/order/${id}`,
         method: "PUT",
-        data,
+        data: { status },
       }),
       invalidatesTags: ["order"],
     }),
 
-    /* DELETE */
-    deleteorder: builder.mutation({
-      query: (id) => ({
-        url: `/order/delete/${id}`,
-        method: "DELETE",
+    /* Payer à la livraison — marque la commande livrée + payée */
+    markOrderPaid: builder.mutation({
+      query: (orderNumber) => ({
+        url: `/order/pay-delivery/${orderNumber}`,
+        method: "PUT",
       }),
+      invalidatesTags: ["order"],
+    }),
+
+    deleteorder: builder.mutation({
+      query: (id) => ({ url: `/order/${id}`, method: "DELETE" }),
       invalidatesTags: ["order"],
     }),
   }),
 });
 
-
-
 export const {
-  useGetAllHistoriesQuery,
+  useGetAllOrdersQuery,
   useGetorderByIdQuery,
-  useCreateorderMutation,
-  useUpdateorderMutation,
+  useGetUserOrdersQuery,
+  useGetCompanyOrdersQuery,
+  useCreateOrderMutation,
+  useUpdateOrderStatusMutation,
+  useMarkOrderPaidMutation,
   useDeleteorderMutation,
 } = orderApi;

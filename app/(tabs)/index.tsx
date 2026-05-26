@@ -188,7 +188,7 @@ export default function HomeScreen() {
   });
 
   const {
-    data: user, isLoading, isFetching, isError, refetch,
+    data: user, isLoading, isError, refetch,
   } = useGetUserByIdQuery(userId!, { skip: !userId });
 
   useEffect(() => {
@@ -197,6 +197,12 @@ export default function HomeScreen() {
       setUserIdReady(true);
     });
   }, []);
+
+  useEffect(() => {
+    if (userIdReady && !userId) {
+      router.replace("/login");
+    }
+  }, [userIdReady, userId, router]);
 
   useEffect(() => {
     if (!permission?.granted) requestPermission();
@@ -214,12 +220,9 @@ export default function HomeScreen() {
 
   const sectors = (sectorsData?.data || []).slice(0, 6);
 
-  if (!userIdReady || isLoading || isFetching) return <FullScreenLoader />;
+  if (!userIdReady || isLoading) return <FullScreenLoader />;
 
-  if (userIdReady && !userId) {
-    router.replace("/login");
-    return <FullScreenLoader />;
-  }
+  if (userIdReady && !userId) return <FullScreenLoader />;
 
   if (isError) return (
     <View style={s.loaderWrap}>

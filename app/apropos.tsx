@@ -105,21 +105,21 @@ const PILIERS = [
 const TEAM = [
   {
     name:    "BARAKA KPAVURO JERRY",
-    role:    "Fondateur Du réseau BIM",
-    detail:  "Concepteur du projet BIM NEXT",
+    role:    "Co-fondateur de BIM NEXT",
+    detail:  "Concepteur & visionnaire du projet BIM NEXT",
     avatar:  "BJ",
   },
   {
-    name:    "Félicien Mafutala",
-    role:    " Financier",
-    detail:  "Pilier stratégique & financier",
-    avatar:  "FM",
+    name:    "MUSHIO ATAULWA",
+    role:    "Co-fondateur de BIM NEXT",
+    detail:  "Responsable technique — BIM NEXT",
+    avatar:  "MA",
   },
   {
-    name:    "MUSHIO ATAULWA",
-    role:    "Leader réseau",
-    detail:  "Développement & partenariats",
-    avatar:  "MA",
+    name:    "Félicien Mafutala",
+    role:    "Directeur financier",
+    detail:  "Pilier stratégique & financier",
+    avatar:  "FM",
   },
 ];
 

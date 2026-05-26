@@ -19,6 +19,15 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed",
+        "changesNotSentForReview": false
+      },
+      "ios": {
+        "language": "fr-FR"
+      }
+    }
   }
 }
