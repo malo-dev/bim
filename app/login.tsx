@@ -330,6 +330,22 @@ export default function LoginScreen() {
               <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </TouchableOpacity>
 
+            {/* Espace Livreur */}
+            <TouchableOpacity
+              style={[s.registerBtn, { marginTop: 8 }]}
+              onPress={() => router.push("/livreur/login")}
+              activeOpacity={0.85}
+            >
+              <View style={[s.iconCircle, { backgroundColor: "#22C55E18" }]}>
+                <Ionicons name="bicycle" size={18} color="#22C55E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.registerMain, { color: "#22C55E" }]}>Espace Livreur</Text>
+                <Text style={s.registerSub}>Accéder à votre espace de livraison</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.muted} />
+            </TouchableOpacity>
+
           </Animated.View>
 
           <View style={{ height: 60 }} />

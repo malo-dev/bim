@@ -1,14 +1,16 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Linking,
+  Modal,
   RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useColorScheme,
   View,
@@ -17,9 +19,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useGetUserOrdersQuery, useMarkOrderPaidMutation } from "@/services/orderService";
-import { useVerifyPassMutation } from "@/services/authService";
-import { useCreatePaiementMutation } from "@/services/tsxService";
+import { useGetUserOrdersQuery, usePayOrderAtDeliveryMutation } from "@/services/orderService";
+import { useRateLivreurMutation } from "@/services/livreurService";
+import { connectSocket, getSocket } from "@/services/socketService";
 
 const SUPPORT_PHONE   = "+243861166469";
 const SUPPORT_DISPLAY = "+243 861 166 469";
@@ -130,16 +132,34 @@ export default function OrderTracking() {
   const { isDark, t }   = useTheme();
 
   /* Payment state */
-  const [showPay,   setShowPay]   = useState(false);
-  const [pin,       setPin]       = useState("");
-  const [pinError,  setPinError]  = useState("");
+  const [showPay,  setShowPay]  = useState(false);
+  const [pin,      setPin]      = useState("");
+  const [pinError, setPinError] = useState("");
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  const [verifyPass,    { isLoading: verifying }] = useVerifyPassMutation();
-  const [createPaiement,{ isLoading: paying }]    = useCreatePaiementMutation();
-  const [markPaid,      { isLoading: marking }]   = useMarkOrderPaidMutation();
+  /* Rating state */
+  const [showRating,     setShowRating]     = useState(false);
+  const [ratingScore,    setRatingScore]    = useState(0);
+  const [ratingComment,  setRatingComment]  = useState("");
+  const [ratingDone,     setRatingDone]     = useState(false);
 
-  const { data, isLoading, refetch, isFetching } = useGetUserOrdersQuery({}, { pollingInterval: 30000 });
+  const [payOrderAtDelivery, { isLoading: paying }] = usePayOrderAtDeliveryMutation();
+  const [rateLivreur, { isLoading: rating }] = useRateLivreurMutation();
+
+  const { data, isLoading, refetch, isFetching } = useGetUserOrdersQuery({});
+
+  // Temps réel — écouter les changements de statut via Socket.io
+  useEffect(() => {
+    if (!orderNumber) return;
+    const socket = getSocket();
+    if (!socket) return;
+    socket.emit("track_order", orderNumber);
+    const handler = (payload: any) => {
+      if (payload.orderNumber === orderNumber) refetch();
+    };
+    socket.on("order:status_updated", handler);
+    return () => { socket.off("order:status_updated", handler); };
+  }, [orderNumber, refetch]);
 
   const orders: any[]   = data?.data || [];
   const order           = orders.find(o => o.orderNumber === orderNumber);
@@ -148,7 +168,8 @@ export default function OrderTracking() {
   const meta            = STATUS_META[status] ?? STATUS_META.pending;
   const items: any[]    = order?.items || [];
   const total           = order?.grandTotal ?? 0;
-  const companyId       = order?.companyId;
+  const livreur         = order?.livreur ?? null;
+  const estimatedMinutes = order?.estimatedMinutes ?? null;
 
   const isCancelled    = status === "cancelled";
   const isDelivered    = status === "delivered";
@@ -170,19 +191,42 @@ export default function OrderTracking() {
   const handlePay = async () => {
     if (pin.length < 6) return;
     try {
-      await verifyPass({ pin }).unwrap();
-      await createPaiement({ companyId: Number(companyId), amount: total, pin }).unwrap();
-      await markPaid(orderNumber).unwrap();
+      await payOrderAtDelivery({ orderNumber, pin }).unwrap();
       setShowPay(false);
       setPin("");
       setPinError("");
       refetch();
-      Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
+      // Ouvrir la notation si un livreur est assigné
+      if (livreur?.livreurId) {
+        setShowRating(true);
+      } else {
+        Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
+      }
     } catch (err: any) {
-      const msg = err?.data?.message || err?.data?.error || "Code PIN incorrect ou solde insuffisant";
+      const msg = err?.data?.message || "Code PIN incorrect ou solde insuffisant";
       setPinError(msg);
       shakePin();
     }
+  };
+
+  /* ── Soumettre la note ── */
+  const handleRate = async () => {
+    if (ratingScore === 0) {
+      Alert.alert("Note requise", "Veuillez sélectionner une note de 1 à 5 étoiles.");
+      return;
+    }
+    try {
+      await rateLivreur({ id: livreur.livreurId, score: ratingScore, comment: ratingComment.trim() || undefined }).unwrap();
+      setRatingDone(true);
+    } catch {
+      // On ferme quand même sans bloquer
+      setShowRating(false);
+    }
+  };
+
+  const handleSkipRating = () => {
+    setShowRating(false);
+    Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
   };
 
   return (
@@ -320,12 +364,12 @@ export default function OrderTracking() {
               <PinPad value={pin} onChange={k => { setPinError(""); setPin(p => p.length < 6 ? p + k : p); }} onDelete={() => setPin(p => p.slice(0, -1))} />
 
               <TouchableOpacity
-                style={[s.confirmBtn, (verifying || paying || marking || pin.length < 6) && { opacity: 0.55 }]}
+                style={[s.confirmBtn, (paying || pin.length < 6) && { opacity: 0.55 }]}
                 onPress={handlePay}
-                disabled={verifying || paying || marking || pin.length < 6}
+                disabled={paying || pin.length < 6}
               >
                 <LinearGradient colors={[C.green, "#16A34A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
-                  {(verifying || paying || marking)
+                  {paying
                     ? <ActivityIndicator color={C.white} size="small" />
                     : <>
                         <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
@@ -373,6 +417,60 @@ export default function OrderTracking() {
             </TouchableOpacity>
           ) : null}
 
+          {/* Livreur assigné */}
+          {livreur && (
+            <View style={s.livreurCard}>
+              <View style={s.livreurHeader}>
+                <View style={s.livreurIconWrap}>
+                  <Ionicons name="bicycle" size={20} color={C.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.livreurTitle, { color: t.text }]}>Votre livreur</Text>
+                  <Text style={[s.livreurSub, { color: t.sub }]}>En route vers vous</Text>
+                </View>
+                <View style={s.livreurOnline}>
+                  <Text style={s.livreurOnlineTxt}>🟢 En ligne</Text>
+                </View>
+              </View>
+              {estimatedMinutes && (
+                <View style={s.estTimeRow}>
+                  <Ionicons name="time-outline" size={14} color={C.orange} />
+                  <Text style={s.estTimeTxt}>Livraison dans environ {estimatedMinutes} min</Text>
+                </View>
+              )}
+              <View style={s.livreurRow}>
+                <Ionicons name="person-circle-outline" size={16} color={C.muted} />
+                <Text style={[s.livreurInfo, { color: t.text }]}>{livreur.user?.username ?? "Livreur BIM"}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 8 }}>
+                  <Text style={{ color: "#FFD700", fontSize: 12 }}>★</Text>
+                  <Text style={[s.livreurInfo, { color: C.muted }]}>{parseFloat(livreur.rating || 0).toFixed(1)}</Text>
+                </View>
+              </View>
+              <View style={s.livreurBtns}>
+                {livreur.telephone && (
+                  <TouchableOpacity
+                    style={s.livreurBtn}
+                    onPress={() => Linking.openURL(`tel:${livreur.telephone}`)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="call" size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={s.livreurBtnTxt}>Appeler · {livreur.telephone}</Text>
+                  </TouchableOpacity>
+                )}
+                {livreur.latitude && livreur.longitude && (
+                  <TouchableOpacity
+                    style={[s.livreurBtn, { backgroundColor: C.primary }]}
+                    onPress={() => Linking.openURL(`https://maps.google.com/?q=${livreur.latitude},${livreur.longitude}`)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="navigate" size={16} color="#fff" style={{ marginRight: 6 }} />
+                    <Text style={s.livreurBtnTxt}>Voir sa position</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Support */}
           <TouchableOpacity style={s.supportBtn} onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)} activeOpacity={0.85}>
             <View style={s.supportIconWrap}>
@@ -395,6 +493,113 @@ export default function OrderTracking() {
           )}
         </ScrollView>
       )}
+
+      {/* ══ MODAL NOTATION LIVREUR ══ */}
+      <Modal visible={showRating} transparent animationType="slide" onRequestClose={handleSkipRating}>
+        <View style={s.ratingOverlay}>
+          <View style={[s.ratingSheet, { backgroundColor: isDark ? TH.dark.card : "#FFF" }]}>
+
+            {!ratingDone ? (
+              <>
+                {/* Header */}
+                <View style={s.ratingHeader}>
+                  <View style={s.ratingAvatarWrap}>
+                    <Ionicons name="bicycle" size={28} color={C.primary} />
+                  </View>
+                  <Text style={[s.ratingTitle, { color: isDark ? TH.dark.text : C.text }]}>
+                    Évaluer votre livreur
+                  </Text>
+                  <Text style={[s.ratingSub, { color: isDark ? TH.dark.sub : C.muted }]}>
+                    {livreur?.user?.username ?? "Votre livreur"} · Comment s'est passée la livraison ?
+                  </Text>
+                </View>
+
+                {/* Étoiles */}
+                <View style={s.starsRow}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <TouchableOpacity key={star} onPress={() => setRatingScore(star)} activeOpacity={0.7}>
+                      <Ionicons
+                        name={star <= ratingScore ? "star" : "star-outline"}
+                        size={40}
+                        color={star <= ratingScore ? "#FFD700" : (isDark ? "#374151" : "#D1D5DB")}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Label selon score */}
+                {ratingScore > 0 && (
+                  <Text style={[s.ratingScoreLabel, { color: ratingScore >= 4 ? C.green : ratingScore >= 3 ? C.orange : C.red }]}>
+                    {ratingScore === 5 ? "Excellent ! 🎉" : ratingScore === 4 ? "Très bien 👍" : ratingScore === 3 ? "Correct 😐" : ratingScore === 2 ? "Décevant 😕" : "Mauvais 😞"}
+                  </Text>
+                )}
+
+                {/* Commentaire optionnel */}
+                <TextInput
+                  style={[s.ratingInput, {
+                    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(3,83,204,0.15)",
+                    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#F8FAFF",
+                    color: isDark ? TH.dark.text : C.text,
+                  }]}
+                  placeholder="Laissez un commentaire (optionnel)"
+                  placeholderTextColor={isDark ? TH.dark.sub : C.muted}
+                  value={ratingComment}
+                  onChangeText={setRatingComment}
+                  multiline
+                  maxLength={200}
+                />
+
+                {/* Boutons */}
+                <TouchableOpacity
+                  style={[s.ratingSubmitBtn, ratingScore === 0 && { opacity: 0.5 }]}
+                  onPress={handleRate}
+                  disabled={ratingScore === 0 || rating}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient colors={[C.deep, C.primary]} style={s.ratingSubmitGrad}>
+                    {rating
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <><Ionicons name="star" size={16} color="#fff" /><Text style={s.ratingSubmitTxt}>Envoyer ma note</Text></>
+                    }
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={s.ratingSkip} onPress={handleSkipRating}>
+                  <Text style={[s.ratingSkipTxt, { color: isDark ? TH.dark.sub : C.muted }]}>Passer cette étape</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* Succès */
+              <View style={s.ratingSuccess}>
+                <View style={s.ratingSuccessIcon}>
+                  <Ionicons name="checkmark-circle" size={56} color={C.green} />
+                </View>
+                <Text style={[s.ratingTitle, { color: isDark ? TH.dark.text : C.text }]}>Merci pour votre avis !</Text>
+                <Text style={[s.ratingSub, { color: isDark ? TH.dark.sub : C.muted, textAlign: "center" }]}>
+                  Votre évaluation aide l'entreprise à garantir la qualité des livraisons.
+                </Text>
+                <View style={s.starsRow}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <Ionicons key={star} name={star <= ratingScore ? "star" : "star-outline"} size={28} color={star <= ratingScore ? "#FFD700" : "#D1D5DB"} />
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={[s.ratingSubmitBtn, { marginTop: 16 }]}
+                  onPress={() => { setShowRating(false); }}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient colors={[C.deep, C.primary]} style={s.ratingSubmitGrad}>
+                    <Ionicons name="home-outline" size={16} color="#fff" />
+                    <Text style={s.ratingSubmitTxt}>Retour à l'accueil</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )}
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -470,6 +675,20 @@ const s = StyleSheet.create({
   refundCallText: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "700", color: C.green },
 
   /* Support */
+  livreurCard:     { backgroundColor: "#EFF6FF", borderRadius: 16, borderWidth: 1, borderColor: C.primary + "25", padding: 14, marginBottom: 12 },
+  livreurHeader:   { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  livreurIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary + "15", alignItems: "center", justifyContent: "center" },
+  livreurTitle:    { fontFamily: "NexaBold", fontSize: 14 },
+  livreurSub:      { fontFamily: "NexaLight", fontSize: 11, marginTop: 1 },
+  livreurOnline:   { backgroundColor: "#DCFCE7", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  livreurOnlineTxt:{ fontFamily: "NexaBold", fontSize: 10, color: "#16A34A" },
+  livreurRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  livreurInfo:     { fontFamily: "NexaBold", fontSize: 13 },
+  livreurBtns:     { flexDirection: "row", gap: 8 },
+  livreurBtn:      { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#22C55E", borderRadius: 10, paddingVertical: 10 },
+  livreurBtnTxt:   { fontFamily: "NexaBold", fontSize: 12, color: "#fff" },
+  estTimeRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, backgroundColor: "#FFF7ED", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  estTimeTxt:      { fontFamily: "NexaBold", fontSize: 12, color: "#F97316" },
   supportBtn:      { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 16, padding: 14, marginTop: 4, marginBottom: 12, borderWidth: 1, borderColor: C.green + "30" },
   supportIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.green + "15", alignItems: "center", justifyContent: "center" },
   supportLabel:    { fontFamily: "NexaLight", fontSize: 11, marginBottom: 2 },
@@ -478,6 +697,24 @@ const s = StyleSheet.create({
   homeBtn:     { borderRadius: 18, overflow: "hidden", marginTop: 4 },
   homeBtnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
   homeBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
+
+  /* Rating modal */
+  ratingOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  ratingSheet:   { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36 },
+  ratingHeader:  { alignItems: "center", marginBottom: 20 },
+  ratingAvatarWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primary + "15", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  ratingTitle:   { fontFamily: "NexaLight", fontSize: 18, fontWeight: "700", marginBottom: 4 },
+  ratingSub:     { fontFamily: "NexaLight", fontSize: 12, textAlign: "center", lineHeight: 18 },
+  starsRow:      { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 12 },
+  ratingScoreLabel: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700", textAlign: "center", marginBottom: 14 },
+  ratingInput:   { borderWidth: 1.5, borderRadius: 14, padding: 12, fontFamily: "NexaLight", fontSize: 13, minHeight: 70, marginBottom: 16 },
+  ratingSubmitBtn:  { borderRadius: 16, overflow: "hidden" },
+  ratingSubmitGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15 },
+  ratingSubmitTxt:  { color: "#fff", fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
+  ratingSkip:    { alignItems: "center", paddingVertical: 14 },
+  ratingSkipTxt: { fontFamily: "NexaLight", fontSize: 13 },
+  ratingSuccess: { alignItems: "center", paddingVertical: 8, gap: 10 },
+  ratingSuccessIcon: { marginBottom: 8 },
 });
 
 const tl = StyleSheet.create({

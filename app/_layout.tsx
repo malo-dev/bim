@@ -237,6 +237,8 @@ export default function RootLayout() {
                 <Stack.Screen name="sante"            options={{ headerShown: false }} />
                 <Stack.Screen name="payment"          options={{ headerShown: false }} />
                 <Stack.Screen name="qrcode"           options={{ headerShown: false }} />
+                <Stack.Screen name="livreur"          options={{ headerShown: false }} />
+                <Stack.Screen name="bim-sos"          options={{ headerShown: false }} />
                 <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />
               </Stack>
 

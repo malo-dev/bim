@@ -70,6 +70,16 @@ export const orderApi = createApi({
       invalidatesTags: ["order"],
     }),
 
+    /* Paiement à la livraison avec PIN — split entreprise/livreur */
+    payOrderAtDelivery: builder.mutation({
+      query: ({ orderNumber, pin }) => ({
+        url: `/order/pay/${orderNumber}`,
+        method: "POST",
+        data: { pin },
+      }),
+      invalidatesTags: ["order"],
+    }),
+
     deleteorder: builder.mutation({
       query: (id) => ({ url: `/order/${id}`, method: "DELETE" }),
       invalidatesTags: ["order"],
@@ -85,5 +95,6 @@ export const {
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,
   useMarkOrderPaidMutation,
+  usePayOrderAtDeliveryMutation,
   useDeleteorderMutation,
 } = orderApi;

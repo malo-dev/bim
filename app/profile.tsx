@@ -354,6 +354,70 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
           </TouchableOpacity>
 
+          {/* ── Mon panier ── */}
+          <TouchableOpacity
+            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.10)", marginTop: 10 }]}
+            onPress={() => router.push("/bim-supermarche/cart")}
+            activeOpacity={0.82}
+          >
+            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(3,83,204,0.15)" : "rgba(3,83,204,0.08)" }]}>
+              <Ionicons name="cart-outline" size={20} color={B.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.ordersTitle, { color: isDark ? t.text : "#0D1B3E" }]}>Mon panier</Text>
+              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Voir et gérer votre panier d'achats</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
+          </TouchableOpacity>
+
+          {/* ── Espace Livreur ── */}
+          <TouchableOpacity
+            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.12)", marginTop: 10 }]}
+            onPress={() => router.push("/livreur/login")}
+            activeOpacity={0.82}
+          >
+            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.08)" }]}>
+              <Ionicons name="bicycle" size={20} color="#22C55E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.ordersTitle, { color: "#22C55E" }]}>Espace Livreur</Text>
+              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Accéder à votre espace de livraison</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
+          </TouchableOpacity>
+
+          {/* ── Candidature livreur ── */}
+          <TouchableOpacity
+            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(255,215,0,0.15)" : "rgba(255,165,0,0.12)", marginTop: 10 }]}
+            onPress={() => router.push("/livreur/apply")}
+            activeOpacity={0.82}
+          >
+            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(255,165,0,0.15)" : "rgba(255,165,0,0.08)" }]}>
+              <Ionicons name="paper-plane-outline" size={20} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.ordersTitle, { color: "#F59E0B" }]}>Devenir livreur</Text>
+              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Soumettre votre candidature</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
+          </TouchableOpacity>
+
+          {/* ── BIM SOS ── */}
+          <TouchableOpacity
+            style={[s.ordersRow, { backgroundColor: isDark ? "rgba(220,38,38,0.12)" : "#FFF5F5", borderColor: isDark ? "rgba(220,38,38,0.3)" : "rgba(220,38,38,0.2)", marginTop: 10 }]}
+            onPress={() => router.push("/bim-sos")}
+            activeOpacity={0.82}
+          >
+            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(220,38,38,0.2)" : "rgba(220,38,38,0.1)" }]}>
+              <Ionicons name="warning-outline" size={20} color="#DC2626" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.ordersTitle, { color: "#DC2626" }]}>BIM SOS</Text>
+              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Sécurité · Urgence · Santé — signaler à BIM NEXT</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#DC2626" />
+          </TouchableOpacity>
+
           <View style={{ height: 60 }} />
         </Animated.ScrollView>
       </View>

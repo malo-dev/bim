@@ -24,6 +24,7 @@ import { productApi } from "../services/productServices";
 import { orderApi } from "../services/orderService";
 import { companyApi } from "../services/companyService";
 import { notesApi } from "../services/notesService";
+import { livreurApi } from "../services/livreurService";
 
 const persistConfig = {
   key: "global",
@@ -43,6 +44,7 @@ const rootReducer = combineReducers({
   [orderApi.reducerPath]: orderApi.reducer,
   [companyApi.reducerPath]: companyApi.reducer,
   [notesApi.reducerPath]: notesApi.reducer,
+  [livreurApi.reducerPath]: livreurApi.reducer,
 
   global: persistReducer(persistConfig, globalReducer),
 });
@@ -66,7 +68,8 @@ export const store = configureStore({
       productApi.middleware,
       orderApi.middleware,
       companyApi.middleware,
-      notesApi.middleware
+      notesApi.middleware,
+      livreurApi.middleware
     ),
 });
 

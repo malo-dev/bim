@@ -1,35 +1,13 @@
 // services/authService.js
 import { createApi } from '@reduxjs/toolkit/query/react';
-import Constants from 'expo-constants';
-import axios from 'axios';
+import axiosInstance from './axiosInstance';
 
-// ✅ Support Expo Go + Build
-const BASE_URL =
-  Constants.expoConfig?.extra?.API_URL ||
-  Constants.manifest?.extra?.API_URL ||
-  '';
-
-// ✅ Instance axios
-const axiosInstance = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 15000,
-});
-
-// ✅ BaseQuery pour RTK Query
+// ✅ BaseQuery utilisant l'instance partagée (avec intercepteur token)
 const axiosBaseQuery =
   () =>
-  async ({ url, method, data, params }) => {
+  async ({ url, method, data, params, headers }) => {
     try {
-      const result = await axiosInstance({
-        url, // ⚠️ pas besoin de baseUrl + url
-        method,
-        data,
-        params,
-      });
-
+      const result = await axiosInstance({ url, method, data, params, headers });
       return { data: result.data };
     } catch (err) {
       return {
@@ -117,6 +95,14 @@ export const authApi = createApi({
         data: { expoPushToken },
       }),
     }),
+
+    sendUserSOS: builder.mutation({
+      query: ({ category, type, subType, caseLocation, contactPhone, latitude, longitude }) => ({
+        url: '/auth/sos',
+        method: 'POST',
+        data: { category, type, subType, caseLocation, contactPhone, latitude, longitude },
+      }),
+    }),
   }),
 });
 
@@ -131,4 +117,5 @@ export const {
   useVerifyPassMutation,
   useRefreshMutation,
   useStoreExpoPushTokenMutation,
+  useSendUserSOSMutation,
 } = authApi;

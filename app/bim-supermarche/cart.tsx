@@ -13,7 +13,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -118,6 +118,7 @@ export default function CartScreen() {
   const { companyId, companyName } = useLocalSearchParams<{ companyId: string; companyName: string }>();
   const router   = useRouter();
   const { isDark, t } = useTheme();
+  const insets   = useSafeAreaInsets();
 
   const [cart,    setCart]    = useState<CartItem[]>([]);
   const [userId,  setUserId]  = useState<string | null>(null);
@@ -368,7 +369,7 @@ export default function CartScreen() {
           </ScrollView>
 
           {/* ── CTA buttons ── */}
-          <View style={[s.ctaBar, { backgroundColor: t.card, borderTopColor: t.border }]}>
+          <View style={[s.ctaBar, { backgroundColor: t.card, borderTopColor: t.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
             <TouchableOpacity style={s.cashBtn} onPress={() => { setPin(""); setPinError(""); setMode("cash"); }} activeOpacity={0.85}>
               <LinearGradient colors={[C.green, "#16A34A"]} style={s.ctaGrad}>
                 <Ionicons name="wallet-outline" size={18} color={C.white} />
@@ -567,6 +568,7 @@ const s = StyleSheet.create({
     flexDirection: "row", gap: 10, padding: 14,
     borderTopWidth: 1,
   },
+  // paddingBottom appliqué dynamiquement via insets
   cashBtn:  { flex: 1, borderRadius: 16, overflow: "hidden" },
   orderBtn: { flex: 1, borderRadius: 16, overflow: "hidden" },
   ctaGrad:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },

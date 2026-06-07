@@ -15,7 +15,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
@@ -251,6 +251,7 @@ export default function SupermarcheDetail() {
   const { id }         = useLocalSearchParams<{ id: string }>();
   const router         = useRouter();
   const { isDark, t }  = useTheme();
+  const insets         = useSafeAreaInsets();
 
   const [search, setSearch]           = useState("");
   const [selected, setSelected]       = useState<any>(null);
@@ -411,7 +412,7 @@ export default function SupermarcheDetail() {
       {/* ── Floating cart bar ── */}
       {cartCount > 0 && (
         <TouchableOpacity
-          style={s.floatingCart}
+          style={[s.floatingCart, { bottom: Math.max(insets.bottom, 12) + 8 }]}
           onPress={() => router.push({ pathname: "/bim-supermarche/cart", params: { companyId: id, companyName } })}
           activeOpacity={0.9}
         >
@@ -491,7 +492,7 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
 
   floatingCart: {
-    position: "absolute", bottom: 16, left: 16, right: 16,
+    position: "absolute", left: 16, right: 16,
     borderRadius: 20, overflow: "hidden", elevation: 8,
     shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
   },
