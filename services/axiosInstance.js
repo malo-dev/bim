@@ -8,12 +8,17 @@ let isRefreshing = false;
 let subscribers = [];
 
 function onRefreshed(token) {
-  subscribers.forEach((callback) => callback(token));
+  subscribers.forEach(({ onSuccess }) => onSuccess(token));
   subscribers = [];
 }
 
-function addSubscriber(callback) {
-  subscribers.push(callback);
+function onRefreshFailed(error) {
+  subscribers.forEach(({ onError }) => onError(error));
+  subscribers = [];
+}
+
+function addSubscriber(onSuccess, onError) {
+  subscribers.push({ onSuccess, onError });
 }
 
 const BASE_URL = Constants.expoConfig.extra.API_URL;
@@ -82,7 +87,7 @@ instance.interceptors.response.use(
           onRefreshed(data.token);
         } catch (err) {
           await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
-          subscribers = [];
+          onRefreshFailed(err);
           isRefreshing = false;
           DeviceEventEmitter.emit("auth:forceLogout");
           return Promise.reject(err);
@@ -91,10 +96,12 @@ instance.interceptors.response.use(
         isRefreshing = false;
       }
 
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         addSubscriber((newToken) => {
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           resolve(instance(originalRequest));
+        }, (err) => {
+          reject(err);
         });
       });
     }
