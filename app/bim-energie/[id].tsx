@@ -14,13 +14,13 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect, Circle, Path } from "react-native-svg";
 import { useGetAllProductsQuery } from "@/services/productServices";
 import NoData from "@/components/ui/noData";
 import { API_URL_BASE } from "@/constants/api";
+import { useAppTheme } from "@/app/_layout";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -61,11 +61,6 @@ const Colors = {
   },
 };
 
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
 
 /* ─── SVG STABLES ────────────────────────────────────────────────────── */
 const EnergyBadge = memo(() => (
@@ -251,7 +246,8 @@ ProductCard.displayName = "ProductCard";
 export default function EnergyProductsPayList() {
   const router        = useRouter();
   const { id }        = useLocalSearchParams();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const t = isDark ? Colors.dark : Colors.light;
 
   const [page,       setPage]       = useState(1);
   const [search,     setSearch]     = useState("");

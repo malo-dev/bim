@@ -1,11 +1,8 @@
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { useRouter } from "expo-router";
-import { useState, useRef, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useResetPasswordMutation } from "@/services/authService";
+import { useRouter } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -19,21 +16,46 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import logo from "@/assets/images/logo.jpeg";
-import { C, Colors} from "@/constants/theme";
 
-/* ─── FORCE INDICATOR ────────────────────────────────────────────────── */
+import logo from "@/assets/images/logo.jpeg";
+import { useResetPasswordMutation } from "@/services/authService";
+import { useAppTheme } from "@/app/_layout";
+
+const LIGHT = {
+  bg:      "#F8F9FF",
+  primary: "#0047FF",
+  text:    "#1A1C1C",
+  muted:   "#747688",
+  input:   "#F4F6FF",
+  border:  "#E8EDF5",
+  red:     "#DC0302",
+  green:   "#22C55E",
+  white:   "#FFFFFF",
+};
+const DARK: typeof LIGHT = {
+  bg:      "#0B1220",
+  primary: "#4D8DFF",
+  text:    "#EAF0FF",
+  muted:   "#9FB0D0",
+  input:   "#182033",
+  border:  "#1F2A44",
+  red:     "#FF6B6B",
+  green:   "#22C55E",
+  white:   "#FFFFFF",
+};
+
 function StrengthBar({ password }: { password: string }) {
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const sb = useMemo(() => mkSb(W), [isDark]);
   const getStrength = () => {
-    if (password.length === 0) return { level: 0, label: "", color: "#E8EDF5" };
-    if (password.length < 6)  return { level: 1, label: "Trop court", color: C.red };
+    if (password.length === 0) return { level: 0, label: "", color: W.border };
+    if (password.length < 6)  return { level: 1, label: "Trop court", color: W.red };
     if (password.length < 8)  return { level: 2, label: "Faible",     color: "#F59E0B" };
     if (/[A-Z]/.test(password) && /[0-9]/.test(password))
-                               return { level: 4, label: "Fort",       color: "#22C55E" };
-    return                            { level: 3, label: "Moyen",      color: C.accent };
+                               return { level: 4, label: "Fort",       color: W.green };
+    return                            { level: 3, label: "Moyen",      color: W.primary };
   };
   const { level, label, color } = getStrength();
   if (password.length === 0) return null;
@@ -41,7 +63,7 @@ function StrengthBar({ password }: { password: string }) {
     <View style={sb.wrap}>
       <View style={sb.bars}>
         {[1, 2, 3, 4].map(i => (
-          <View key={i} style={[sb.bar, { backgroundColor: i <= level ? color : "#E8EDF5" }]} />
+          <View key={i} style={[sb.bar, { backgroundColor: i <= level ? color : W.border }]} />
         ))}
       </View>
       <Text style={[sb.label, { color }]}>{label}</Text>
@@ -49,14 +71,10 @@ function StrengthBar({ password }: { password: string }) {
   );
 }
 
-/* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function ResetPassword() {
-  function useTheme() {
-      const scheme = useColorScheme();
-      const isDark  = scheme === "dark";
-      return { isDark, t: isDark ? Colors.dark : Colors.light };
-    }
-    const { isDark,t }             = useTheme();
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(W), [isDark]);
   const router = useRouter();
   const [resetPassword, { isLoading }] = useResetPasswordMutation();
 
@@ -64,15 +82,14 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword,    setShowPassword]    = useState(false);
   const [showConfirm,     setShowConfirm]     = useState(false);
-  const [focusedInput,    setFocusedInput]    = useState<"pwd" | "confirm" | null>(null);
+  const [focused,         setFocused]         = useState<"pwd" | "confirm" | null>(null);
 
-  /* ── Animations ── */
-  const cardSlide  = useRef(new Animated.Value(60)).current;
-  const cardOpac   = useRef(new Animated.Value(0)).current;
-  const logoScale  = useRef(new Animated.Value(0.7)).current;
-  const logoOpac   = useRef(new Animated.Value(0)).current;
-  const floatY     = useRef(new Animated.Value(0)).current;
-  const shakeAnim  = useRef(new Animated.Value(0)).current;
+  const cardSlide = useRef(new Animated.Value(60)).current;
+  const cardOpac  = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.7)).current;
+  const logoOpac  = useRef(new Animated.Value(0)).current;
+  const floatY    = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -84,8 +101,8 @@ export default function ResetPassword() {
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
-        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: -10, duration: 2800, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 2800, useNativeDriver: true }),
       ])
     ).start();
   }, []);
@@ -111,7 +128,7 @@ export default function ResetPassword() {
       shake(); Alert.alert("Les mots de passe ne correspondent pas"); return;
     }
     try {
-      const userId  = await AsyncStorage.getItem("userId");
+      const userId = await AsyncStorage.getItem("userId");
       const response = await resetPassword({ newPassword: String(password), userId }).unwrap();
       if (response) router.replace("/login");
     } catch (err) {
@@ -125,24 +142,8 @@ export default function ResetPassword() {
   const noMatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   return (
-    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
-      <StatusBar barStyle="light-content" />
-
-      <LinearGradient
-          colors={
-          isDark
-            ? ["#060D1F", "#091528", "#0D1F3C"]
-            : [t.gradientStart, t.gradientEnd, t.accent]
-        }
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Cercles décoratifs */}
-      <View style={[s.circle, s.circle1]} />
-      <View style={[s.circle, s.circle2]} />
-      <View style={[s.circle, s.circle3]} />
-      <View style={[s.circle, s.circle4]} />
+    <View style={s.screen}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={W.bg} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
@@ -150,80 +151,77 @@ export default function ResetPassword() {
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-
-          {/* ── Logo flottant ── */}
+          {/* Logo flottant */}
           <Animated.View style={[s.logoArea, { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] }]}>
             <View style={s.logoWrap}>
               <Image source={logo} style={s.logo} resizeMode="contain" />
             </View>
-            {/* Barre accent tricolore */}
-            <View style={s.logoAccentBar}>
-              <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 2 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 1 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.gold,    flex: 1 }]} />
-            </View>
+            <Text style={s.brand}>BIMNext</Text>
             <Text style={s.heroTitle}>Nouveau mot de passe</Text>
             <Text style={s.heroSub}>Créez un mot de passe fort et sécurisé</Text>
           </Animated.View>
 
-          {/* ── Card ── */}
-          <Animated.View style={[s.cardWrap, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
+          {/* Card */}
+          <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
 
-            {/* Section header — pattern home */}
             <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: C.violet }]} />
+              <View style={s.dot} />
               <Text style={s.sectionLabel}>RÉINITIALISATION · ÉTAPE 3/3</Text>
             </View>
 
-            {/* Steps indicator */}
+            {/* Progress pills */}
             <View style={s.stepsRow}>
-              {[C.primary, C.primary, C.violet].map((color, i) => (
+              {[W.primary, W.primary, W.primary].map((color, i) => (
                 <View key={i} style={[s.stepPill, { backgroundColor: color }]} />
               ))}
             </View>
 
             <View style={s.sep} />
 
-            {/* Mot de passe */}
+            {/* Nouveau mot de passe */}
             <Text style={s.label}>Nouveau mot de passe</Text>
-            <View style={[s.inputRow, focusedInput === "pwd" && s.inputFocused]}>
-              <View style={[s.iconCircle, { backgroundColor: focusedInput === "pwd" ? C.violet + "18" : C.f4 }]}>
-                <Ionicons name="lock-closed-outline" size={17} color={focusedInput === "pwd" ? C.violet : C.muted} />
+            <View style={[s.inputRow, focused === "pwd" && s.inputFocused]}>
+              <View style={[s.iconBox, focused === "pwd" && s.iconBoxFocused]}>
+                <Ionicons name="lock-closed-outline" size={17} color={focused === "pwd" ? W.primary : W.muted} />
               </View>
               <TextInput
                 style={s.input}
                 placeholder="Nouveau mot de passe"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={W.muted}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                onFocus={() => setFocusedInput("pwd")}
-                onBlur={() => setFocusedInput(null)}
+                onFocus={() => setFocused("pwd")}
+                onBlur={() => setFocused(null)}
               />
               <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={s.eyeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={C.muted} />
+                <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={W.muted} />
               </TouchableOpacity>
             </View>
 
-            {/* Barre de force */}
             <StrengthBar password={password} />
 
-            {/* Confirmation */}
+            {/* Confirmer */}
             <Text style={[s.label, { marginTop: 14 }]}>Confirmer le mot de passe</Text>
-            <View style={[s.inputRow, focusedInput === "confirm" && s.inputFocused, noMatch && s.inputError, match && s.inputSuccess]}>
-              <View style={[s.iconCircle, { backgroundColor: match ? "#22C55E18" : focusedInput === "confirm" ? C.violet + "18" : C.f4 }]}>
+            <View style={[
+              s.inputRow,
+              focused === "confirm" && s.inputFocused,
+              noMatch && { borderColor: W.red, backgroundColor: "#FFF5F5" },
+              match   && { borderColor: W.green, backgroundColor: "#F0FFF4" },
+            ]}>
+              <View style={[s.iconBox, { backgroundColor: match ? "#22C55E18" : focused === "confirm" ? "#0047FF12" : "transparent" }]}>
                 <Ionicons
                   name="shield-checkmark-outline"
                   size={17}
-                  color={match ? "#22C55E" : focusedInput === "confirm" ? C.violet : C.muted}
+                  color={match ? W.green : focused === "confirm" ? W.primary : W.muted}
                 />
               </View>
               <TextInput
                 style={s.input}
                 placeholder="Confirmez votre mot de passe"
-                placeholderTextColor={C.muted}
+                placeholderTextColor={W.muted}
                 secureTextEntry={!showConfirm}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -231,26 +229,25 @@ export default function ResetPassword() {
                 autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={handleReset}
-                onFocus={() => setFocusedInput("confirm")}
-                onBlur={() => setFocusedInput(null)}
+                onFocus={() => setFocused("confirm")}
+                onBlur={() => setFocused(null)}
               />
-              {match && <Ionicons name="checkmark-circle" size={18} color="#22C55E" style={{ marginRight: 12 }} />}
+              {match && <Ionicons name="checkmark-circle" size={18} color={W.green} style={{ marginRight: 12 }} />}
               {!match && confirmPassword.length > 0 && (
                 <TouchableOpacity onPress={() => setShowConfirm(p => !p)} style={s.eyeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name={showConfirm ? "eye-off-outline" : "eye-outline"} size={18} color={C.muted} />
+                  <Ionicons name={showConfirm ? "eye-off-outline" : "eye-outline"} size={18} color={W.muted} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Match indicator */}
             {confirmPassword.length > 0 && (
-              <View style={[s.matchRow, { borderLeftColor: match ? "#22C55E" : C.red }]}>
+              <View style={[s.matchRow, { borderLeftColor: match ? W.green : W.red }]}>
                 <Ionicons
                   name={match ? "checkmark-circle-outline" : "close-circle-outline"}
                   size={13}
-                  color={match ? "#22C55E" : C.red}
+                  color={match ? W.green : W.red}
                 />
-                <Text style={[s.matchText, { color: match ? "#22C55E" : C.red }]}>
+                <Text style={[s.matchText, { color: match ? W.green : W.red }]}>
                   {match ? "Les mots de passe correspondent" : "Les mots de passe ne correspondent pas"}
                 </Text>
               </View>
@@ -258,30 +255,24 @@ export default function ResetPassword() {
 
             {/* Info bulle */}
             <View style={s.infoBubble}>
-              <View style={[s.iconCircle, { backgroundColor: C.violet + "12", width: 32, height: 32, borderRadius: 16 }]}>
-                <Ionicons name="information-circle-outline" size={15} color={C.violet} />
+              <View style={s.infoIcon}>
+                <Ionicons name="information-circle-outline" size={15} color={W.primary} />
               </View>
               <Text style={s.infoText}>
                 Minimum 8 caractères avec majuscule et chiffre pour un mot de passe{" "}
-                <Text style={{ color: "#22C55E", fontWeight: "700" }}>fort</Text>
+                <Text style={{ color: W.green, fontWeight: "700" }}>fort</Text>
               </Text>
             </View>
 
             {/* CTA */}
-            <View style={{ marginTop: 22 }}>
-              <GradientButton
-                title="Réinitialiser le mot de passe"
-                onPress={handleReset}
-                isLoad={isLoading}
-                leftIcon={<ArrowIcon width={20} height={14} />}
-                rightIcon={<ArrowRightIcon width={30} height={24} />}
-              />
-            </View>
+            <TouchableOpacity style={[s.btn, { marginTop: 22 }]} onPress={handleReset} activeOpacity={0.88} disabled={isLoading}>
+              <Text style={s.btnText}>{isLoading ? "Réinitialisation..." : "Réinitialiser le mot de passe"}</Text>
+            </TouchableOpacity>
 
-            {/* Retour login */}
+            {/* Retour */}
             <TouchableOpacity style={s.backBtn} onPress={() => router.push("/login")} activeOpacity={0.85}>
-              <View style={[s.iconCircle, { backgroundColor: C.f4, width: 36, height: 36, borderRadius: 18 }]}>
-                <FontAwesome6 name="arrow-left" size={13} color={C.muted} />
+              <View style={[s.iconBox, { backgroundColor: W.input, width: 36, height: 36, borderRadius: 18 }]}>
+                <FontAwesome6 name="arrow-left" size={13} color={W.muted} />
               </View>
               <Text style={s.backText}>Retour à la connexion</Text>
             </TouchableOpacity>
@@ -298,19 +289,8 @@ export default function ResetPassword() {
 
 ResetPassword.options = { headerShown: false };
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: C.deep },
-
-  circle: { position: "absolute", borderRadius: 999 },
-  circle1: {
-    width: 300, height: 300, top: -130, right: -120,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
-  },
-  circle2: { width: 140, height: 140, top: 100, right: -40, backgroundColor: "rgba(57,6,199,0.15)" },
-  circle3: { width: 190, height: 190, bottom: 140, left: -80, backgroundColor: "rgba(77,150,255,0.1)" },
-  circle4: { width: 65,  height: 65,  top: "35%", left: 20,  backgroundColor: "rgba(255,215,0,0.08)" },
+function mkS(W: typeof LIGHT) { return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: W.bg },
 
   logoArea: {
     alignItems: "center",
@@ -319,68 +299,63 @@ const s = StyleSheet.create({
   },
   logoWrap: {
     width: 90, height: 90, borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: W.white,
+    borderWidth: 2, borderColor: "#C8D8FF",
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden", elevation: 14,
-    shadowColor: C.black, shadowOpacity: 0.3,
-    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+    overflow: "hidden", elevation: 8,
+    shadowColor: W.primary, shadowOpacity: 0.18,
+    shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
   },
   logo: { width: 74, height: 74 },
-  logoAccentBar: {
-    flexDirection: "row", width: 56, height: 3,
-    borderRadius: 2, marginTop: 12, overflow: "hidden", gap: 2,
-  },
-  logoAccentSeg: { height: "100%", borderRadius: 2 },
+  brand: { fontFamily: "NexaBold", fontSize: 18, color: W.primary, marginTop: 10, letterSpacing: 0.5 },
   heroTitle: {
-    color: C.white, fontFamily: "NexaLight", fontSize: 20,
-    letterSpacing: 0.3, textAlign: "center", marginTop: 16, marginBottom: 7,
+    fontFamily: "NexaBold", fontSize: 20, color: W.text,
+    textAlign: "center", marginTop: 14, marginBottom: 6,
   },
   heroSub: {
-    color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight",
-    fontSize: 13, textAlign: "center", lineHeight: 20, paddingHorizontal: 24,
+    fontFamily: "NexaRegular", fontSize: 13, color: W.muted,
+    textAlign: "center", lineHeight: 20, paddingHorizontal: 24,
   },
 
-  cardWrap: {
-    backgroundColor: C.white, borderRadius: 28, padding: 22,
-    elevation: 10, shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 20,
+  card: {
+    backgroundColor: W.white, borderRadius: 28, padding: 22,
+    elevation: 6,
+    shadowColor: W.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10, shadowRadius: 16,
   },
 
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
-  sectionDot:   { width: 4, height: 16, borderRadius: 2 },
-  sectionLabel: {
-    fontFamily: "NexaLight", fontSize: 11,
-    color: C.muted, letterSpacing: 1.2, textTransform: "uppercase",
-  },
+  dot:           { width: 4, height: 16, borderRadius: 2, backgroundColor: W.primary },
+  sectionLabel:  { fontFamily: "NexaRegular", fontSize: 11, color: W.muted, letterSpacing: 1.2, textTransform: "uppercase" },
 
-  /* Progress pills */
   stepsRow: { flexDirection: "row", gap: 6, marginBottom: 16 },
   stepPill: { flex: 1, height: 3, borderRadius: 2 },
 
-  sep: { height: 1, backgroundColor: "#E8EDF5", marginBottom: 20 },
+  sep: { height: 1, backgroundColor: W.border, marginBottom: 20 },
 
   label: {
-    fontFamily: "NexaLight", fontSize: 11, color: C.muted,
+    fontFamily: "NexaRegular", fontSize: 11, color: W.muted,
     letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8,
   },
 
   inputRow: {
     flexDirection: "row", alignItems: "center",
-    borderWidth: 1.5, borderColor: "#E8EDF5",
-    borderRadius: 18, height: 54, backgroundColor: C.f4,
+    borderWidth: 1.5, borderColor: W.border,
+    borderRadius: 18, height: 54,
+    backgroundColor: W.input,
   },
-  inputFocused: { borderColor: C.violet, backgroundColor: "#F5F0FF" },
-  inputError:   { borderColor: C.red,    backgroundColor: "#FFF5F5" },
-  inputSuccess: { borderColor: "#22C55E", backgroundColor: "#F0FFF4" },
+  inputFocused: { borderColor: W.primary, backgroundColor: "#EEF4FF" },
 
-  iconCircle: {
+  iconBox: {
     width: 44, height: 44, borderRadius: 22,
     justifyContent: "center", alignItems: "center", marginHorizontal: 6,
+    backgroundColor: "transparent",
   },
+  iconBoxFocused: { backgroundColor: "#0047FF12" },
+
   input: {
     flex: 1, height: "100%",
-    fontSize: 14, color: C.text, fontFamily: "NexaLight", paddingRight: 4,
+    fontSize: 14, color: W.text, fontFamily: "NexaRegular", paddingRight: 4,
   },
   eyeBtn: { padding: 4, marginRight: 8 },
 
@@ -389,33 +364,43 @@ const s = StyleSheet.create({
     marginTop: 6, marginBottom: 4,
     paddingLeft: 10, borderLeftWidth: 2, borderRadius: 2,
   },
-  matchText: { fontFamily: "NexaLight", fontSize: 12 },
+  matchText: { fontFamily: "NexaRegular", fontSize: 12 },
 
   infoBubble: {
     flexDirection: "row", alignItems: "center", gap: 10, marginTop: 14,
-    backgroundColor: C.violet + "08", borderRadius: 14, padding: 10,
-    borderWidth: 1, borderColor: C.violet + "15",
+    backgroundColor: "#0047FF08", borderRadius: 14, padding: 10,
+    borderWidth: 1, borderColor: "#0047FF15",
   },
-  infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.muted, lineHeight: 17 },
+  infoIcon: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "#0047FF12",
+    alignItems: "center", justifyContent: "center",
+  },
+  infoText: { flex: 1, fontFamily: "NexaRegular", fontSize: 12, color: W.muted, lineHeight: 17 },
+
+  btn: {
+    backgroundColor: W.primary, borderRadius: 18, height: 54,
+    alignItems: "center", justifyContent: "center",
+    elevation: 4,
+    shadowColor: W.primary, shadowOpacity: 0.3, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  btnText: { fontFamily: "NexaBold", fontSize: 15, color: W.white, letterSpacing: 0.5 },
 
   backBtn: {
-    flexDirection: "row", alignItems: "center",
-    gap: 10, marginTop: 18,
-    backgroundColor: C.f4, borderRadius: 18,
+    flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18,
+    backgroundColor: W.input, borderRadius: 18,
     paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: W.border,
   },
-  backText: { fontFamily: "NexaLight", fontSize: 13, color: C.muted, flex: 1 },
+  backText: { fontFamily: "NexaRegular", fontSize: 13, color: W.muted, flex: 1 },
 
-  version: {
-    textAlign: "center", fontFamily: "NexaLight",
-    fontSize: 11, color: "rgba(255,255,255,0.28)", marginTop: 22,
-  },
-});
+  version: { textAlign: "center", fontFamily: "NexaRegular", fontSize: 11, color: W.muted, marginTop: 22 },
+}); }
 
-/* ─── STRENGTH BAR STYLES ────────────────────────────────────────────── */
-const sb = StyleSheet.create({
-  wrap: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 4 },
-  bars: { flexDirection: "row", gap: 4, flex: 1 },
-  bar:  { flex: 1, height: 3, borderRadius: 2 },
-  label: { fontFamily: "NexaLight", fontSize: 11, fontWeight: "700", minWidth: 60, textAlign: "right" },
-});
+function mkSb(W: typeof LIGHT) { return StyleSheet.create({
+  wrap:  { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 4 },
+  bars:  { flexDirection: "row", gap: 4, flex: 1 },
+  bar:   { flex: 1, height: 3, borderRadius: 2 },
+  label: { fontFamily: "NexaRegular", fontSize: 11, fontWeight: "700", minWidth: 60, textAlign: "right" },
+}); }

@@ -11,8 +11,8 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, createContext, useContext, useState } from "react";
 import { Animated, AppState, AppStateStatus, Image, StyleSheet, View, ActivityIndicator, Appearance, DeviceEventEmitter } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { LinearGradient } from "expo-linear-gradient";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SocketProvider from "@/components/SocketProvider";
 import logo from "@/assets/images/logo.jpeg";
@@ -64,12 +64,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 /* ─── ROOT LAYOUT ────────────────────────────────────────────────────── */
 export default function RootLayout() {
-  const systemScheme = useColorScheme();
-
   /* ── Theme state ── */
-  const [isDark,       setIsDark]       = useState<boolean>(systemScheme === "dark");
+  const [isDark,       setIsDark]       = useState<boolean>(Appearance.getColorScheme() === "dark");
   const [followSystem, setFollowSystemState] = useState<boolean>(true);
   const [themeLoaded,  setThemeLoaded]  = useState(false);
+
+  /* ── Ref synchrone pour éviter closure périmée dans le listener ── */
+  const followSystemRef = useRef(true);
 
   /* ── Écran de reprise (arrière-plan → premier plan) ── */
   const [showResume, setShowResume] = useState(false);
@@ -123,52 +124,50 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [resumeOpacity]);
 
+  /* ── Listener Appearance : source unique de vérité pour les changements système ── */
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      if (followSystemRef.current) {
+        setIsDark(colorScheme === "dark");
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   /* ── Charger les préférences sauvegardées ── */
   useEffect(() => {
     AsyncStorage.getItem("themeMode").then((themeVal) => {
       if (themeVal === "dark") {
+        followSystemRef.current = false;
         setFollowSystemState(false);
         setIsDark(true);
       } else if (themeVal === "light") {
+        followSystemRef.current = false;
         setFollowSystemState(false);
         setIsDark(false);
       } else {
-        // "system" ou null (premier lancement) → suivre le système
+        followSystemRef.current = true;
         setFollowSystemState(true);
-        setIsDark(systemScheme === "dark");
+        setIsDark(Appearance.getColorScheme() === "dark");
       }
       setThemeLoaded(true);
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /* ── Quand le système change et que followSystem est actif ── */
-  useEffect(() => {
-    if (followSystem) {
-      setIsDark(systemScheme === "dark");
-      // Ne pas appeler Appearance.setColorScheme ici :
-      // on laisse le système piloter — tout appel ici verrouille la valeur
-    }
-  }, [systemScheme, followSystem]);
 
   const toggleTheme = async () => {
     const next = !isDark;
     setIsDark(next);
-    Appearance.setColorScheme(next ? "dark" : "light");
     await AsyncStorage.setItem("themeMode", next ? "dark" : "light");
   };
 
   const setFollowSystem = async (v: boolean) => {
+    followSystemRef.current = v;
     setFollowSystemState(v);
     if (v) {
       await AsyncStorage.setItem("themeMode", "system");
-      // Libérer le contrôle au système (null = reset override)
-      Appearance.setColorScheme(null);
-      setIsDark(systemScheme === "dark");
+      setIsDark(Appearance.getColorScheme() === "dark");
     } else {
-      // Figer sur le thème actuel
       await AsyncStorage.setItem("themeMode", isDark ? "dark" : "light");
-      Appearance.setColorScheme(isDark ? "dark" : "light");
     }
   };
 
@@ -193,6 +192,7 @@ export default function RootLayout() {
 
   /* ── App ── */
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <AppThemeContext.Provider value={{ isDark, followSystem, toggleTheme, setFollowSystem }}>
       <Provider store={store}>
         <PersistGate
@@ -227,6 +227,7 @@ export default function RootLayout() {
                 <Stack.Screen name="recharge"         options={{ headerShown: false }} />
                 <Stack.Screen name="check-pwd"        options={{ headerShown: false }} />
                 <Stack.Screen name="reset-password"   options={{ headerShown: false }} />
+                <Stack.Screen name="mes-commandes"    options={{ headerShown: false }} />
                 <Stack.Screen name="verify-code"      options={{ headerShown: false }} />
                 <Stack.Screen name="register"         options={{ headerShown: false }} />
                 <Stack.Screen name="transport"        options={{ headerShown: false }} />
@@ -239,6 +240,8 @@ export default function RootLayout() {
                 <Stack.Screen name="qrcode"           options={{ headerShown: false }} />
                 <Stack.Screen name="livreur"          options={{ headerShown: false }} />
                 <Stack.Screen name="bim-sos"          options={{ headerShown: false }} />
+                <Stack.Screen name="favorites"        options={{ headerShown: false }} />
+                <Stack.Screen name="recommended"      options={{ headerShown: false }} />
                 <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />
               </Stack>
 
@@ -279,5 +282,6 @@ export default function RootLayout() {
         </PersistGate>
       </Provider>
     </AppThemeContext.Provider>
+    </GestureHandlerRootView>
   );
 }

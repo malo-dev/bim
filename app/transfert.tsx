@@ -1,21 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
+/* eslint-disable */
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCreateTransfertMutation } from "@/services/tsxService";
-import { useVerifyPassMutation } from "@/services/authService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
-import React, { useEffect, useRef, useState } from "react";
-import { useGetAllUsersQuery } from "@/services/userService";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -25,166 +19,101 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  Alert,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Modal from "react-native-modal";
+import RNModal from "react-native-modal";
+import { useCreateTransfertMutation } from "@/services/tsxService";
+import { useVerifyPassMutation } from "@/services/authService";
+import { useGetAllUsersQuery } from "@/services/userService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
-  green:   "#22C55E",
-  error:   "#EF4444",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:      "#0035C5",
+  blue:         "#0047FF",
+  deep:         "#001257",
+  white:        "#FFFFFF",
+  error:        "#EF4444",
+  success:      "#22C55E",
+  bg:           "#F9F9F9",
+  text:         "#1A1C1C",
+  textSec:      "#434657",
+  textMut:      "#747688",
+  border:       "rgba(196,197,218,0.30)",
+  inputBg:      "#FFFFFF",
+  surface:      "#FFFFFF",
+  navBg:        "rgba(255,255,255,0.92)",
+  navBord:      "rgba(196,197,218,0.18)",
+  iconBtnBg:    "rgba(0,0,0,0.04)",
+  heroBg:       "rgba(0,53,197,0.06)",
+  infoBg:       "rgba(0,53,197,0.05)",
+  infoBord:     "rgba(0,53,197,0.12)",
+  cardBg:       "rgba(255,255,255,0.80)",
+  cardBord:     "rgba(255,255,255,0.80)",
+  selectedBg:   "rgba(0,53,197,0.04)",
+  selectedBord: "rgba(0,53,197,0.15)",
+  avatarBg:     "rgba(0,53,197,0.10)",
+  recapBg:      "rgba(0,53,197,0.03)",
+  lockBg:       "rgba(0,53,197,0.07)",
+  handleBg:     "rgba(0,0,0,0.10)",
+  reminderBg:   "rgba(0,53,197,0.04)",
 };
-
-const Colors = {
-  light: {
-    bg:              "#F0F4FF",
-    card:            "#FFFFFF",
-    text:            "#0D1B3E",
-    textSecondary:   "#7B8DB0",
-    border:          "rgba(3,83,204,0.12)",
-    inputBg:         "rgba(3,83,204,0.06)",
-    inputFocBg:      "rgba(3,83,204,0.10)",
-    headerGrad:      [C.deep, C.violet] as [string, string],
-    shadow:          C.violet,
-    recapBg:         "rgba(3,83,204,0.05)",
-    modalBg:         "#FFFFFF",
-    pinBorder:       "rgba(3,83,204,0.20)",
-    pinFilled:       C.primary,
-    lockIconBg:      "rgba(3,83,204,0.08)",
-    keyBg:           "rgba(3,83,204,0.06)",
-    keyDelBg:        "rgba(239,68,68,0.08)",
-    dropdownBg:      "#FFFFFF",
-    selectedUserBg:  "rgba(3,83,204,0.08)",
-    selectedBorder:  "rgba(3,83,204,0.25)",
-    avatarBg:        "rgba(3,83,204,0.10)",
-    clearBtnBg:      "rgba(3,83,204,0.06)",
-  },
-  dark: {
-    bg:              "#07091A",
-    card:            "#0F1228",
-    text:            "#E2E8F0",
-    textSecondary:   "#556080",
-    border:          "rgba(77,150,255,0.12)",
-    inputBg:         "rgba(77,150,255,0.07)",
-    inputFocBg:      "rgba(77,150,255,0.13)",
-    headerGrad:      ["#0D0520", "#1a0c3d"] as [string, string],
-    shadow:          "#000",
-    recapBg:         "rgba(77,150,255,0.06)",
-    modalBg:         "#0F1228",
-    pinBorder:       "rgba(77,150,255,0.22)",
-    pinFilled:       C.accent,
-    lockIconBg:      "rgba(3,83,204,0.18)",
-    keyBg:           "rgba(77,150,255,0.07)",
-    keyDelBg:        "rgba(239,68,68,0.12)",
-    dropdownBg:      "#0F1228",
-    selectedUserBg:  "rgba(77,150,255,0.10)",
-    selectedBorder:  "rgba(77,150,255,0.22)",
-    avatarBg:        "rgba(77,150,255,0.12)",
-    clearBtnBg:      "rgba(77,150,255,0.08)",
-  },
+const DARK: typeof LIGHT = {
+  primary:      "#4D8DFF",
+  blue:         "#4D8DFF",
+  deep:         "#4D8DFF",
+  white:        "#FFFFFF",
+  error:        "#FF5A5A",
+  success:      "#22C55E",
+  bg:           "#0B1220",
+  text:         "#EAF0FF",
+  textSec:      "#C5D0E8",
+  textMut:      "#9FB0D0",
+  border:       "rgba(31,42,68,0.80)",
+  inputBg:      "#0F1A2E",
+  surface:      "#1A2540",
+  navBg:        "rgba(11,18,32,0.94)",
+  navBord:      "rgba(31,42,68,0.80)",
+  iconBtnBg:    "rgba(255,255,255,0.06)",
+  heroBg:       "rgba(77,141,255,0.08)",
+  infoBg:       "rgba(77,141,255,0.05)",
+  infoBord:     "rgba(77,141,255,0.12)",
+  cardBg:       "rgba(26,37,64,0.90)",
+  cardBord:     "rgba(31,42,68,0.80)",
+  selectedBg:   "rgba(77,141,255,0.08)",
+  selectedBord: "rgba(77,141,255,0.20)",
+  avatarBg:     "rgba(77,141,255,0.12)",
+  recapBg:      "rgba(77,141,255,0.05)",
+  lockBg:       "rgba(77,141,255,0.10)",
+  handleBg:     "rgba(255,255,255,0.12)",
+  reminderBg:   "rgba(77,141,255,0.08)",
 };
-
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
 
 const SHORTCUTS = ["500", "1000", "2500", "5000"];
 
-interface User {
-  id: number | string;
-  username: string;
-  email?: string;
-}
-
-/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
-function SectionLabel({ title, icon }: { title: string; icon: string }) {
-  return (
-    <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color={C.primary} style={{ opacity: 0.7 }} />
-      <Text style={sl.text}>{title}</Text>
-    </View>
-  );
-}
-
-/* ─── USER ROW ───────────────────────────────────────────────────────── */
-function UserRow({
-  item, selected, onPress, t, isDark,
-}: {
-  item: User; selected: boolean; onPress: () => void;
-  t: typeof Colors.light; isDark: boolean;
-}) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
-  const initials = item.username.slice(0, 2).toUpperCase();
-
-  return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
-      <Animated.View style={[
-        ur.row,
-        {
-          borderBottomColor: t.border,
-          backgroundColor: selected ? t.selectedUserBg : "transparent",
-          transform: [{ scale }],
-        },
-      ]}>
-        <View style={[ur.avatar, { backgroundColor: selected ? C.primary : t.avatarBg }]}>
-          <Text style={[ur.initials, { color: selected ? C.white : C.primary }]}>{initials}</Text>
-        </View>
-        <View style={ur.info}>
-          <Text style={[ur.name, { color: selected ? C.primary : t.text }]}>{item.username}</Text>
-          {item.email && <Text style={[ur.email, { color: t.textSecondary }]} numberOfLines={1}>{item.email}</Text>}
-        </View>
-        {selected ? (
-          <View style={ur.checkCircle}>
-            <Ionicons name="checkmark" size={14} color={C.white} />
-          </View>
-        ) : (
-          <Ionicons name="chevron-forward" size={16} color={t.textSecondary} />
-        )}
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
 /* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value, t }: { value: string; t: typeof Colors.light }) {
+function PinDots({ value }: { value: string }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   return (
     <View style={pd.row}>
       {Array.from({ length: 6 }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            pd.dot,
-            {
-              backgroundColor: i < value.length ? t.pinFilled : "transparent",
-              borderColor:     i < value.length ? t.pinFilled : t.pinBorder,
-            },
-          ]}
-        />
+        <View key={i} style={[pd.dot, {
+          backgroundColor: i < value.length ? C.primary : "transparent",
+          borderColor:     i < value.length ? C.primary : (isDark ? "rgba(77,141,255,0.30)" : "rgba(0,53,197,0.22)"),
+        }]} />
       ))}
     </View>
   );
 }
 
 /* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({
-  onPress, onDelete, t, isDark,
-}: {
-  onPress: (v: string) => void;
-  onDelete: () => void;
-  t: typeof Colors.light;
-  isDark: boolean;
-}) {
+function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return (
     <View style={kp.grid}>
@@ -192,19 +121,10 @@ function Keypad({
         if (k === "") return <View key={i} style={kp.empty} />;
         const isDel = k === "⌫";
         return (
-          <TouchableOpacity
-            key={i}
-            style={[
-              kp.key,
-              {
-                backgroundColor: isDel ? t.keyDelBg : t.keyBg,
-                borderColor:     isDel ? "rgba(239,68,68,0.20)" : t.border,
-              },
-            ]}
-            onPress={() => isDel ? onDelete() : onPress(k)}
-            activeOpacity={0.7}
-          >
-            <Text style={[kp.keyText, { color: isDel ? C.error : t.text }]}>{k}</Text>
+          <TouchableOpacity key={i}
+            style={[kp.key, { backgroundColor: isDark ? "rgba(77,141,255,0.08)" : "rgba(0,53,197,0.05)", borderColor: C.border }]}
+            onPress={() => isDel ? onDelete() : onPress(k)} activeOpacity={0.7}>
+            <Text style={[kp.keyText, { color: C.text }]}>{k}</Text>
           </TouchableOpacity>
         );
       })}
@@ -212,23 +132,24 @@ function Keypad({
   );
 }
 
-/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
-export default function TransferEcoinsScreen() {
+type User = { id: string | number; username: string; phone?: string };
+
+/* ─── SCREEN ─────────────────────────────────────────────────────────── */
+export default function TransfertScreen() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s  = useMemo(() => mkS(C),  [isDark]);
+  const fb = useMemo(() => mkFb(C), [isDark]);
+
   const router = useRouter();
-  const { isDark, t } = useTheme();
+  const { unread } = useUnreadNotifications();
 
-  const [createTransfert, { isLoading }] = useCreateTransfertMutation();
-  const [verifyPass]                     = useVerifyPassMutation();
-
-  const [userId,       setUserId]       = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [amount,       setAmount]       = useState("");
+  const [userId,       setUserId]       = useState<string | null>(null);
   const [searchQuery,  setSearchQuery]  = useState("");
-  const [page,         setPage]         = useState(1);
-  const [users,        setUsers]        = useState<User[]>([]);
-  const [showList,     setShowList]     = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  /* PIN modal */
   const [showPinModal,  setShowPinModal]  = useState(false);
   const [pinValue,      setPinValue]      = useState("");
   const [pinError,      setPinError]      = useState("");
@@ -236,322 +157,291 @@ export default function TransferEcoinsScreen() {
   const [loadingPay,    setLoadingPay]    = useState(false);
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  const cardAnim  = useRef(new Animated.Value(50)).current;
-  const cardOpac  = useRef(new Animated.Value(0)).current;
-  const inputFocS = useRef(new Animated.Value(0)).current;
-  const inputFocA = useRef(new Animated.Value(0)).current;
+  const [feedback,    setFeedback]    = useState<"success" | "error" | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const fbScale = useRef(new Animated.Value(0.85)).current;
+  const fbOpac  = useRef(new Animated.Value(0)).current;
+
+  const cardAnim = useRef(new Animated.Value(40)).current;
+  const cardOpac = useRef(new Animated.Value(0)).current;
+
+  const [createTransfert] = useCreateTransfertMutation();
+  const [verifyPass]      = useVerifyPassMutation();
+  const { data: usersData } = useGetAllUsersQuery({});
+
+  const allUsers: User[] = usersData?.data ?? usersData ?? [];
+  const filteredUsers = searchQuery.length > 1
+    ? allUsers.filter((u: User) => {
+        const q = searchQuery.toLowerCase();
+        return u.username?.toLowerCase().includes(q) || String(u.phone ?? "").includes(q);
+      }).slice(0, 6)
+    : [];
 
   useEffect(() => {
     AsyncStorage.getItem("userId").then(setUserId);
     Animated.parallel([
-      Animated.timing(cardAnim, { toValue: 0, duration: 420, delay: 100, useNativeDriver: true }),
-      Animated.timing(cardOpac, { toValue: 1, duration: 420, delay: 100, useNativeDriver: true }),
+      Animated.timing(cardAnim, { toValue: 0, duration: 400, delay: 80, useNativeDriver: true }),
+      Animated.timing(cardOpac, { toValue: 1, duration: 400, delay: 80, useNativeDriver: true }),
     ]).start();
-  }, [cardAnim, cardOpac]);
+  }, []);
 
-  const { data, isFetching, refetch } = useGetAllUsersQuery({
-    search: searchQuery, page, pageSize: 20, paginate: true,
-  });
-
-  useEffect(() => {
-    if (data?.data) {
-      if (page === 1) setUsers(data.data);
-      else setUsers((prev) => [...prev, ...data.data]);
-    }
-  }, [data, page]);
-
-  const loadMore = () => {
-    if (!isFetching && data?.pagination?.page < data?.pagination?.totalPages)
-      setPage((p) => p + 1);
+  const showFeedback = (type: "success" | "error", msg: string) => {
+    setFeedbackMsg(msg); setFeedback(type);
+    fbScale.setValue(0.85); fbOpac.setValue(0);
+    Animated.parallel([
+      Animated.spring(fbScale, { toValue: 1, friction: 7, useNativeDriver: true }),
+      Animated.timing(fbOpac,  { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
   };
 
-  const focusAnim = (anim: Animated.Value, v: number) =>
-    Animated.timing(anim, { toValue: v, duration: 200, useNativeDriver: false }).start();
-
-  const borderS = inputFocS.interpolate({ inputRange: [0, 1], outputRange: [t.border, C.primary] });
-  const bgS     = inputFocS.interpolate({ inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
-  const borderA = inputFocA.interpolate({ inputRange: [0, 1], outputRange: [t.border, C.primary] });
-  const bgA     = inputFocA.interpolate({ inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
-
-  const handleSelectUser = (item: User) => {
-    setSelectedUser(item);
-    setSearchQuery(item.username);
-    setShowList(false);
-    Keyboard.dismiss();
+  const hideFeedback = () => {
+    const wasSuccess = feedback === "success";
+    Animated.timing(fbOpac, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setFeedback(null);
+      if (wasSuccess) { setAmount(""); setSearchQuery(""); setSelectedUser(null); }
+    });
   };
 
-  /* ── Step 1 : validate → open PIN ── */
+  const handleSelectUser = (user: User) => {
+    setSelectedUser(user); setSearchQuery(user.username); setShowDropdown(false); Keyboard.dismiss();
+  };
+
   const handleConfirmPress = () => {
-    if (!selectedUser || !amount) {
-      Alert.alert("Champs manquants", "Choisissez un utilisateur et entrez un montant.");
-      return;
-    }
-    if (!userId) {
-      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter.");
-      return;
-    }
-    setPinValue("");
-    setPinError("");
-    setShowPinModal(true);
+    if (!amount || !selectedUser) { showFeedback("error", "Veuillez remplir tous les champs."); return; }
+    if (!userId) { showFeedback("error", "Utilisateur introuvable. Veuillez vous reconnecter."); return; }
+    setPinValue(""); setPinError(""); setShowPinModal(true);
   };
 
-  /* Shake on wrong PIN */
-  const shakePin = () => {
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  0,  duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
+  const shakePin = () => Animated.sequence([
+    Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
+  ]).start();
 
   const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
   const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
 
-  /* ── Step 2 : verifyPass → Step 3 : transfert ── */
   const handleConfirmPin = async () => {
     if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
-    if (!userId) return;
-
-    try {
-      setLoadingVerify(true);
-      await verifyPass({ userId, password: pinValue }).unwrap();
-    } catch {
-      shakePin();
-      setPinError("Mot de passe incorrect. Réessayez.");
-      setPinValue("");
-      setLoadingVerify(false);
-      return;
-    }
-    setLoadingVerify(false);
-    setShowPinModal(false);
-
-    /* ── Step 3 : proceed ── */
+    if (!userId || !selectedUser) return;
+    try { setLoadingVerify(true); await verifyPass({ userId, password: pinValue }).unwrap(); }
+    catch { shakePin(); setPinError("Mot de passe incorrect. Réessayez."); setPinValue(""); setLoadingVerify(false); return; }
+    setLoadingVerify(false); setShowPinModal(false);
     try {
       setLoadingPay(true);
-      const res: any = await createTransfert({
-        amount:   normalizeDecimal(amount),
-        targetId: selectedUser!.id,
-        id:       userId,
-      }).unwrap();
-
-      if (res) {
-        Alert.alert("✅ Succès", `${amount} Ecoins transférés à ${selectedUser!.username} !`);
-        setSelectedUser(null); setAmount(""); setSearchQuery(""); setPage(1);
-      } else {
-        Alert.alert("Échec", "Transfert échoué, veuillez réessayer.");
-      }
+      const res: any = await createTransfert({ amount: normalizeDecimal(amount), receiverId: selectedUser.id, senderId: userId }).unwrap();
+      if (res) showFeedback("success", `Transfert de ${amount} EC à ${selectedUser.username} réussi !`);
+      else     showFeedback("error", "Transfert échoué, veuillez réessayer.");
     } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue.");
-    } finally {
-      setLoadingPay(false);
-    }
+      showFeedback("error", err?.data?.message || "Une erreur est survenue lors du transfert.");
+    } finally { setLoadingPay(false); }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[{ flex: 1 }, { backgroundColor: t.bg }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
-      <StatusBar barStyle="light-content" />
-      <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowList(false); }}>
-        <View>
-          {/* ── HEADER ── */}
-          <View style={[s.header, { shadowColor: t.shadow }]}>
-            <LinearGradient
-              colors={t.headerGrad}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={s.deco1} />
-            <View style={s.deco2} />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-            <SafeAreaView edges={["top"]} style={{ width: "100%" }}>
-              <View style={s.topBar}>
-                <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-                  <Ionicons name="arrow-back" size={22} color={C.white} />
-                </TouchableOpacity>
-                <Text style={s.headerTitle}>Transfert Ecoins</Text>
-                <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-                  <Ionicons name="notifications-outline" size={22} color={C.white} />
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
+      {/* ── TOP BAR ──────────────────────────────────────────────────── */}
+      <SafeAreaView edges={["top"]} style={s.safeBar}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <Text style={s.topTitle}>Transfert</Text>
+          <TouchableOpacity style={s.iconBtnRel} onPress={() => router.push("/notification" as any)}>
+            <Ionicons name="notifications-outline" size={22} color={C.textSec} />
+            {unread > 0 && (
+              <View style={s.badge}><Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text></View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
-            <View style={s.headerIcon}>
-              <Ionicons name="swap-horizontal-outline" size={32} color={C.white} />
+      <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowDropdown(false); }}>
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          {/* ── HERO SECTION ─────────────────────────────────────────── */}
+          <View style={s.hero}>
+            <View style={s.heroIconWrap}>
+              <Ionicons name="swap-horizontal-outline" size={32} color={C.primary} />
             </View>
-            <Text style={s.headerSub}>Envoyez des Ecoins à un utilisateur</Text>
+            <Text style={s.heroSub}>Envoyez des Ecoins à un membre BIM</Text>
           </View>
 
-          {/* ── FORM CARD ── */}
-          <Animated.View style={[
-            s.card,
-            {
-              backgroundColor: t.card,
-              shadowColor: t.shadow,
-              borderColor: isDark ? t.border : "transparent",
-              borderWidth: isDark ? 1 : 0,
-              opacity: cardOpac,
-              transform: [{ translateY: cardAnim }],
-            },
-          ]}>
-            {isDark && <View style={s.cardShimmer} />}
+          {/* ── INFO BANNER ──────────────────────────────────────────── */}
+          <View style={s.infoBanner}>
+            <Ionicons name="information-circle-outline" size={18} color={C.primary} />
+            <Text style={s.infoText}>Les transferts entre membres BIM sont instantanés et sans frais</Text>
+          </View>
 
-            {/* Destinataire */}
-            <SectionLabel title="DESTINATAIRE" icon="person-outline" />
+          {/* ── FORM CARD ────────────────────────────────────────────── */}
+          <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardAnim }] }]}>
 
-            {/* Utilisateur sélectionné */}
-            {selectedUser && (
-              <View style={[s.selectedUser, { backgroundColor: t.selectedUserBg, borderColor: t.selectedBorder }]}>
-                <View style={[s.selectedAvatar, { backgroundColor: C.primary }]}>
-                  <Text style={s.selectedInitials}>{selectedUser.username.slice(0, 2).toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.selectedName, { color: t.text }]}>{selectedUser.username}</Text>
-                  {selectedUser.email && <Text style={[s.selectedEmail, { color: t.textSecondary }]}>{selectedUser.email}</Text>}
-                </View>
-                <TouchableOpacity
-                  style={[s.clearUser, { backgroundColor: t.clearBtnBg }]}
-                  onPress={() => { setSelectedUser(null); setSearchQuery(""); setShowList(false); }}
-                >
-                  <Ionicons name="close" size={16} color={t.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* Amount */}
+            <View style={s.sectionHeader}>
+              <Ionicons name="cash-outline" size={14} color={C.primary} />
+              <Text style={s.sectionLabel}>MONTANT À ENVOYER</Text>
+            </View>
 
-            {/* Search */}
-            <Animated.View style={[s.inputBox, { borderColor: borderS, backgroundColor: bgS }]}>
-              <Ionicons name="search-outline" size={16} color={t.textSecondary} />
-              <TextInput
-                placeholder="Rechercher un utilisateur…"
-                placeholderTextColor={t.textSecondary}
-                style={[s.input, { color: t.text }]}
-                value={searchQuery}
-                onChangeText={(v) => { setSearchQuery(v); setPage(1); setShowList(true); refetch(); }}
-                onFocus={() => { focusAnim(inputFocS, 1); setShowList(true); }}
-                onBlur={() => focusAnim(inputFocS, 0)}
-              />
-              {searchQuery.length > 0 && !selectedUser && (
-                <ActivityIndicator size="small" color={t.textSecondary} animating={isFetching} />
-              )}
-            </Animated.View>
-
-            {/* Dropdown */}
-            {showList && users.length > 0 && !selectedUser && (
-              <View style={[s.dropdown, { backgroundColor: t.dropdownBg, borderColor: t.border }]}>
-                <FlatList
-
-                  data={users}
-                
- 
-                  keyExtractor={(item) => item.id.toString()}
-                  style={{ maxHeight: 220 }}
-                  keyboardShouldPersistTaps="handled"
-                  onEndReached={loadMore}
-                  onEndReachedThreshold={0.5}
-                  showsVerticalScrollIndicator={false}
-                   nestedScrollEnabled
-                  ListFooterComponent={
-                    isFetching ? (
-                      <View style={{ padding: 10, alignItems: "center" }}>
-                        <ActivityIndicator size="small" color={C.primary} />
-                      </View>
-                    ) : null
-                  }
-                  renderItem={({ item }) => (
-                    <UserRow
-                      item={item}
-                      selected={selectedUser?.id === item.id}
-                      onPress={() => handleSelectUser(item)}
-                      t={t}
-                      isDark={isDark}
-                    />
-                  )}
-                />
-              </View>
-            )}
-
-            {/* Montant */}
-            <SectionLabel title="MONTANT (EC)" icon="cash-outline" />
-            <Animated.View style={[s.inputBox, { borderColor: borderA, backgroundColor: bgA }]}>
-              <Text style={[s.currency, { color: C.primary }]}>EC</Text>
+            <View style={s.amountBox}>
+              <Text style={s.currencyPrefix}>EC</Text>
               <TextInput
                 placeholder="0"
-                placeholderTextColor={t.textSecondary}
+                placeholderTextColor={C.textMut}
                 keyboardType="numeric"
-                style={[s.input, { color: t.text, fontSize: 18 }]}
+                style={s.amountInput}
                 value={amount}
                 onChangeText={setAmount}
-                onFocus={() => focusAnim(inputFocA, 1)}
-                onBlur={() => focusAnim(inputFocA, 0)}
                 returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
               />
               {amount.length > 0 && (
                 <TouchableOpacity onPress={() => setAmount("")}>
-                  <Ionicons name="close-circle" size={18} color={t.textSecondary} />
+                  <Ionicons name="close-circle" size={20} color={C.textMut} />
                 </TouchableOpacity>
               )}
-            </Animated.View>
+            </View>
 
-            {/* Raccourcis */}
-            <View style={s.shortcuts}>
+            {/* Quick chips */}
+            <View style={s.chips}>
               {SHORTCUTS.map((v) => {
                 const active = amount === v;
                 return (
                   <TouchableOpacity
                     key={v}
-                    style={[s.chip, { backgroundColor: active ? C.primary : t.inputBg, borderColor: active ? C.primary : t.border }]}
+                    style={[s.chip, active && s.chipActive]}
                     onPress={() => setAmount(v)}
+                    activeOpacity={0.75}
                   >
-                    <Text style={[s.chipText, { color: active ? C.white : t.textSecondary }]}>{v} EC</Text>
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{v} EC</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            {/* Récap */}
-            {selectedUser && amount && (
-              <View style={[s.recap, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-                <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Destinataire</Text>
-                  <Text style={[s.recapVal, { color: t.text }]}>{selectedUser.username}</Text>
+            {/* Recipient */}
+            <View style={[s.sectionHeader, { marginTop: 18 }]}>
+              <Ionicons name="person-circle-outline" size={14} color={C.primary} />
+              <Text style={s.sectionLabel}>DESTINATAIRE</Text>
+            </View>
+
+            {selectedUser ? (
+              <View style={s.selectedUserCard}>
+                <View style={s.userAvatar}>
+                  <Text style={s.avatarText}>{selectedUser.username?.charAt(0).toUpperCase()}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.selectedName}>{selectedUser.username}</Text>
+                  {selectedUser.phone && <Text style={s.selectedPhone}>{selectedUser.phone}</Text>}
+                </View>
+                <TouchableOpacity onPress={() => { setSelectedUser(null); setSearchQuery(""); }}>
+                  <Ionicons name="close-circle" size={20} color={C.textMut} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                <View style={s.searchBox}>
+                  <Ionicons name="search-outline" size={16} color={C.textMut} />
+                  <TextInput
+                    placeholder="Rechercher un membre BIM..."
+                    placeholderTextColor={C.textMut}
+                    style={s.searchInput}
+                    value={searchQuery}
+                    onChangeText={(t) => { setSearchQuery(t); setShowDropdown(t.length > 1); }}
+                    onFocus={() => { if (searchQuery.length > 1) setShowDropdown(true); }}
+                    returnKeyType="search"
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => { setSearchQuery(""); setShowDropdown(false); }}>
+                      <Ionicons name="close-circle" size={16} color={C.textMut} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {showDropdown && filteredUsers.length > 0 && (
+                  <View style={s.dropdown}>
+                    {filteredUsers.map((item) => (
+                      <TouchableOpacity key={String(item.id)} style={s.dropdownItem} onPress={() => handleSelectUser(item)} activeOpacity={0.7}>
+                        <View style={[s.userAvatar, { width: 34, height: 34, borderRadius: 17 }]}>
+                          <Text style={[s.avatarText, { fontSize: 14 }]}>{item.username?.charAt(0).toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.dropdownName}>{item.username}</Text>
+                          {item.phone && <Text style={s.dropdownPhone}>{item.phone}</Text>}
+                        </View>
+                        <Ionicons name="chevron-forward" size={14} color={C.textMut} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {showDropdown && filteredUsers.length === 0 && searchQuery.length > 1 && (
+                  <View style={s.dropdown}>
+                    <View style={s.emptyDrop}>
+                      <Ionicons name="person-outline" size={24} color={C.textMut} />
+                      <Text style={s.emptyDropText}>Aucun membre trouvé</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Recap */}
+            {amount.length > 0 && selectedUser && (
+              <View style={s.recap}>
+                <View style={s.recapRow}>
+                  <Text style={s.recapLabel}>Destinataire</Text>
+                  <Text style={s.recapVal}>{selectedUser.username}</Text>
                 </View>
                 <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Montant</Text>
-                  <Text style={[s.recapVal, { color: C.primary }]}>{amount} EC</Text>
+                  <Text style={s.recapLabel}>Montant</Text>
+                  <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>{amount} EC</Text>
                 </View>
               </View>
             )}
 
             {/* CTA */}
-            <View style={s.cta}>
-              <GradientButton
-                isLoad={loadingPay}
-                title={loadingPay ? "Traitement…" : "Confirmer le transfert"}
-                onPress={handleConfirmPress}
-                leftIcon={<ArrowIcon width={18} height={12} color={C.violet} />}
-                rightIcon={<ArrowRightIcon width={26} height={20} />}
-              />
-            </View>
+            <TouchableOpacity
+              style={[s.ctaBtn, { opacity: loadingPay ? 0.7 : 1 }]}
+              onPress={handleConfirmPress}
+              disabled={loadingPay}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
+                {loadingPay
+                  ? <ActivityIndicator size="small" color={C.white} />
+                  : <>
+                      <Ionicons name="send-outline" size={20} color={C.white} />
+                      <Text style={s.ctaText}>Envoyer les Ecoins</Text>
+                    </>}
+              </LinearGradient>
+            </TouchableOpacity>
 
+            {/* Secure note */}
             <View style={s.secureRow}>
-              <Ionicons name="lock-closed-outline" size={12} color={t.textSecondary} />
-              <Text style={[s.secureText, { color: t.textSecondary }]}>Transfert sécurisé par BIM</Text>
+              <Ionicons name="shield-checkmark-outline" size={12} color={C.textMut} />
+              <Text style={s.secureText}>Transfert sécurisé et instantané · BIM NEXT</Text>
             </View>
           </Animated.View>
 
-          <View style={{ height: 60 }} />
-        </View>
+          {/* ── PROMO CARD ───────────────────────────────────────────── */}
+          <Animated.View style={[s.promoCard, { opacity: cardOpac }]}>
+            <View style={s.promoContent}>
+              <Text style={s.promoTitle}>Transférez sans limites</Text>
+              <Text style={s.promoSub}>Profitez de transferts sécurisés à travers tout l'écosystème BIMNext.</Text>
+            </View>
+            <View style={s.promoIconCircle}>
+              <Ionicons name="swap-horizontal-outline" size={36} color={C.primary} style={{ opacity: 0.18 }} />
+            </View>
+          </Animated.View>
+
+          <View style={{ height: 80 }} />
+        </ScrollView>
       </TouchableWithoutFeedback>
 
-      {/* ══════════════════════════════════════════════
-          ── PIN MODAL ──
-      ══════════════════════════════════════════════ */}
-      <Modal
+      {/* ── PIN MODAL ────────────────────────────────────────────────── */}
+      <RNModal
         isVisible={showPinModal}
         onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
         animationIn="slideInUp"
@@ -559,46 +449,26 @@ export default function TransferEcoinsScreen() {
         style={s.modalSlide}
         avoidKeyboard
       >
-        <View style={[
-          s.pinModal,
-          {
-            backgroundColor: t.modalBg,
-            borderColor: isDark ? t.border : "transparent",
-            borderWidth: isDark ? 1 : 0,
-          },
-        ]}>
-          {/* Drag handle */}
-          <View style={[s.dragHandle, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }]} />
-
-          {/* Lock icon — violet pour le transfert */}
-          <View style={[s.lockIconWrap, { backgroundColor: t.lockIconBg }]}>
-            <Ionicons name="lock-closed" size={28} color={C.violet} />
+        <View style={s.pinModal}>
+          <View style={s.dragHandle} />
+          <View style={s.lockIconWrap}>
+            <Ionicons name="lock-closed" size={28} color={C.primary} />
           </View>
+          <Text style={s.pinTitle}>Mot de passe requis</Text>
+          <Text style={s.pinSub}>Entrez votre code à 6 chiffres pour confirmer le transfert</Text>
 
-          <Text style={[s.pinTitle, { color: t.text }]}>Mot de passe requis</Text>
-          <Text style={[s.pinSub, { color: t.textSecondary }]}>
-            Entrez votre code à 6 chiffres pour confirmer le transfert
-          </Text>
-
-          {/* Reminder : destinataire + montant */}
-          {selectedUser && amount && (
-            <View style={[s.amountReminder, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-              <Ionicons name="swap-horizontal-outline" size={14} color={C.primary} />
-              <Text style={[s.amountReminderText, { color: t.text }]}>
-                {Number(amount).toLocaleString("fr-FR")} EC
-              </Text>
-              <Text style={[s.amountReminderMethod, { color: t.textSecondary }]}>
-                → {selectedUser.username}
-              </Text>
+          {amount.length > 0 && selectedUser && (
+            <View style={s.amountReminder}>
+              <Ionicons name="send-outline" size={14} color={C.primary} />
+              <Text style={s.amountReminderText}>{Number(normalizeDecimal(amount)).toLocaleString("fr-FR")} EC</Text>
+              <Text style={s.amountReminderMethod}>→ {selectedUser.username}</Text>
             </View>
           )}
 
-          {/* PIN dots */}
           <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} t={t} />
+            <PinDots value={pinValue} />
           </Animated.View>
 
-          {/* Error */}
           {pinError.length > 0 && (
             <View style={s.pinErrorRow}>
               <Ionicons name="alert-circle-outline" size={14} color={C.error} />
@@ -606,214 +476,183 @@ export default function TransferEcoinsScreen() {
             </View>
           )}
 
-          {/* Keypad */}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} t={t} isDark={isDark} />
+          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
 
-          {/* Confirm */}
           <TouchableOpacity
             style={[s.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
             onPress={handleConfirmPin}
             disabled={loadingVerify || pinValue.length < 6}
             activeOpacity={0.85}
           >
-            <LinearGradient
-              colors={[C.deep, C.violet]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={s.confirmGrad}
-            >
+            <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
               {loadingVerify
-                ? <Ionicons name="sync" size={18} color={C.white} />
-                : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                    <Text style={s.confirmText}>Valider</Text>
-                  </>
-                )
-              }
+                ? <ActivityIndicator size="small" color={C.white} />
+                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.confirmText}>Valider</Text></>}
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setShowPinModal(false)}
-            style={s.cancelBtn}
-            disabled={loadingVerify}
-          >
-            <Text style={[s.cancelText, { color: t.textSecondary }]}>Annuler</Text>
+          <TouchableOpacity onPress={() => setShowPinModal(false)} style={s.cancelBtn} disabled={loadingVerify}>
+            <Text style={s.cancelText}>Annuler</Text>
           </TouchableOpacity>
         </View>
+      </RNModal>
+
+      {/* ── FEEDBACK MODAL ───────────────────────────────────────────── */}
+      <Modal transparent visible={feedback !== null} animationType="none" onRequestClose={hideFeedback}>
+        <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={hideFeedback}>
+          <Animated.View style={[fb.sheet, { opacity: fbOpac, transform: [{ scale: fbScale }] }]}>
+            <View style={[fb.iconWrap, { backgroundColor: feedback === "success" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)" }]}>
+              <Ionicons
+                name={feedback === "success" ? "checkmark-circle" : "close-circle"}
+                size={56}
+                color={feedback === "success" ? C.success : C.error}
+              />
+            </View>
+            <Text style={fb.title}>{feedback === "success" ? "Transfert réussi !" : "Opération échouée"}</Text>
+            <Text style={fb.msg}>{feedbackMsg}</Text>
+            <TouchableOpacity
+              style={[fb.btn, { backgroundColor: feedback === "success" ? C.success : C.error }]}
+              onPress={hideFeedback}
+              activeOpacity={0.85}
+            >
+              <Text style={fb.btnText}>OK</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
       </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  safeBar: { backgroundColor: C.navBg, borderBottomWidth: 1, borderBottomColor: C.navBord },
+  topBar:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center" },
+  iconBtnRel: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  topTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  badge:   { position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  badgeText:{ fontFamily: "NexaBold", fontSize: 9, color: C.white },
+
   scroll: { paddingBottom: 20 },
 
-  header: {
-    height: 220, overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    alignItems: "center", elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16,
+  hero: { alignItems: "center", paddingTop: 28, paddingBottom: 8, gap: 8 },
+  heroIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.heroBg, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  heroTitle: { fontFamily: "NexaBold", fontSize: 24, color: C.text, letterSpacing: -0.3 },
+  heroSub:   { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+
+  infoBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    marginHorizontal: 16, marginTop: 16,
+    backgroundColor: C.infoBg,
+    borderWidth: 1, borderColor: C.infoBord,
+    borderRadius: 16, padding: 14,
   },
-  deco1: {
-    position: "absolute", width: 180, height: 180,
-    borderRadius: 90, backgroundColor: "rgba(255,255,255,0.06)",
-    top: -50, right: -40,
-  },
-  deco2: {
-    position: "absolute", width: 120, height: 120,
-    borderRadius: 60, backgroundColor: "rgba(255,255,255,0.04)",
-    bottom: -20, left: -20,
-  },
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 8,
-  },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-  },
-  headerTitle: { color: "#FFFFFF", fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  headerIcon: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    marginTop: 12, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)",
-  },
-  headerSub: { color: "rgba(255,255,255,0.80)", fontSize: 12, fontFamily: "NexaLight", marginTop: 8 },
+  infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, lineHeight: 18, color: C.text },
 
   card: {
+    marginHorizontal: 16, marginTop: 16,
+    backgroundColor: C.cardBg,
     borderRadius: 28, padding: 20,
-    marginHorizontal: 16, marginTop: -28,
-    overflow: "hidden", elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10, shadowRadius: 14,
-  },
-  cardShimmer: {
-    position: "absolute", top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1, borderColor: C.cardBord,
+    elevation: 4, shadowColor: "#0047FF", shadowOpacity: 0.04, shadowRadius: 32, shadowOffset: { width: 0, height: 8 },
   },
 
-  selectedUser: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 14, padding: 10,
-    marginBottom: 10, gap: 10,
-    borderWidth: 1.5,
-  },
-  selectedAvatar: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: "center", justifyContent: "center",
-  },
-  selectedInitials: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 13 },
-  selectedName:     { fontFamily: "NexaLight", fontSize: 13 },
-  selectedEmail:    { fontFamily: "NexaLight", fontSize: 11 },
-  clearUser: {
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: "center", justifyContent: "center",
-  },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, marginTop: 4 },
+  sectionLabel:  { fontFamily: "NexaBold", fontSize: 10, color: C.primary, textTransform: "uppercase", letterSpacing: 1 },
 
-  inputBox: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 14, borderWidth: 1.5,
-    paddingHorizontal: 14, height: 50, gap: 10, marginBottom: 12,
+  amountBox: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.surface, borderRadius: 18,
+    borderWidth: 1.5, borderColor: C.border,
+    paddingHorizontal: 18, paddingVertical: 18,
+    marginBottom: 14,
+    elevation: 2, shadowColor: "#0047FF", shadowOpacity: 0.03, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
   },
-  currency: { fontFamily: "NexaLight", fontSize: 15 },
-  input:    { flex: 1, fontSize: 14, fontFamily: "NexaLight" },
+  currencyPrefix: { fontFamily: "NexaBold", fontSize: 20, color: C.primary },
+  amountInput:    { flex: 1, fontSize: 34, fontFamily: "NexaBold", color: C.text },
+
+  chips: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 4 },
+  chip:       { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 22, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.surface },
+  chipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  chipText:       { fontFamily: "NexaBold", fontSize: 12, color: C.textSec },
+  chipTextActive: { color: C.white },
+
+  selectedUserCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderRadius: 16, borderWidth: 1.5, padding: 12, marginBottom: 14,
+    borderColor: C.selectedBord, backgroundColor: C.selectedBg,
+  },
+  userAvatar:  { width: 42, height: 42, borderRadius: 21, backgroundColor: C.avatarBg, alignItems: "center", justifyContent: "center" },
+  avatarText:  { fontFamily: "NexaBold", fontSize: 18, color: C.primary },
+  selectedName:  { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  selectedPhone: { fontFamily: "NexaLight", fontSize: 12, color: C.textSec },
+
+  searchBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: C.surface, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, height: 48,
+    elevation: 2, shadowColor: "#0035C5", shadowOpacity: 0.03, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+  },
+  searchInput: { flex: 1, fontSize: 13, fontFamily: "NexaLight", color: C.text },
 
   dropdown: {
-    borderRadius: 16, marginBottom: 14,
-    borderWidth: 1, overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10, shadowRadius: 8,
+    marginTop: 6,
+    borderRadius: 16, borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.surface,
+    elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12,
+    overflow: "hidden",
   },
+  dropdownItem:  { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  dropdownName:  { fontFamily: "NexaBold", fontSize: 13, color: C.text },
+  dropdownPhone: { fontFamily: "NexaLight", fontSize: 11, color: C.textSec },
+  emptyDrop:     { padding: 20, alignItems: "center", gap: 6 },
+  emptyDropText: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
 
-  shortcuts: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 18 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
-  chipText: { fontFamily: "NexaLight", fontSize: 12 },
+  recap: { borderRadius: 14, padding: 14, marginTop: 14, marginBottom: 2, borderWidth: 1, backgroundColor: C.recapBg, borderColor: C.border },
+  recapRow:  { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  recapLabel:{ fontFamily: "NexaLight", fontSize: 12, color: C.textSec },
+  recapVal:  { fontFamily: "NexaLight", fontSize: 12, color: C.text },
 
-  recap: { borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1 },
-  recapRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1 },
-  recapLabel: { fontFamily: "NexaLight", fontSize: 12 },
-  recapVal:   { fontFamily: "NexaLight", fontSize: 12 },
+  ctaBtn:  { borderRadius: 18, overflow: "hidden", marginTop: 18 },
+  ctaGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 18 },
+  ctaText: { color: C.white, fontFamily: "NexaBold", fontSize: 16 },
 
-  cta: { marginTop: 4 },
-  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 12 },
-  secureText: { fontFamily: "NexaLight", fontSize: 11 },
+  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 14 },
+  secureText:{ fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
 
-  /* ── PIN modal ── */
+  promoCard: {
+    marginHorizontal: 16, marginTop: 14,
+    backgroundColor: C.cardBg,
+    borderRadius: 28, padding: 22,
+    borderWidth: 1, borderColor: C.cardBord,
+    flexDirection: "row", alignItems: "center",
+    minHeight: 130, overflow: "hidden",
+    elevation: 2, shadowColor: "#0047FF", shadowOpacity: 0.03, shadowRadius: 20, shadowOffset: { width: 0, height: 4 },
+  },
+  promoContent: { flex: 1, zIndex: 1 },
+  promoTitle:   { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 8 },
+  promoSub:     { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, lineHeight: 20 },
+  promoIconCircle: { position: "absolute", right: -16, top: "50%", marginTop: -36, width: 120, height: 120, alignItems: "center", justifyContent: "center" },
+
   modalSlide: { justifyContent: "flex-end", margin: 0 },
-  pinModal: {
-    borderTopLeftRadius: 32, borderTopRightRadius: 32,
-    padding: 24, paddingBottom: 36, alignItems: "center",
-    elevation: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18, shadowRadius: 20,
-  },
-  dragHandle: { width: 40, height: 4, borderRadius: 2, marginBottom: 20 },
-  lockIconWrap: {
-    width: 66, height: 66, borderRadius: 33,
-    alignItems: "center", justifyContent: "center", marginBottom: 14,
-  },
-  pinTitle: { fontFamily: "NexaLight", fontSize: 18, marginBottom: 6, letterSpacing: 0.2 },
-  pinSub: {
-    fontFamily: "NexaLight", fontSize: 12,
-    textAlign: "center", lineHeight: 18,
-    marginBottom: 18, paddingHorizontal: 10,
-  },
-  amountReminder: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22,
-  },
-  amountReminderText:   { fontFamily: "NexaLight", fontSize: 15, fontWeight: "600" },
-  amountReminderMethod: { fontFamily: "NexaLight", fontSize: 13 },
-
-  pinErrorRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  pinModal:    { backgroundColor: C.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 36, alignItems: "center", elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 20 },
+  dragHandle:  { width: 40, height: 4, borderRadius: 2, marginBottom: 20, backgroundColor: C.handleBg },
+  lockIconWrap:{ width: 66, height: 66, borderRadius: 33, backgroundColor: C.lockBg, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  pinTitle:    { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 6, letterSpacing: 0.2 },
+  pinSub:      { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, textAlign: "center", lineHeight: 18, marginBottom: 18, paddingHorizontal: 10 },
+  amountReminder: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 12, borderWidth: 1, backgroundColor: C.reminderBg, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22 },
+  amountReminderText:   { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  amountReminderMethod: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+  pinErrorRow:  { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
   pinErrorText: { fontFamily: "NexaLight", fontSize: 12, color: C.error },
-
-  confirmBtn: { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 20 },
-  confirmGrad: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 10, paddingVertical: 15,
-  },
-  confirmText: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 15 },
-
-  cancelBtn: { marginTop: 14, paddingVertical: 8 },
-  cancelText: { fontFamily: "NexaLight", fontSize: 13 },
-});
-
-const ur = StyleSheet.create({
-  row: {
-    flexDirection: "row", alignItems: "center",
-    padding: 12, gap: 10, borderBottomWidth: 1,
-  },
-  avatar: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: "center", justifyContent: "center",
-  },
-  initials:    { fontFamily: "NexaLight", fontSize: 13 },
-  info:        { flex: 1 },
-  name:        { fontFamily: "NexaLight", fontSize: 13 },
-  email:       { fontFamily: "NexaLight", fontSize: 11 },
-  checkCircle: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: C.primary,
-    alignItems: "center", justifyContent: "center",
-  },
-});
-
-const sl = StyleSheet.create({
-  row:  { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, marginTop: 4 },
-  text: { fontFamily: "NexaLight", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 0.8, opacity: 0.9 },
-});
+  confirmBtn:   { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 20 },
+  confirmGrad:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  confirmText:  { color: C.white, fontFamily: "NexaBold", fontSize: 15 },
+  cancelBtn:    { marginTop: 14, paddingVertical: 8 },
+  cancelText:   { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+}); }
 
 const pd = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, marginBottom: 10 },
@@ -826,3 +665,13 @@ const kp = StyleSheet.create({
   empty:   { width: 78, height: 56 },
   keyText: { fontSize: 20, fontFamily: "NexaLight", fontWeight: "600" },
 });
+
+function mkFb(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 32 },
+  sheet:   { backgroundColor: C.inputBg, borderRadius: 28, padding: 28, alignItems: "center", width: "100%", elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20 },
+  iconWrap:{ width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  title:   { fontFamily: "NexaBold", fontSize: 20, color: C.text, marginBottom: 10, textAlign: "center" },
+  msg:     { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  btn:     { paddingHorizontal: 40, paddingVertical: 13, borderRadius: 14 },
+  btnText: { color: C.white, fontFamily: "NexaBold", fontSize: 15 },
+}); }

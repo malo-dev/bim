@@ -41,10 +41,31 @@ export const notesApi = createApi({
       }),
       invalidatesTags: (result, error, arg) => [{ type: "Notes", id: String(arg.companyId) }],
     }),
+
+    /* PUT modifier une note existante */
+    updateNote: builder.mutation({
+      query: ({ noteId, companyId, ...data }) => ({
+        url: `/notes/update/${noteId}`,
+        method: "PUT",
+        data,
+      }),
+      invalidatesTags: (result, error, arg) => [{ type: "Notes", id: String(arg.companyId) }],
+    }),
+
+    /* DELETE supprimer une note */
+    deleteNote: builder.mutation({
+      query: ({ noteId }) => ({
+        url: `/notes/delete/${noteId}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (result, error, arg) => [{ type: "Notes", id: String(arg.companyId) }],
+    }),
   }),
 });
 
 export const {
   useGetNotesByCompanyQuery,
   useCreateNoteMutation,
+  useUpdateNoteMutation,
+  useDeleteNoteMutation,
 } = notesApi;

@@ -15,10 +15,10 @@ import {
   Switch,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
   RefreshControl,
 } from "react-native";
+import { useAppTheme } from "@/app/_layout";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   useGetMyLivreurProfileQuery,
@@ -35,10 +35,6 @@ import {
 import axiosInstance from "@/services/axiosInstance";
 import { getSocket } from "@/services/socketService";
 
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
 
 const STAR = "★";
 
@@ -51,7 +47,8 @@ const ORDER_STATUS: Record<string, { label: string; color: string; bg: string }>
 
 export default function LivreurSpaceScreen() {
   const router = useRouter();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const t = isDark ? Colors.dark : Colors.light;
 
   const { data: livreur, refetch: refetchProfile } = useGetMyLivreurProfileQuery(undefined);
   const { data: availableData, refetch: refetchAvailable, isFetching: loadingAvailable } = useGetAvailableOrdersQuery(undefined);
@@ -79,13 +76,28 @@ export default function LivreurSpaceScreen() {
   const myDeliveries:    any[] = myDelivData?.data   ?? [];
 
   useEffect(() => {
-    AsyncStorage.getItem("livreurUser").then((raw) => {
-      if (raw) setLivreurInfo(JSON.parse(raw));
-      else router.replace("/livreur/login");
-    });
-    AsyncStorage.getItem("livreurToken").then((token) => {
-      if (token) axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-    });
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+    AsyncStorage.multiGet(["livreurUser", "livreurToken", "livreurLastActivity"]).then(
+      ([[, rawUser], [, token], [, lastActivity]]) => {
+        if (!rawUser || !token) {
+          router.replace("/livreur/login");
+          return;
+        }
+
+        const now = Date.now();
+        const inactive = lastActivity && (now - Number(lastActivity)) > SEVEN_DAYS;
+        if (inactive) {
+          AsyncStorage.multiRemove(["livreurToken", "livreurId", "livreurUser", "livreurLastActivity"]);
+          router.replace("/livreur/login");
+          return;
+        }
+
+        AsyncStorage.setItem("livreurLastActivity", String(now));
+        setLivreurInfo(JSON.parse(rawUser));
+        axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      }
+    );
     requestGps();
     return () => { if (locationInterval.current) clearInterval(locationInterval.current); };
   }, []);

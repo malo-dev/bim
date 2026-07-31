@@ -1,12 +1,13 @@
-import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
-import { useRouter } from "expo-router";
-import { useState, useRef, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Alert,
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,39 +17,54 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
-  useColorScheme,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { C, Colors} from "@/constants/theme";
+
 import logo from "@/assets/images/logo.jpeg";
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
+import { useAppTheme } from "@/app/_layout";
 import { useAskPasswordResetMutation } from "@/services/authService";
 
+const LIGHT = {
+  bg:      "#F8F9FF",
+  primary: "#0047FF",
+  text:    "#1A1C1C",
+  muted:   "#747688",
+  input:   "#F4F6FF",
+  border:  "#E8EDF5",
+  white:   "#FFFFFF",
+  cardBg:  "#FFFFFF",
+  cardElev: 6,
+  cardBord: "transparent",
+};
+const DARK: typeof LIGHT = {
+  bg:      "#0B1220",
+  primary: "#4D8DFF",
+  text:    "#EAF0FF",
+  muted:   "#9FB0D0",
+  input:   "#182033",
+  border:  "#1F2A44",
+  white:   "#FFFFFF",
+  cardBg:  "#1A2540",
+  cardElev: 0,
+  cardBord: "rgba(31,42,68,0.90)",
+};
 
-
-/* ─── ÉTAPES — pattern sectionHeader du home ─────────────────────────── */
 const STEPS = [
-  { icon: "mail-outline",      key: "email"  },
-  { icon: "keypad-outline",    key: "code"   },
-  { icon: "lock-open-outline", key: "reset"  },
+  { icon: "mail-outline"      as const },
+  { icon: "keypad-outline"    as const },
+  { icon: "lock-open-outline" as const },
 ];
 
 function Steps({ labels }: { labels: string[] }) {
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const st = useMemo(() => mkSt(W), [isDark]);
   return (
     <View style={st.row}>
       {STEPS.map((step, i) => (
-        <View key={step.key} style={st.stepWrap}>
-          {/* line before */}
+        <View key={i} style={st.stepWrap}>
           {i > 0 && <View style={st.line} />}
-
-          <View style={[st.iconCircle, i === 0 && st.iconCircleActive]}>
-            <Ionicons
-              name={step.icon as any}
-              size={13}
-              color={i === 0 ? C.white : C.muted}
-            />
+          <View style={[st.circle, i === 0 && st.circleActive]}>
+            <Ionicons name={step.icon} size={13} color={i === 0 ? W.white : W.muted} />
           </View>
           <Text style={[st.label, i === 0 && st.labelActive]}>{labels[i]}</Text>
         </View>
@@ -57,22 +73,17 @@ function Steps({ labels }: { labels: string[] }) {
   );
 }
 
-/* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function ForgotPasswordScreen() {
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(W), [isDark]);
   const { t: tr } = useTranslation();
-  function useTheme() {
-    const scheme = useColorScheme();
-    const isDark  = scheme === "dark";
-    return { isDark, t: isDark ? Colors.dark : Colors.light };
-  }
-  const { isDark,t }             = useTheme();
   const router = useRouter();
   const [askPasswordReset, { isLoading }] = useAskPasswordResetMutation();
 
   const [email,   setEmail]   = useState("");
   const [focused, setFocused] = useState(false);
 
-  /* ── Animations ── */
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(60)).current;
   const cardOpac  = useRef(new Animated.Value(0)).current;
@@ -90,11 +101,11 @@ export default function ForgotPasswordScreen() {
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
-        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: -10, duration: 2800, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 2800, useNativeDriver: true }),
       ])
     ).start();
-  }, [cardOpac, cardSlide, floatY, logoOpac, logoScale]);
+  }, []);
 
   const shake = () => {
     Animated.sequence([
@@ -122,26 +133,8 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
-      <StatusBar barStyle="light-content" />
-
-      {/* Gradient — même que LoginScreen / HomeScreen loader */}
-      <LinearGradient
-        colors={
-          isDark
-            ? ["#060D1F", "#091528", "#0D1F3C"]
-            : [t.gradientStart, t.gradientEnd, t.accent]
-        }
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Cercles décoratifs — pattern home */}
-      <View style={[s.circle, s.circle1]} />
-      <View style={[s.circle, s.circle2]} />
-      <View style={[s.circle, s.circle3]} />
-      <View style={[s.circle, s.circle4]} />
+    <View style={s.screen}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={W.bg} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
@@ -149,60 +142,44 @@ export default function ForgotPasswordScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-
-          {/* ── Logo flottant ── */}
+          {/* Logo flottant */}
           <Animated.View style={[s.logoArea, { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] }]}>
             <View style={s.logoWrap}>
               <Image source={logo} style={s.logo} resizeMode="contain" />
             </View>
-            {/* Barre accent tricolore — même sectorAccent pattern */}
-            <View style={s.logoAccentBar}>
-              <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 2 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.gold,    flex: 1 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 1 }]} />
-            </View>
-
+            <Text style={s.brand}>BIMNext</Text>
             <Text style={s.heroTitle}>{tr("auth.forgotTitle")}</Text>
-            <Text style={s.heroSub}>
-              {tr("auth.forgotSub")}
-            </Text>
+            <Text style={s.heroSub}>{tr("auth.forgotSub")}</Text>
           </Animated.View>
 
-          {/* ── Card ── */}
-          <Animated.View style={[s.cardWrap, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
+          {/* Card */}
+          <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
 
-            {/* Section header — copie exacte du home */}
             <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: C.gold }]} />
+              <View style={s.dot} />
               <Text style={s.sectionLabel}>{tr("auth.resetSection")}</Text>
             </View>
 
-            {/* Étapes + icône mail */}
+            {/* Steps + mail icon */}
             <View style={s.stepsRow}>
-              {/* Mail icon box — même iconCircle du home */}
-              <View style={[s.mailIconBox, { backgroundColor: C.primary + "18" }]}>
-                <Ionicons name="mail-outline" size={22} color={C.primary} />
-                {/* Point doré — badge style home */}
+              <View style={s.mailIconBox}>
+                <Ionicons name="mail-outline" size={22} color={W.primary} />
                 <View style={s.goldDot} />
               </View>
               <Steps labels={[tr("auth.emailStep"), tr("auth.codeStep"), tr("auth.resetStep")]} />
             </View>
 
-            {/* Séparateur */}
             <View style={s.sep} />
 
-            {/* Label */}
             <Text style={s.label}>{tr("auth.email")}</Text>
-
-            {/* Input row — même style LoginScreen / RegisterScreen */}
             <View style={[s.inputRow, focused && s.inputFocused]}>
-              <View style={[s.iconCircle, { backgroundColor: focused ? C.primary + "18" : C.f4 }]}>
-                <Ionicons name="mail-outline" size={17} color={focused ? C.primary : C.muted} />
+              <View style={[s.iconBox, focused && s.iconBoxFocused]}>
+                <Ionicons name="mail-outline" size={17} color={focused ? W.primary : W.muted} />
               </View>
               <TextInput
                 style={s.input}
                 placeholder={tr("auth.emailPH")}
-                placeholderTextColor={C.muted}
+                placeholderTextColor={W.muted}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -212,43 +189,34 @@ export default function ForgotPasswordScreen() {
               />
               {email.length > 0 && (
                 <TouchableOpacity onPress={() => setEmail("")} style={{ marginRight: 12 }}>
-                  <Ionicons name="close-circle" size={18} color={C.muted} />
+                  <Ionicons name="close-circle" size={18} color={W.muted} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Info bulle — même chip style dividerBadge */}
+            {/* Info bulle */}
             <View style={s.infoBubble}>
-              <View style={[s.iconCircle, { backgroundColor: C.primary + "12", width: 32, height: 32, borderRadius: 16 }]}>
-                <Ionicons name="information-circle-outline" size={15} color={C.primary} />
+              <View style={s.infoIcon}>
+                <Ionicons name="information-circle-outline" size={15} color={W.primary} />
               </View>
-              <Text style={s.infoText}>
-                {tr("auth.emailCodeHint")}
-              </Text>
+              <Text style={s.infoText}>{tr("auth.emailCodeHint")}</Text>
             </View>
 
             {/* CTA */}
-            <View style={{ marginTop: 22 }}>
-              <GradientButton
-                isLoad={isLoading}
-                title={tr("auth.sendCode")}
-                onPress={handleSend}
-                leftIcon={<ArrowIcon width={18} height={12} />}
-                rightIcon={<ArrowRightIcon width={26} height={20} />}
-              />
-            </View>
+            <TouchableOpacity style={[s.btn, { marginTop: 22 }]} onPress={handleSend} activeOpacity={0.88} disabled={isLoading}>
+              <Text style={s.btnText}>{isLoading ? "Envoi en cours..." : tr("auth.sendCode")}</Text>
+            </TouchableOpacity>
 
-            {/* Retour — même loginBtn du RegisterScreen */}
+            {/* Retour */}
             <TouchableOpacity style={s.backBtn} onPress={() => router.push("/login")} activeOpacity={0.85}>
-              <View style={[s.iconCircle, { backgroundColor: C.f4, width: 36, height: 36, borderRadius: 18 }]}>
-                <FontAwesome6 name="arrow-left" size={13} color={C.muted} />
+              <View style={[s.iconBox, { backgroundColor: W.input, width: 36, height: 36, borderRadius: 18 }]}>
+                <FontAwesome6 name="arrow-left" size={13} color={W.muted} />
               </View>
               <Text style={s.backText}>{tr("auth.backToLogin")}</Text>
             </TouchableOpacity>
 
           </Animated.View>
 
-          {/* Version */}
           <Text style={s.version}>BIM NEXT · v1.0.0</Text>
           <View style={{ height: 50 }} />
         </ScrollView>
@@ -259,31 +227,9 @@ export default function ForgotPasswordScreen() {
 
 ForgotPasswordScreen.options = { headerShown: false };
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: C.deep },
+function mkS(W: typeof LIGHT) { return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: W.bg },
 
-  /* Cercles décoratifs */
-  circle: { position: "absolute", borderRadius: 999 },
-  circle1: {
-    width: 300, height: 300, top: -130, right: -120,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
-  },
-  circle2: {
-    width: 140, height: 140, top: 100, right: -40,
-    backgroundColor: "rgba(255,215,0,0.08)",
-  },
-  circle3: {
-    width: 190, height: 190, bottom: 140, left: -80,
-    backgroundColor: "rgba(57,6,199,0.13)",
-  },
-  circle4: {
-    width: 65, height: 65, top: "35%", left: 20,
-    backgroundColor: "rgba(77,150,255,0.1)",
-  },
-
-  /* Logo */
   logoArea: {
     alignItems: "center",
     paddingTop: Platform.OS === "ios" ? 65 : 46,
@@ -291,156 +237,123 @@ const s = StyleSheet.create({
   },
   logoWrap: {
     width: 90, height: 90, borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: W.white,
+    borderWidth: 2, borderColor: "#C8D8FF",
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden", elevation: 14,
-    shadowColor: C.black, shadowOpacity: 0.3,
-    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+    overflow: "hidden", elevation: 8,
+    shadowColor: W.primary, shadowOpacity: 0.18,
+    shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
   },
   logo: { width: 74, height: 74 },
-  logoAccentBar: {
-    flexDirection: "row", width: 56, height: 3,
-    borderRadius: 2, marginTop: 12, overflow: "hidden", gap: 2,
-  },
-  logoAccentSeg: { height: "100%", borderRadius: 2 },
+  brand: { fontFamily: "NexaBold", fontSize: 18, color: W.primary, marginTop: 10, letterSpacing: 0.5 },
   heroTitle: {
-    color: C.white, fontFamily: "NexaLight",
-    fontSize: 20, letterSpacing: 0.3,
-    textAlign: "center", marginTop: 16, marginBottom: 7,
+    fontFamily: "NexaBold", fontSize: 20, color: W.text,
+    textAlign: "center", marginTop: 14, marginBottom: 6,
   },
   heroSub: {
-    color: "rgba(255,255,255,0.6)",
-    fontFamily: "NexaLight", fontSize: 13,
-    textAlign: "center", lineHeight: 20,
-    paddingHorizontal: 24,
+    fontFamily: "NexaRegular", fontSize: 13, color: W.muted,
+    textAlign: "center", lineHeight: 20, paddingHorizontal: 24,
   },
 
-  /* Card */
-  cardWrap: {
-    backgroundColor: C.white,
-    borderRadius: 28, padding: 22,
-    elevation: 10,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2, shadowRadius: 20,
+  card: {
+    backgroundColor: W.cardBg, borderRadius: 28, padding: 22,
+    elevation: W.cardElev,
+    borderWidth: 1.5,
+    borderColor: W.cardBord,
+    shadowColor: W.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10, shadowRadius: 16,
   },
 
-  /* Section header — home pattern */
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
-  sectionDot:   { width: 4, height: 16, borderRadius: 2 },
-  sectionLabel: {
-    fontFamily: "NexaLight", fontSize: 11,
-    color: C.muted, letterSpacing: 1.2, textTransform: "uppercase",
-  },
+  dot:           { width: 4, height: 16, borderRadius: 2, backgroundColor: W.primary },
+  sectionLabel:  { fontFamily: "NexaRegular", fontSize: 11, color: W.muted, letterSpacing: 1.2, textTransform: "uppercase" },
 
-  /* Steps row */
-  stepsRow: {
-    flexDirection: "row", alignItems: "center",
-    marginBottom: 20, gap: 12,
-  },
+  stepsRow: { flexDirection: "row", alignItems: "center", marginBottom: 20, gap: 12 },
 
-  /* Mail icon box */
   mailIconBox: {
     width: 56, height: 56, borderRadius: 18,
     alignItems: "center", justifyContent: "center",
+    backgroundColor: "#0047FF12",
     position: "relative",
   },
   goldDot: {
     position: "absolute", top: 6, right: 6,
     width: 10, height: 10, borderRadius: 5,
-    backgroundColor: C.gold,
-    borderWidth: 1.5, borderColor: C.white,
+    backgroundColor: "#F59E0B",
+    borderWidth: 1.5, borderColor: W.white,
   },
 
-  sep: { height: 1, backgroundColor: "#E8EDF5", marginBottom: 20 },
+  sep: { height: 1, backgroundColor: W.border, marginBottom: 20 },
 
   label: {
-    fontFamily: "NexaLight", fontSize: 11, color: C.muted,
+    fontFamily: "NexaRegular", fontSize: 11, color: W.muted,
     letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8,
   },
 
-  /* Input — même pattern Login/Register */
   inputRow: {
     flexDirection: "row", alignItems: "center",
-    borderWidth: 1.5, borderColor: "#E8EDF5",
+    borderWidth: 1.5, borderColor: W.border,
     borderRadius: 18, height: 54,
-    backgroundColor: C.f4, overflow: "hidden",
-    paddingRight: 4,
+    backgroundColor: W.input, overflow: "hidden", paddingRight: 4,
   },
-  inputFocused: { borderColor: C.primary, backgroundColor: "#EEF4FF" },
-  iconCircle: {
+  inputFocused: { borderColor: W.primary, backgroundColor: "#EEF4FF" },
+
+  iconBox: {
     width: 44, height: 44, borderRadius: 22,
     justifyContent: "center", alignItems: "center",
-    marginHorizontal: 6,
+    marginHorizontal: 6, backgroundColor: "transparent",
   },
-  input: {
-    flex: 1, height: "100%",
-    fontSize: 14, color: C.text, fontFamily: "NexaLight",
-  },
+  iconBoxFocused: { backgroundColor: "#0047FF12" },
 
-  /* Info bulle */
+  input: { flex: 1, height: "100%", fontSize: 14, color: W.text, fontFamily: "NexaRegular" },
+
   infoBubble: {
-    flexDirection: "row", alignItems: "center",
-    gap: 10, marginTop: 12,
-    backgroundColor: C.primary + "08",
-    borderRadius: 14, padding: 10,
-    borderWidth: 1, borderColor: C.primary + "15",
+    flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12,
+    backgroundColor: "#0047FF08", borderRadius: 14, padding: 10,
+    borderWidth: 1, borderColor: "#0047FF15",
   },
-  infoText: {
-    flex: 1, fontFamily: "NexaLight",
-    fontSize: 12, color: C.muted, lineHeight: 17,
-  },
-
-  /* Back btn */
-  backBtn: {
-    flexDirection: "row", alignItems: "center",
-    gap: 10, marginTop: 18,
-    backgroundColor: C.f4, borderRadius: 18,
-    paddingVertical: 12, paddingHorizontal: 14,
-  },
-  backText: {
-    fontFamily: "NexaLight", fontSize: 13,
-    color: C.muted, flex: 1,
-  },
-
-  version: {
-    textAlign: "center", fontFamily: "NexaLight",
-    fontSize: 11, color: "rgba(255,255,255,0.28)",
-    marginTop: 22,
-  },
-});
-
-/* ─── Steps styles — pattern sectionHeader du home ───────────────────── */
-const st = StyleSheet.create({
-  row: {
-    flexDirection: "row", alignItems: "flex-start",
-    flex: 1, gap: 4,
-  },
-  stepWrap: {
-    alignItems: "center", flex: 1,
-    position: "relative",
-  },
-  line: {
-    position: "absolute",
-    top: 15, right: "50%",
-    width: "100%", height: 1,
-    backgroundColor: "#E8EDF5",
-    zIndex: -1,
-  },
-  iconCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: C.f4,
+  infoIcon: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "#0047FF12",
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#E8EDF5",
   },
-  iconCircleActive: {
-    backgroundColor: C.primary,
-    borderColor: C.primary,
+  infoText: { flex: 1, fontFamily: "NexaRegular", fontSize: 12, color: W.muted, lineHeight: 17 },
+
+  btn: {
+    backgroundColor: W.primary, borderRadius: 18, height: 54,
+    alignItems: "center", justifyContent: "center",
+    elevation: 4,
+    shadowColor: W.primary, shadowOpacity: 0.3, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  label: {
-    fontFamily: "NexaLight", fontSize: 10,
-    color: C.muted, marginTop: 5, letterSpacing: 0.3,
+  btnText: { fontFamily: "NexaBold", fontSize: 15, color: W.white, letterSpacing: 0.5 },
+
+  backBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18,
+    backgroundColor: W.input, borderRadius: 18,
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: W.border,
   },
-  labelActive: { color: C.primary },
-});
+  backText: { fontFamily: "NexaRegular", fontSize: 13, color: W.muted, flex: 1 },
+
+  version: { textAlign: "center", fontFamily: "NexaRegular", fontSize: 11, color: W.muted, marginTop: 22 },
+}); }
+
+function mkSt(W: typeof LIGHT) { return StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "flex-start", flex: 1, gap: 4 },
+  stepWrap: { alignItems: "center", flex: 1, position: "relative" },
+  line: {
+    position: "absolute", top: 15, right: "50%",
+    width: "100%", height: 1,
+    backgroundColor: W.border, zIndex: -1,
+  },
+  circle: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: W.input,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: W.border,
+  },
+  circleActive: { backgroundColor: W.primary, borderColor: W.primary },
+  label: { fontFamily: "NexaRegular", fontSize: 10, color: W.muted, marginTop: 5, letterSpacing: 0.3 },
+  labelActive: { color: W.primary },
+}); }

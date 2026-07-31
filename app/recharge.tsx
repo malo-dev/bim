@@ -1,17 +1,11 @@
 /* eslint-disable */
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
-import { getSocket } from "@/services/socketService";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  AppState,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -25,204 +19,165 @@ import {
   TouchableWithoutFeedback,
   View,
   Alert,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Modal from "react-native-modal";
-import { useRechargeMutation, useVerifyPaymentMutation } from "@/services/tsxService";
 import { useVerifyPassMutation } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
-  error:   "#EF4444",
-  success: "#22C55E",
+/* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:  "#0035C5",
+  deep:     "#302E99",
+  gold:     "#FFD700",
+  white:    "#FFFFFF",
+  error:    "#EF4444",
+  success:  "#22C55E",
+  bg:       "#F9F9F9",
+  surface:  "#FFFFFF",
+  text:     "#1A1C1C",
+  textSec:  "#434657",
+  textMut:  "#747688",
+  border:   "rgba(196,197,218,0.40)",
+  topBarBg:        "rgba(255,255,255,0.92)",
+  topBarBord:      "rgba(196,197,218,0.20)",
+  glassBg:         "rgba(255,255,255,0.75)",
+  glassBord:       "rgba(255,255,255,0.85)",
+  cardInfoBg:      "rgba(0,53,197,0.05)",
+  cardInfoBord:    "rgba(0,53,197,0.12)",
+  recapBord:       "rgba(196,197,218,0.30)",
+  pmHandle:        "rgba(0,0,0,0.10)",
+  pmLockBg:        "rgba(0,53,197,0.08)",
+  pmReminderBg:    "rgba(0,53,197,0.04)",
+  pmReminderBord:  "rgba(196,197,218,0.40)",
+  receiptBg:       "#FFFFFF",
+  receiptPerfBg:   "#F9F9F9",
+  receiptPerfBord: "rgba(196,197,218,0.35)",
+  stepsCardBg:     "rgba(255,255,255,0.80)",
+  stepsCardBord:   "rgba(255,255,255,0.85)",
+  infoBannerBg:    "rgba(0,53,197,0.05)",
+  infoBannerBord:  "rgba(0,53,197,0.12)",
+  stepConnBg:      "rgba(196,197,218,0.40)",
+};
+const DARK: typeof LIGHT = {
+  primary:  "#4D8DFF",
+  deep:     "#302E99",
+  gold:     "#FFD700",
+  white:    "#FFFFFF",
+  error:    "#EF4444",
+  success:  "#22C55E",
+  bg:       "#0B1220",
+  surface:  "#1A2540",
+  text:     "#EAF0FF",
+  textSec:  "#9FB0D0",
+  textMut:  "#6B7A99",
+  border:   "rgba(31,42,68,0.80)",
+  topBarBg:        "#1A2540",
+  topBarBord:      "rgba(31,42,68,0.80)",
+  glassBg:         "rgba(26,37,64,0.75)",
+  glassBord:       "rgba(31,42,68,0.80)",
+  cardInfoBg:      "rgba(77,150,255,0.05)",
+  cardInfoBord:    "rgba(77,150,255,0.12)",
+  recapBord:       "rgba(31,42,68,0.80)",
+  pmHandle:        "rgba(255,255,255,0.12)",
+  pmLockBg:        "rgba(77,150,255,0.08)",
+  pmReminderBg:    "rgba(77,150,255,0.04)",
+  pmReminderBord:  "rgba(31,42,68,0.80)",
+  receiptBg:       "#1A2540",
+  receiptPerfBg:   "#0B1220",
+  receiptPerfBord: "rgba(31,42,68,0.80)",
+  stepsCardBg:     "rgba(26,37,64,0.80)",
+  stepsCardBord:   "rgba(31,42,68,0.80)",
+  infoBannerBg:    "rgba(77,150,255,0.05)",
+  infoBannerBord:  "rgba(77,150,255,0.12)",
+  stepConnBg:      "rgba(31,42,68,0.80)",
 };
 
-const Colors = {
-  light: {
-    bg:            "#F0F4FF",
-    card:          "#FFFFFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.12)",
-    inputBg:       "rgba(3,83,204,0.06)",
-    inputFocBg:    "rgba(3,83,204,0.10)",
-    headerGrad:    [C.deep, C.primary] as [string, string],
-    shadow:        "#000",
-    recapBg:       "rgba(3,83,204,0.05)",
-    prefixBorder:  "rgba(3,83,204,0.12)",
-    modalBg:       "#FFFFFF",
-    pinBorder:     "rgba(3,83,204,0.20)",
-    pinFilled:     C.primary,
-    lockIconBg:    "rgba(3,83,204,0.08)",
-    keyBg:         "rgba(3,83,204,0.06)",
-    keyDelBg:      "rgba(239,68,68,0.08)",
-  },
-  dark: {
-    bg:            "#07091A",
-    card:          "#0F1228",
-    text:          "#E2E8F0",
-    textSecondary: "#556080",
-    border:        "rgba(77,150,255,0.12)",
-    inputBg:       "rgba(77,150,255,0.07)",
-    inputFocBg:    "rgba(77,150,255,0.13)",
-    headerGrad:    ["#05081A", "#0D1535"] as [string, string],
-    shadow:        "#000",
-    recapBg:       "rgba(77,150,255,0.06)",
-    prefixBorder:  "rgba(77,150,255,0.15)",
-    modalBg:       "#0F1228",
-    pinBorder:     "rgba(77,150,255,0.20)",
-    pinFilled:     C.accent,
-    lockIconBg:    "rgba(3,83,204,0.18)",
-    keyBg:         "rgba(77,150,255,0.07)",
-    keyDelBg:      "rgba(239,68,68,0.12)",
-  },
-};
-
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-/* ─── METHODS ────────────────────────────────────────────────────────── */
 const METHODS = [
-  { id: "airtel",   name: "AirtelMoney", logo: "https://images.africanfinancials.com/797d4617-ng-airtel-logo.png",  color: "#E4002B" },
-  { id: "orange",   name: "OrangeMoney", logo: "https://c.woopic.com/logo-orange.png",                              color: "#FF6900" },
+  { id: "airtel",   name: "AirtelMoney", logo: "https://images.africanfinancials.com/797d4617-ng-airtel-logo.png",       color: "#E4002B" },
+  { id: "orange",   name: "OrangeMoney", logo: "https://c.woopic.com/logo-orange.png",                                   color: "#FF6900" },
   { id: "vodacom",  name: "M-Pesa",      logo: "https://www.vodacom.co.za/themes/custom/blip/img/menu/vodacom-logo.png", color: "#E60000" },
-  { id: "africell", name: "AfriMoney",   logo: "https://upload.wikimedia.org/wikipedia/commons/c/c9/AfricellLogo.png",  color: "#0077C8" },
+  { id: "africell", name: "AfriMoney",   logo: "https://upload.wikimedia.org/wikipedia/commons/c/c9/AfricellLogo.png",   color: "#0077C8" },
 ];
 
 const SHORTCUTS       = ["1 000", "2 500", "5 000", "10 000"];
 const SHORTCUTS_CLEAN = ["1000",  "2500",  "5000",  "10000"];
 
-/* ─── METHOD CARD ────────────────────────────────────────────────────── */
-function MethodCard({
-  item, selected, onPress,
-}: { item: typeof METHODS[number]; selected: boolean; onPress: () => void }) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
-
+/* ─── TOP BAR ─────────────────────────────────────────────────────────── */
+function TopBar({ onBack, onNotif, badge = 0 }: { onBack: () => void; onNotif: () => void; badge?: number }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const tb = useMemo(() => mkTb(C), [isDark]);
   return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
-      <Animated.View style={[
-        ms.card,
-        selected && { borderColor: C.gold, borderWidth: 2.5 },
-        { transform: [{ scale }] },
-      ]}>
-        <LinearGradient
-          colors={[C.deep, item.color + "CC"]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={ms.deco} />
-        {selected && (
-          <View style={ms.checkBadge}>
-            <Ionicons name="checkmark" size={10} color={C.deep} />
-          </View>
-        )}
-        <Image source={{ uri: item.logo }} style={ms.logo} contentFit="contain" transition={200} />
-        <Text style={ms.name}>{item.name}</Text>
+    <SafeAreaView edges={["top"]} style={tb.safe}>
+      <View style={tb.bar}>
+        <TouchableOpacity style={tb.iconBtn} onPress={onBack} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={22} color={C.text} />
+        </TouchableOpacity>
+        <Text style={tb.brand}>BIM<Text style={{ color: C.primary }}>Next</Text></Text>
+        <TouchableOpacity style={tb.iconBtn} onPress={onNotif} activeOpacity={0.7}>
+          <Ionicons name="notifications-outline" size={22} color={C.primary} />
+          {badge > 0 && (
+            <View style={tb.badge}>
+              <Text style={tb.badgeText}>{badge > 99 ? "99+" : badge}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+/* ─── METHOD CARD ─────────────────────────────────────────────────────── */
+function MethodCard({ item, selected, onPress }: { item: typeof METHODS[number]; selected: boolean; onPress: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const ms = useMemo(() => mkMs(C), [isDark]);
+  const scale = useRef(new Animated.Value(1)).current;
+  return (
+    <TouchableOpacity activeOpacity={1}
+      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start()}
+      onPress={onPress}>
+      <Animated.View style={[ms.card, selected && { borderColor: C.primary, borderWidth: 2 }, { transform: [{ scale }] }]}>
+        <View style={[ms.logoBox, { backgroundColor: item.color + "14" }]}>
+          <Image source={{ uri: item.logo }} style={ms.logo} contentFit="contain" transition={200} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={ms.name}>{item.name}</Text>
+          <Text style={ms.fee}>Demande traitée par notre équipe</Text>
+        </View>
+        <View style={[ms.radio, selected && { borderColor: C.primary, backgroundColor: "rgba(0,53,197,0.10)" }]}>
+          {selected && <View style={ms.radioDot} />}
+        </View>
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-/* ─── VISA CARD ──────────────────────────────────────────────────────── */
-function VisaCard({ selected, onPress }: { selected: boolean; onPress: () => void }) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
-
-  return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress} style={{ width: "100%" }}>
-      <Animated.View style={[vc.outer, selected && vc.selected, { transform: [{ scale }] }]}>
-        {selected && (
-          <View style={vc.checkBadge}>
-            <Ionicons name="checkmark" size={12} color={C.deep} />
-          </View>
-        )}
-        <LinearGradient
-          colors={["#0A0E3A", "#0353CC", "#071A6E"]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={vc.card}
-        >
-          <View style={vc.deco1} />
-          <View style={vc.deco2} />
-          {/* Top */}
-          <View style={vc.topRow}>
-            <Text style={vc.bankName}>BIM BANK</Text>
-            <View style={vc.chip}>
-              <View style={vc.chipH} />
-              <View style={vc.chipV} />
-            </View>
-          </View>
-          {/* Number */}
-          <Text style={vc.cardNum}>•••• •••• •••• ••••</Text>
-          {/* Bottom */}
-          <View style={vc.bottomRow}>
-            <View>
-              <Text style={vc.cardLabel}>TITULAIRE</Text>
-              <Text style={vc.cardValue}>VOTRE NOM</Text>
-            </View>
-            <View>
-              <Text style={vc.cardLabel}>EXPIRE</Text>
-              <Text style={vc.cardValue}>12/27</Text>
-            </View>
-            <Text style={vc.visaText}>VISA</Text>
-          </View>
-        </LinearGradient>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
-function SectionLabel({ title, icon }: { title: string; icon: string }) {
-  return (
-    <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color={C.primary} style={{ opacity: 0.7 }} />
-      <Text style={sl.text}>{title}</Text>
-    </View>
-  );
-}
-
-/* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value, t }: { value: string; t: typeof Colors.light }) {
+/* ─── PIN DOTS ────────────────────────────────────────────────────────── */
+function PinDots({ value }: { value: string }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   return (
     <View style={pd.row}>
       {Array.from({ length: 6 }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            pd.dot,
-            {
-              backgroundColor: i < value.length ? t.pinFilled : "transparent",
-              borderColor:     i < value.length ? t.pinFilled : t.pinBorder,
-            },
-          ]}
-        />
+        <View key={i} style={[pd.dot, {
+          backgroundColor: i < value.length ? C.primary : "transparent",
+          borderColor:     i < value.length ? C.primary : "rgba(0,53,197,0.22)",
+        }]} />
       ))}
     </View>
   );
 }
 
-/* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({
-  onPress, onDelete, t,
-}: {
-  onPress: (v: string) => void;
-  onDelete: () => void;
-  t: typeof Colors.light;
-}) {
+/* ─── KEYPAD ──────────────────────────────────────────────────────────── */
+function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return (
     <View style={kp.grid}>
@@ -230,19 +185,10 @@ function Keypad({
         if (k === "") return <View key={i} style={kp.empty} />;
         const isDel = k === "⌫";
         return (
-          <TouchableOpacity
-            key={i}
-            style={[
-              kp.key,
-              {
-                backgroundColor: isDel ? t.keyDelBg : t.keyBg,
-                borderColor:     isDel ? "rgba(239,68,68,0.20)" : t.border,
-              },
-            ]}
-            onPress={() => isDel ? onDelete() : onPress(k)}
-            activeOpacity={0.7}
-          >
-            <Text style={[kp.keyText, { color: isDel ? C.error : t.text }]}>{k}</Text>
+          <TouchableOpacity key={i}
+            style={[kp.key, { backgroundColor: isDel ? "rgba(239,68,68,0.07)" : "rgba(0,53,197,0.04)", borderColor: isDel ? "rgba(239,68,68,0.18)" : C.border }]}
+            onPress={() => isDel ? onDelete() : onPress(k)} activeOpacity={0.7}>
+            <Text style={[kp.keyText, { color: isDel ? C.error : C.text }]}>{k}</Text>
           </TouchableOpacity>
         );
       })}
@@ -250,939 +196,486 @@ function Keypad({
   );
 }
 
-/* ─── PENDING VIEW ───────────────────────────────────────────────────── */
-function PendingView({
-  subText, reference, isCard, t, onCancel, showVerifyBtn, onVerify, verifying, retryAttempt,
-}: {
-  subText: string;
-  reference: string;
-  isCard: boolean;
-  t: typeof Colors.light;
-  onCancel: () => void;
-  showVerifyBtn: boolean;
-  onVerify: () => void;
-  verifying: boolean;
-  retryAttempt: number;
-}) {
-  const pulse = useRef(new Animated.Value(1)).current;
+/* ─── PENDING SCREEN ──────────────────────────────────────────────────── */
+function PendingScreen({
+  amount, contactPhone, method, onBack,
+}: { amount: string; contactPhone: string; method: string; onBack: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const pv = useMemo(() => mkPv(C), [isDark]);
+  const slideUp = useRef(new Animated.Value(30)).current;
+  const fadeIn  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.25, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,    duration: 900, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
+    Animated.parallel([
+      Animated.timing(fadeIn,  { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(slideUp, { toValue: 0, duration: 450, useNativeDriver: true }),
+    ]).start();
   }, []);
 
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  const timeStr = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const ref = `BIM-${Date.now().toString(36).toUpperCase().slice(-8)}`;
+
   return (
-    <View style={[pv.container, { backgroundColor: t.bg }]}>
-      <View style={pv.loaderWrap}>
-        <Animated.View style={[pv.ring, { borderColor: C.primary + "33", transform: [{ scale: pulse }] }]} />
-        <View style={[pv.innerCircle, { backgroundColor: "rgba(3,83,204,0.10)" }]}>
-          <ActivityIndicator size="large" color={C.primary} />
+    <Animated.View style={[pv.container, { opacity: fadeIn, transform: [{ translateY: slideUp }] }]}>
+
+      {/* ── RECEIPT CARD ─────────────────────────────────────────── */}
+      <View style={pv.receipt}>
+        {/* Header */}
+        <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={pv.receiptHeader}>
+          <View style={pv.receiptCheckCircle}>
+            <Ionicons name="checkmark" size={28} color={C.primary} />
+          </View>
+          <Text style={pv.receiptTitle}>Demande envoyée</Text>
+          <Text style={pv.receiptSub}>Votre demande de recharge est bien enregistrée</Text>
+        </LinearGradient>
+
+        {/* Perforated edge */}
+        <View style={pv.perfRow}>
+          <View style={pv.perfHalf} />
+          {Array.from({ length: 10 }).map((_, i) => <View key={i} style={pv.perfDot} />)}
+          <View style={pv.perfHalf} />
+        </View>
+
+        {/* Details */}
+        <View style={pv.receiptBody}>
+          <View style={pv.detailRow}>
+            <Text style={pv.detailLabel}>Référence</Text>
+            <Text style={pv.detailVal}>{ref}</Text>
+          </View>
+          <View style={pv.detailRow}>
+            <Text style={pv.detailLabel}>Date</Text>
+            <Text style={pv.detailVal}>{dateStr}</Text>
+          </View>
+          <View style={pv.detailRow}>
+            <Text style={pv.detailLabel}>Heure</Text>
+            <Text style={pv.detailVal}>{timeStr}</Text>
+          </View>
+          <View style={pv.detailRow}>
+            <Text style={pv.detailLabel}>Méthode</Text>
+            <Text style={pv.detailVal}>{method}</Text>
+          </View>
+          {contactPhone ? (
+            <View style={pv.detailRow}>
+              <Text style={pv.detailLabel}>Contact</Text>
+              <Text style={pv.detailVal}>+{contactPhone}</Text>
+            </View>
+          ) : null}
+          <View style={pv.detailDivider} />
+          <View style={pv.detailRow}>
+            <Text style={[pv.detailLabel, { fontFamily: "NexaBold", color: C.text }]}>Montant</Text>
+            <Text style={pv.amountVal}>{amount}</Text>
+          </View>
         </View>
       </View>
 
-      <Text style={[pv.title, { color: t.text }]}>
-        {isCard ? "Paiement en cours…" : "En attente de confirmation"}
-      </Text>
-      <Text style={[pv.sub, { color: t.textSecondary }]}>{subText}</Text>
+      {/* ── STEPS ────────────────────────────────────────────────── */}
+      <View style={pv.stepsCard}>
+        <Text style={pv.stepsTitle}>Prochaines étapes</Text>
 
-      {!!reference && (
-        <View style={[pv.refBox, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-          <Ionicons name="receipt-outline" size={13} color={C.primary} />
-          <Text style={[pv.refText, { color: t.textSecondary }]}>Réf : {reference}</Text>
-        </View>
-      )}
-
-      <Text style={[pv.hint, { color: t.textSecondary }]}>
-        {isCard
-          ? "Ne fermez pas l'application. Cette page se mettra à jour automatiquement."
-          : "Cette page se mettra à jour automatiquement dès que le paiement est confirmé."}
-      </Text>
-
-      {!isCard && retryAttempt === 0 && (
-        <View style={[pv.autoCheckBadge, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-          <Ionicons name="sync-outline" size={13} color={C.primary} />
-          <Text style={[pv.autoCheckText, { color: t.textSecondary }]}>
-            Vérification automatique toutes les 20 secondes
-          </Text>
-        </View>
-      )}
-
-      {!isCard && retryAttempt > 0 && (
-        <View style={[pv.autoCheckBadge, { backgroundColor: "rgba(255,165,0,0.08)", borderColor: "rgba(255,165,0,0.35)" }]}>
-          <Ionicons name="time-outline" size={13} color="#F97316" />
-          <Text style={[pv.autoCheckText, { color: "#F97316" }]}>
-            Tentative {retryAttempt}/4 — En attente de votre confirmation…
-          </Text>
-        </View>
-      )}
-
-      {showVerifyBtn && !isCard && (
-        <TouchableOpacity
-          style={[pv.verifyBtn, { opacity: verifying ? 0.7 : 1 }]}
-          onPress={onVerify}
-          disabled={verifying}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={[C.deep, C.primary]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={pv.verifyGrad}
-          >
-            {verifying
-              ? <ActivityIndicator size="small" color={C.white} />
-              : <Ionicons name="refresh-outline" size={16} color={C.white} />}
-            <Text style={pv.verifyText}>
-              {verifying ? "Vérification…" : "Vérifier le paiement"}
+        <View style={pv.step}>
+          <View style={[pv.stepNum, { backgroundColor: "rgba(0,53,197,0.08)" }]}>
+            <Text style={[pv.stepNumText, { color: C.primary }]}>1</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={pv.stepTitle}>Appel de confirmation</Text>
+            <Text style={pv.stepDesc}>
+              Notre équipe support vous appellera{contactPhone ? ` au +${contactPhone}` : ""} pour confirmer votre recharge.
             </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
+          </View>
+        </View>
 
-      <TouchableOpacity
-        style={[pv.cancelBtn, { borderColor: C.error, backgroundColor: "rgba(239,68,68,0.08)" }]}
-        onPress={onCancel}
-        activeOpacity={0.75}
-      >
-        <Ionicons name="close-circle-outline" size={16} color={C.error} />
-        <Text style={[pv.cancelText, { color: C.error, fontWeight: "600" }]}>Annuler le paiement</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
+        <View style={pv.stepConnector} />
 
-/* ─── SUCCESS VIEW ───────────────────────────────────────────────────── */
-function SuccessView({
-  amount, t, onBack,
-}: {
-  amount: number;
-  t: typeof Colors.light;
-  onBack: () => void;
-}) {
-  const scale = useRef(new Animated.Value(0.4)).current;
+        <View style={pv.step}>
+          <View style={[pv.stepNum, { backgroundColor: "rgba(34,197,94,0.08)" }]}>
+            <Text style={[pv.stepNumText, { color: C.success }]}>2</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={pv.stepTitle}>Compte crédité</Text>
+            <Text style={pv.stepDesc}>Après confirmation, votre compte sera crédité de {amount} et vous recevrez une notification et un email.</Text>
+          </View>
+        </View>
+      </View>
 
-  useEffect(() => {
-    Animated.spring(scale, {
-      toValue: 1, useNativeDriver: true, damping: 10, stiffness: 120,
-    }).start();
-  }, []);
+      {/* ── INFO ─────────────────────────────────────────────────── */}
+      <View style={pv.infoBanner}>
+        <Ionicons name="call-outline" size={16} color={C.primary} />
+        <Text style={pv.infoText}>Restez disponible. Notre équipe vous contacte dans les plus brefs délais.</Text>
+      </View>
 
-  return (
-    <View style={[xv.container, { backgroundColor: t.bg }]}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <LinearGradient colors={[C.success, "#16A34A"]} style={xv.iconGrad}>
-          <Ionicons name="checkmark" size={52} color={C.white} />
-        </LinearGradient>
-      </Animated.View>
-
-      <Text style={[xv.title, { color: t.text }]}>Recharge réussie !</Text>
-      {amount > 0 && (
-        <Text style={[xv.amount, { color: C.primary }]}>
-          +{Number(amount).toLocaleString("fr-FR")} EC crédités
-        </Text>
-      )}
-      <Text style={[xv.sub, { color: t.textSecondary }]}>
-        Votre compte BIM a été crédité avec succès.
-      </Text>
-
-      <TouchableOpacity style={xv.btn} onPress={onBack} activeOpacity={0.85}>
-        <LinearGradient
-          colors={[C.deep, C.primary]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={xv.btnGrad}
-        >
+      {/* ── BTN ──────────────────────────────────────────────────── */}
+      <TouchableOpacity style={pv.backBtn} onPress={onBack} activeOpacity={0.88}>
+        <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={pv.backGrad}>
           <Ionicons name="home-outline" size={18} color={C.white} />
-          <Text style={xv.btnText}>Retour à l'accueil</Text>
+          <Text style={pv.backText}>Retour à l'accueil</Text>
         </LinearGradient>
       </TouchableOpacity>
-    </View>
+
+    </Animated.View>
   );
 }
 
-/* ─── FAILED VIEW ────────────────────────────────────────────────────── */
-function FailedView({
-  t, onRetry, onBack,
-}: {
-  t: typeof Colors.light;
-  onRetry: () => void;
-  onBack: () => void;
-}) {
-  const scale = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    Animated.spring(scale, {
-      toValue: 1, useNativeDriver: true, damping: 10, stiffness: 120,
-    }).start();
-  }, []);
-
-  return (
-    <View style={[fv.container, { backgroundColor: t.bg }]}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <LinearGradient colors={[C.error, "#DC2626"]} style={fv.iconGrad}>
-          <Ionicons name="close" size={52} color={C.white} />
-        </LinearGradient>
-      </Animated.View>
-
-      <Text style={[fv.title, { color: t.text }]}>Paiement échoué</Text>
-      <Text style={[fv.sub, { color: t.textSecondary }]}>
-        Votre paiement n'a pas abouti. Veuillez réessayer.
-      </Text>
-
-      <TouchableOpacity style={fv.retryBtn} onPress={onRetry} activeOpacity={0.85}>
-        <LinearGradient
-          colors={[C.deep, C.primary]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={fv.retryGrad}
-        >
-          <Ionicons name="refresh-outline" size={18} color={C.white} />
-          <Text style={fv.retryText}>Réessayer</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={fv.backBtn} onPress={onBack}>
-        <Text style={[fv.backText, { color: t.textSecondary }]}>Retour</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-/* ─── CANCELLED VIEW ─────────────────────────────────────────────────── */
-function CancelledView({
-  t, onRetry, onBack,
-}: {
-  t: typeof Colors.light;
-  onRetry: () => void;
-  onBack: () => void;
-}) {
-  const scale = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    Animated.spring(scale, {
-      toValue: 1, useNativeDriver: true, damping: 10, stiffness: 120,
-    }).start();
-  }, []);
-
-  return (
-    <View style={[fv.container, { backgroundColor: t.bg }]}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <LinearGradient colors={["#F59E0B", "#D97706"]} style={fv.iconGrad}>
-          <Ionicons name="ban-outline" size={52} color={C.white} />
-        </LinearGradient>
-      </Animated.View>
-
-      <Text style={[fv.title, { color: t.text }]}>Recharge annulée</Text>
-      <Text style={[fv.sub, { color: t.textSecondary }]}>
-        Vous avez annulé la recharge. Aucun montant n'a été débité si vous n'avez pas confirmé sur votre téléphone.
-      </Text>
-
-      <TouchableOpacity style={fv.retryBtn} onPress={onRetry} activeOpacity={0.85}>
-        <LinearGradient
-          colors={[C.deep, C.primary]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={fv.retryGrad}
-        >
-          <Ionicons name="refresh-outline" size={18} color={C.white} />
-          <Text style={fv.retryText}>Nouvelle recharge</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={fv.backBtn} onPress={onBack}>
-        <Text style={[fv.backText, { color: t.textSecondary }]}>Retour</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
+/* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function RechargeEcoinsScreen() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+  const pm = useMemo(() => mkPm(C), [isDark]);
   const router = useRouter();
-  const { isDark, t } = useTheme();
-  const { t: tr } = useTranslation();
+  const { unread: notifCount } = useUnreadNotifications();
 
   const [amount,         setAmount]         = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [phone,          setPhone]          = useState("");
   const [userId,         setUserId]         = useState<string | null>(null);
 
-  /* ── Phase ── */
-  type Phase = "idle" | "pending" | "success" | "failed" | "cancelled";
-  const [phase,        setPhase]        = useState<Phase>("idle");
-  const [pendingRef,   setPendingRef]   = useState("");
-  const [pendingSubTx, setPendingSubTx] = useState("");
-  const [paidAmount,   setPaidAmount]   = useState(0);
-  const [retryAttempt, setRetryAttempt] = useState(0);
+  /* Card-specific fields */
+  const [cardName,      setCardName]      = useState("");
+  const [contactPhone,  setContactPhone]  = useState("");
+  const [cardRef,       setCardRef]       = useState("");
 
-  /* PIN modal */
+  type Phase = "idle" | "pending";
+  const [phase,       setPhase]       = useState<Phase>("idle");
+  const [pendingInfo, setPendingInfo]  = useState({ amount: "", contact: "", method: "" });
+
   const [showPinModal,  setShowPinModal]  = useState(false);
   const [pinValue,      setPinValue]      = useState("");
   const [pinError,      setPinError]      = useState("");
   const [loadingVerify, setLoadingVerify] = useState(false);
-  const [loadingPay,    setLoadingPay]    = useState(false);
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  const inputFocAmt = useRef(new Animated.Value(0)).current;
-  const inputFocPh  = useRef(new Animated.Value(0)).current;
-  const cardAnim    = useRef(new Animated.Value(50)).current;
-  const cardOpac    = useRef(new Animated.Value(0)).current;
+  const inputFocAmt  = useRef(new Animated.Value(0)).current;
+  const inputFocPh   = useRef(new Animated.Value(0)).current;
+  const inputFocName = useRef(new Animated.Value(0)).current;
+  const inputFocRef  = useRef(new Animated.Value(0)).current;
+  const inputFocCont = useRef(new Animated.Value(0)).current;
 
-  const [recharge]       = useRechargeMutation();
-  const [verifyPass]     = useVerifyPassMutation();
-  const [verifyPayment]  = useVerifyPaymentMutation();
-  const [verifying,      setVerifying]      = useState(false);
-  const [showVerifyBtn,  setShowVerifyBtn]  = useState(false);
-
-  /* Ref qui suit toujours la référence active — lisible dans les closures socket sans re-création */
-  const pendingRefRef      = useRef("");
-  const pendingRetryCount  = useRef(0);
-  const awaitingRetryMode  = useRef(false);
-  const pollingInProgress  = useRef(false);
+  const [verifyPass] = useVerifyPassMutation();
 
   const isCard   = selectedMethod === "Card";
   const isMobile = selectedMethod !== null && !isCard;
 
-  useEffect(() => {
-    AsyncStorage.getItem("userId").then(setUserId);
-    Animated.parallel([
-      Animated.timing(cardAnim, { toValue: 0, duration: 420, delay: 100, useNativeDriver: true }),
-      Animated.timing(cardOpac, { toValue: 1, duration: 420, delay: 100, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  /* Garde pendingRefRef synchronisé avec pendingRef */
-  useEffect(() => { pendingRefRef.current = pendingRef; }, [pendingRef]);
-
-  /* Reset du compteur à chaque nouvelle transaction */
-  useEffect(() => { pendingRetryCount.current = 0; }, [pendingRef]);
-
-  /* Reset retry mode quand on quitte la phase pending */
-  useEffect(() => {
-    if (phase !== "pending") {
-      awaitingRetryMode.current = false;
-      pendingRetryCount.current = 0;
-      setRetryAttempt(0);
-    }
-  }, [phase]);
-
-  /* ── Socket listeners ── */
-  useEffect(() => {
-    const onSuccess   = (data: any) => {
-      if (data?.reference && pendingRefRef.current && data.reference !== pendingRefRef.current) return;
-      setPaidAmount(data?.montantCredite || 0);
-      setPhase("success");
-    };
-    const onFailed    = (data: any) => {
-      if (data?.reference && pendingRefRef.current && data.reference !== pendingRefRef.current) return;
-      setPhase("failed");
-    };
-    const onCancelled = (data: any) => {
-      if (data?.reference && pendingRefRef.current && data.reference !== pendingRefRef.current) return;
-      if (pollingInProgress.current || awaitingRetryMode.current) return;
-      setPendingRef("");
-      setShowVerifyBtn(false);
-      setPhase("cancelled");
-    };
-
-    const registerOn = (s: any) => {
-      s.off("recharge:success",   onSuccess);
-      s.off("recharge:failed",    onFailed);
-      s.off("recharge:declined",  onFailed);
-      s.off("recharge:cancelled", onCancelled);
-      s.on("recharge:success",   onSuccess);
-      s.on("recharge:failed",    onFailed);
-      s.on("recharge:declined",  onFailed);
-      s.on("recharge:cancelled", onCancelled);
-    };
-    const registerOff = (s: any) => {
-      s.off("recharge:success",   onSuccess);
-      s.off("recharge:failed",    onFailed);
-      s.off("recharge:declined",  onFailed);
-      s.off("recharge:cancelled", onCancelled);
-      s.off("connect",            onReconnect);
-    };
-    const onReconnect = () => {
-      const s = getSocket();
-      if (s) registerOn(s);
-    };
-
-    let pollId: ReturnType<typeof setInterval> | null = null;
-
-    const attach = (s: any) => {
-      registerOn(s);
-      s.on("connect", onReconnect);
-    };
-
-    let s = getSocket();
-    if (s) {
-      attach(s);
-    } else {
-      let attempts = 0;
-      pollId = setInterval(() => {
-        s = getSocket();
-        attempts++;
-        if (s || attempts >= 20) {
-          clearInterval(pollId!);
-          pollId = null;
-          if (s) attach(s);
-        }
-      }, 500);
-    }
-
-    return () => {
-      if (pollId) clearInterval(pollId);
-      const sock = getSocket();
-      if (sock) registerOff(sock);
-    };
-  }, []);
-
-  /* ── Polling toutes les 20 s pendant la phase pending (fallback si event socket raté) ── */
-  useEffect(() => {
-    if (phase !== "pending" || isCard || !pendingRef) return;
-
-    const id = setInterval(async () => {
-      const attempt = pendingRetryCount.current + 1;
-      pollingInProgress.current = true;
-      try {
-        const result: any = await verifyPayment({ reference: pendingRef }).unwrap();
-        const flexMsg: string = result?.data?.message ?? "";
-
-        if (result?.status === "success" || result?.status === "already_done") {
-          awaitingRetryMode.current = false;
-          setPaidAmount(result?.montantCredite || 0);
-          setPhase("success");
-        } else if (flexMsg.includes("awaiting client authorization")) {
-          awaitingRetryMode.current = true;
-          pendingRetryCount.current += 1;
-          setRetryAttempt(pendingRetryCount.current);
-          if (pendingRetryCount.current >= 4) {
-            awaitingRetryMode.current = false;
-            setPhase("cancelled");
-          }
-        } else if (awaitingRetryMode.current) {
-          pendingRetryCount.current += 1;
-          setRetryAttempt(pendingRetryCount.current);
-          if (pendingRetryCount.current >= 4) {
-            awaitingRetryMode.current = false;
-            setPhase("cancelled");
-          }
-        } else if (result?.status === "cancelled" || result?.status === "failed") {
-          setPhase("cancelled");
-        }
-      } catch { /* silencieux */ }
-      finally {
-        pollingInProgress.current = false;
-      }
-    }, 20_000);
-
-    return () => clearInterval(id);
-  }, [phase, isCard, pendingRef]);
-
-
-  
-
-  /* ── Timeout 60 s : afficher le bouton "Vérifier" ── */
-  useEffect(() => {
-    if (phase !== "pending" || isCard) return;
-    setShowVerifyBtn(false);
-    const timer = setTimeout(() => setShowVerifyBtn(true), 60_000);
-    return () => clearTimeout(timer);
-  }, [phase, isCard]);
-
-  /* ── Vérification FlexPay après 20 min ── */
-  useEffect(() => {
-    if (phase !== "pending" || isCard || !pendingRef) return;
-    const timer = setTimeout(async () => {
-      try {
-        const result: any = await verifyPayment({ reference: pendingRef }).unwrap();
-        if (result?.status === "success" || result?.status === "already_done") {
-          setPaidAmount(result?.montantCredite || 0);
-          setPhase("success");
-        }
-      } catch { /* silencieux */ }
-    }, 20 * 60 * 1000);
-    return () => clearTimeout(timer);
-  }, [phase, isCard, pendingRef]);
-
-  /* ── Vérification auto quand l'app revient au premier plan (phase pending) ── */
-  useEffect(() => {
-    if (phase !== "pending" || isCard) return;
-
-    const sub = AppState.addEventListener("change", async (nextState) => {
-      if (nextState === "active" && pendingRef) {
-        await new Promise(r => setTimeout(r, 1500));
-        try {
-          const result: any = await verifyPayment({ reference: pendingRef }).unwrap();
-          if (result?.status === "success" || result?.status === "already_done") {
-            setPaidAmount(result?.montantCredite || 0);
-            setPhase("success");
-          } else if (result?.status === "cancelled" || result?.status === "failed") {
-            setPhase("cancelled");
-          }
-        } catch { /* silencieux — le socket ou le bouton "Vérifier" prendra le relais */ }
-      }
-    });
-
-    return () => sub.remove();
-  }, [phase, isCard, pendingRef]);
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
   const focusAnim = (anim: Animated.Value, v: number) =>
     Animated.timing(anim, { toValue: v, duration: 200, useNativeDriver: false }).start();
 
-  const borderAmt = inputFocAmt.interpolate({ inputRange: [0, 1], outputRange: [t.border, C.primary] });
-  const bgAmt     = inputFocAmt.interpolate({ inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
-  const borderPh  = inputFocPh.interpolate({  inputRange: [0, 1], outputRange: [t.border, C.primary] });
-  const bgPh      = inputFocPh.interpolate({  inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
+  const borderOf = (anim: Animated.Value) =>
+    anim.interpolate({ inputRange: [0,1], outputRange: [C.border, C.primary] });
 
   const cleanAmount = (v: string) => v.replace(/\s/g, "");
 
-  const resetToIdle = () => {
-    setPhase("idle");
-    setPendingRef("");
-    setPaidAmount(0);
-    setPendingSubTx("");
-    setShowVerifyBtn(false);
-  };
-
-  const handleCancel = () => {
-    setPendingRef("");
-    setPaidAmount(0);
-    setPendingSubTx("");
-    setShowVerifyBtn(false);
-    setPhase("cancelled");
-  };
-
-  const handleCancelPress = () => {
-    Alert.alert(
-      "Annuler le paiement ?",
-      "Même si un message de paiement apparaît sur votre téléphone après ceci, SVP ne payez pas — la transaction sera annulée de notre côté.",
-      [
-        { text: "Continuer d'attendre", style: "cancel" },
-        { text: "Annuler le paiement", style: "destructive", onPress: handleCancel },
-      ]
-    );
-  };
-
-  const handleVerify = async () => {
-    if (!pendingRef || verifying) return;
-    try {
-      setVerifying(true);
-      const result: any = await verifyPayment({ reference: pendingRef }).unwrap();
-      if (result?.status === "success" || result?.status === "already_done") {
-        setPaidAmount(result?.montantCredite || 0);
-        setPhase("success");
-      } else if (result?.status === "failed") {
-        setPhase("failed");
-      } else if (result?.status === "cancelled") {
-        setPhase("cancelled");
-      } else {
-        Alert.alert(
-          "Paiement en attente",
-          "Votre paiement n'est pas encore confirmé par l'opérateur. Réessayez dans quelques instants."
-        );
-      }
-    } catch {
-      Alert.alert("Erreur", "Impossible de vérifier le paiement. Vérifiez votre connexion.");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  /* ── Step 1 ── */
   const handleConfirmPress = () => {
     if (!amount || !selectedMethod) {
-      Alert.alert(tr("common.missingFields"), tr("common.fillAllFields"));
-      return;
+      Alert.alert("Champs manquants", "Veuillez sélectionner un montant et une méthode."); return;
     }
     if (isMobile && !phone) {
-      Alert.alert(tr("common.missingFields"), tr("common.fillAllFields"));
-      return;
+      Alert.alert("Champs manquants", "Veuillez entrer votre numéro de téléphone."); return;
     }
-    if (isMobile && !phone.startsWith("243")) {
-      Alert.alert(tr("recharge.invalidNumber"), tr("recharge.numberHint"));
-      return;
+    if (isCard && (!cardName || !contactPhone || !cardRef)) {
+      Alert.alert("Champs manquants", "Veuillez remplir tous les champs de la carte."); return;
     }
     if (!userId) {
-      Alert.alert(tr("common.error"), "Utilisateur introuvable. Veuillez vous reconnecter.");
-      return;
+      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
-    setPinValue("");
-    setPinError("");
-    setShowPinModal(true);
+    setPinValue(""); setPinError(""); setShowPinModal(true);
   };
 
-  const shakePin = () => {
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  0,  duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
+  const shakePin = () => Animated.sequence([
+    Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
+  ]).start();
 
   const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
   const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
 
-  /* ── Step 2 & 3 ── */
   const handleConfirmPin = async () => {
     if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
     if (!userId) return;
-
     try {
       setLoadingVerify(true);
       await verifyPass({ userId, password: pinValue }).unwrap();
     } catch {
-      shakePin();
-      setPinError("Mot de passe incorrect. Réessayez.");
-      setPinValue("");
-      setLoadingVerify(false);
-      return;
+      shakePin(); setPinError("Mot de passe incorrect. Réessayez.");
+      setPinValue(""); setLoadingVerify(false); return;
     }
-    setLoadingVerify(false);
-    setShowPinModal(false);
+    setLoadingVerify(false); setShowPinModal(false);
 
-    try {
-      setLoadingPay(true);
-      const result: any = await recharge({
-        amount:        normalizeDecimal(cleanAmount(amount)),
-        userId,
-        telephone:     isCard ? "0000000000" : phone,
-        PayTypeValue:  selectedMethod,
-        CurrencyValue: "USD",
-      }).unwrap();
-
-      setPendingRef(result?.reference || "");
-
-      if (isCard) {
-        setPendingSubTx("Votre paiement carte est en cours de traitement.");
-        setPhase("pending");
-        setLoadingPay(false);
-        if (result?.redirectUrl) {
-          await WebBrowser.openBrowserAsync(result.redirectUrl);
-        }
-      } else {
-        setPendingSubTx("Validez le push sur votre téléphone.");
-        setPhase("pending");
-        setLoadingPay(false);
-      }
-    } catch (err: any) {
-      setLoadingPay(false);
-      Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue lors de la recharge.");
-    }
+    setPendingInfo({
+      amount: `${amount} EC`,
+      contact: isMobile ? phone : contactPhone,
+      method:  selectedMethod ?? "",
+    });
+    setPhase("pending");
   };
 
-  /* ─── HEADER (JSX variable, shared across all phases) ─────────────── */
-  const headerJSX = (
-    <View style={[s.header, { shadowColor: t.shadow }]}>
-      <LinearGradient
-        colors={t.headerGrad}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={s.deco1} />
-      <View style={s.deco2} />
-      <SafeAreaView edges={["top"]} style={{ width: "100%" }}>
-        <View style={s.topBar}>
-          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={C.white} />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>Recharge Ecoins</Text>
-          <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-            <Ionicons name="notifications-outline" size={22} color={C.white} />
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-      <View style={s.headerIcon}>
-        <Ionicons name="wallet-outline" size={32} color={C.white} />
-      </View>
-      <Text style={s.headerSub}>Choisissez un moyen de recharge</Text>
+  const topBar = (
+    <TopBar
+      onBack={() => router.back()}
+      onNotif={() => router.push("/notification" as any)}
+      badge={notifCount}
+    />
+  );
+
+  if (phase === "pending") return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />{topBar}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <PendingScreen
+          amount={pendingInfo.amount}
+          contactPhone={pendingInfo.contact}
+          method={pendingInfo.method}
+          onBack={() => router.replace("/(tabs)" as any)}
+        />
+      </ScrollView>
     </View>
   );
 
-  /* ─── STATUS SCREENS ───────────────────────────────────────────────── */
-  if (phase === "pending") {
-    return (
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <StatusBar barStyle="light-content" />
-        {headerJSX}
-        <PendingView
-          subText={pendingSubTx}
-          reference={pendingRef}
-          isCard={isCard}
-          t={t}
-          onCancel={handleCancelPress}
-          showVerifyBtn={showVerifyBtn}
-          onVerify={handleVerify}
-          verifying={verifying}
-          retryAttempt={retryAttempt}
-        />
-      </View>
-    );
-  }
-
-  if (phase === "success") {
-    return (
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <StatusBar barStyle="light-content" />
-        {headerJSX}
-        <SuccessView amount={paidAmount} t={t} onBack={() => router.back()} />
-      </View>
-    );
-  }
-
-  if (phase === "failed") {
-    return (
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <StatusBar barStyle="light-content" />
-        {headerJSX}
-        <FailedView t={t} onRetry={resetToIdle} onBack={() => router.back()} />
-      </View>
-    );
-  }
-
-  if (phase === "cancelled") {
-    return (
-      <View style={{ flex: 1, backgroundColor: t.bg }}>
-        <StatusBar barStyle="light-content" />
-        {headerJSX}
-        <CancelledView t={t} onRetry={resetToIdle} onBack={() => router.back()} />
-      </View>
-    );
-  }
-
-  /* ─── IDLE : FORM ──────────────────────────────────────────────────── */
   return (
-    <KeyboardAvoidingView
-      style={[{ flex: 1 }, { backgroundColor: t.bg }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <StatusBar barStyle="light-content" />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      {topBar}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView
-          contentContainerStyle={[s.scroll, { backgroundColor: t.bg }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* HEADER */}
-          {headerJSX}
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          {/* FORM CARD */}
-          <Animated.View style={[
-            s.card,
-            {
-              backgroundColor: t.card,
-              shadowColor: t.shadow,
-              borderColor: isDark ? t.border : "transparent",
-              borderWidth: isDark ? 1 : 0,
-              opacity: cardOpac,
-              transform: [{ translateY: cardAnim }],
-            },
-          ]}>
-            {isDark && <View style={s.cardShimmer} />}
+          {/* ── TITRE ────────────────────────────────────────────────── */}
+          <View style={s.titleSection}>
+            <Text style={s.pageTitle}>Recharge</Text>
+            <Text style={s.pageSub}>Rechargez vos Ecoins facilement</Text>
+          </View>
 
-            {/* Montant */}
-            <SectionLabel title="MONTANT À RECHARGER" icon="cash-outline" />
-            <Animated.View style={[s.inputBox, { borderColor: borderAmt, backgroundColor: bgAmt }]}>
-              <Text style={[s.currency, { color: C.primary }]}>EC</Text>
+          {/* ── MONTANT ──────────────────────────────────────────────── */}
+          <View style={s.glassCard}>
+            <Text style={s.sectionLabel}>Montant à recharger</Text>
+            <Animated.View style={[s.amountRow, { borderColor: borderOf(inputFocAmt) }]}>
+              <Text style={s.amountCurrency}>EC</Text>
               <TextInput
-                placeholder="0"
-                placeholderTextColor={t.textSecondary}
-                keyboardType="numeric"
-                style={[s.input, { color: t.text }]}
-                value={amount}
-                onChangeText={setAmount}
-                onFocus={() => focusAnim(inputFocAmt, 1)}
-                onBlur={() => focusAnim(inputFocAmt, 0)}
+                placeholder="0" placeholderTextColor={C.textMut} keyboardType="numeric"
+                style={s.amountInput} value={amount} onChangeText={setAmount}
+                onFocus={() => focusAnim(inputFocAmt, 1)} onBlur={() => focusAnim(inputFocAmt, 0)}
                 returnKeyType="done"
               />
               {amount.length > 0 && (
                 <TouchableOpacity onPress={() => setAmount("")}>
-                  <Ionicons name="close-circle" size={18} color={t.textSecondary} />
+                  <Ionicons name="close-circle" size={20} color={C.textMut} />
                 </TouchableOpacity>
               )}
             </Animated.View>
-
-            {/* Raccourcis */}
             <View style={s.shortcuts}>
               {SHORTCUTS.map((v, i) => {
-                const clean  = SHORTCUTS_CLEAN[i];
-                const active = amount === clean;
+                const clean = SHORTCUTS_CLEAN[i]; const active = amount === clean;
                 return (
-                  <TouchableOpacity
-                    key={v}
-                    style={[s.chip, { backgroundColor: active ? C.primary : t.inputBg, borderColor: active ? C.primary : t.border }]}
-                    onPress={() => setAmount(clean)}
-                  >
-                    <Text style={[s.chipText, { color: active ? C.white : t.textSecondary }]}>{v}</Text>
+                  <TouchableOpacity key={v}
+                    style={[s.chip, { backgroundColor: active ? C.primary : C.surface, borderColor: active ? C.primary : C.border }]}
+                    onPress={() => setAmount(clean)} activeOpacity={0.8}>
+                    <Text style={[s.chipText, { color: active ? C.white : C.textSec, fontFamily: active ? "NexaBold" : "NexaLight" }]}>{v}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
+          </View>
 
-            {/* ── Section 1 : Mobile Money ── */}
-            <SectionLabel title="MOBILE MONEY" icon="phone-portrait-outline" />
-            <View style={s.methodsGrid}>
+          {/* ── MOBILE MONEY ─────────────────────────────────────────── */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Mobile Money</Text>
+            <View style={s.methodsList}>
               {METHODS.map((item) => (
-                <View key={item.id} style={s.methodWrap}>
-                  <MethodCard
-                    item={item}
-                    selected={selectedMethod === item.name}
-                    onPress={() => setSelectedMethod(item.name)}
-                  />
-                </View>
+                <MethodCard key={item.id} item={item}
+                  selected={selectedMethod === item.name}
+                  onPress={() => setSelectedMethod(item.name)} />
               ))}
             </View>
+          </View>
 
-            {/* Téléphone — Mobile Money uniquement */}
-            {isMobile && (
-              <>
-                <SectionLabel title={`NUMÉRO (${selectedMethod})`} icon="call-outline" />
-                <Animated.View style={[s.inputBox, { borderColor: borderPh, backgroundColor: bgPh }]}>
-                  <Text style={[s.prefixBadge, { color: C.primary, borderRightColor: t.prefixBorder }]}>+</Text>
-                  <TextInput
-                    placeholder="243812 345 678"
-                    placeholderTextColor={t.textSecondary}
-                    keyboardType="numeric"
-                    style={[s.input, { color: t.text }]}
-                    value={phone}
-                    onChangeText={setPhone}
-                    onFocus={() => focusAnim(inputFocPh, 1)}
-                    onBlur={() => focusAnim(inputFocPh, 0)}
-                    returnKeyType="done"
-                    onSubmitEditing={Keyboard.dismiss}
-                  />
-                  {phone.length > 0 && (
-                    <TouchableOpacity onPress={() => setPhone("")}>
-                      <Ionicons name="close-circle" size={18} color={t.textSecondary} />
-                    </TouchableOpacity>
-                  )}
-                </Animated.View>
-              </>
-            )}
+          {/* ── NUMÉRO MOBILE ────────────────────────────────────────── */}
+          {isMobile && (
+            <View style={s.glassCard}>
+              <Text style={s.sectionLabel}>Votre numéro ({selectedMethod})</Text>
+              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocPh) }]}>
+                <Text style={s.prefix}>+</Text>
+                <View style={s.prefixDivider} />
+                <TextInput
+                  placeholder="243812 345 678" placeholderTextColor={C.textMut}
+                  keyboardType="numeric" style={s.inputField}
+                  value={phone} onChangeText={setPhone}
+                  onFocus={() => focusAnim(inputFocPh, 1)} onBlur={() => focusAnim(inputFocPh, 0)}
+                  returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
+                />
+                {phone.length > 0 && (
+                  <TouchableOpacity onPress={() => setPhone("")}>
+                    <Ionicons name="close-circle" size={18} color={C.textMut} />
+                  </TouchableOpacity>
+                )}
+              </Animated.View>
+            </View>
+          )}
 
-            {/* ── Section 2 : Carte Bancaire ── */}
-            <SectionLabel title="CARTE BANCAIRE" icon="card-outline" />
-            <VisaCard selected={isCard} onPress={() => setSelectedMethod("Card")} />
-
-            {/* Récap */}
-            {amount && selectedMethod && (
-              <View style={[s.recap, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-                <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Méthode</Text>
-                  <Text style={[s.recapVal, { color: t.text }]}>{selectedMethod}</Text>
+          {/* ── CARTE BANCAIRE ───────────────────────────────────────── */}
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Carte bancaire</Text>
+            <TouchableOpacity activeOpacity={0.88} onPress={() => setSelectedMethod("Card")}>
+              <View style={[s.cardOption, isCard && { borderColor: C.primary, borderWidth: 2 }]}>
+                <LinearGradient colors={["#0A0E3A", "#0035C5", "#071A6E"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View style={s.cardDeco1} /><View style={s.cardDeco2} />
+                {isCard && (
+                  <View style={s.cardCheck}><Ionicons name="checkmark" size={12} color={C.deep} /></View>
+                )}
+                <View style={s.cardRow}>
+                  <Text style={s.cardBank}>BIM BANK</Text>
+                  <View style={s.cardChip}><View style={s.cardChipH} /><View style={s.cardChipV} /></View>
                 </View>
-                <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Montant</Text>
-                  <Text style={[s.recapVal, { color: C.primary }]}>{amount} EC</Text>
+                <Text style={s.cardNum}>•••• •••• •••• ••••</Text>
+                <View style={s.cardBottom}>
+                  <View><Text style={s.cardLabel}>TITULAIRE</Text><Text style={s.cardValue}>VOTRE NOM</Text></View>
+                  <View><Text style={s.cardLabel}>EXPIRE</Text><Text style={s.cardValue}>12/27</Text></View>
+                  <Text style={s.cardVisa}>VISA</Text>
                 </View>
               </View>
-            )}
+            </TouchableOpacity>
+          </View>
 
-            {/* CTA */}
-            <View style={s.cta}>
-              <GradientButton
-                title={
-                  loadingPay ? "Traitement…" :
-                  isCard     ? "Payer avec ma carte Visa" :
-                               "Confirmer la recharge"
-                }
-                onPress={handleConfirmPress}
-                leftIcon={<ArrowIcon width={18} height={12} color={C.violet} />}
-                rightIcon={<ArrowRightIcon width={26} height={20} />}
-                isLoad={loadingPay}
-              />
-            </View>
+          {/* ── CHAMPS CARTE ─────────────────────────────────────────── */}
+          {isCard && (
+            <View style={s.glassCard}>
+              <Text style={s.sectionLabel}>Informations de la demande</Text>
 
-            <View style={s.secureRow}>
-              <Ionicons name="lock-closed-outline" size={12} color={t.textSecondary} />
-              <Text style={[s.secureText, { color: t.textSecondary }]}>Paiement sécurisé par BIM</Text>
+              {/* Nom */}
+              <Text style={s.fieldLabel}>Nom complet du titulaire</Text>
+              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocName), marginBottom: 14 }]}>
+                <Ionicons name="person-outline" size={16} color={C.textMut} />
+                <TextInput
+                  placeholder="Votre nom complet" placeholderTextColor={C.textMut}
+                  style={s.inputField} value={cardName} onChangeText={setCardName}
+                  onFocus={() => focusAnim(inputFocName, 1)} onBlur={() => focusAnim(inputFocName, 0)}
+                  returnKeyType="next"
+                />
+              </Animated.View>
+
+              {/* Numéro de référence carte */}
+              <Text style={s.fieldLabel}>Numéro de référence / carte</Text>
+              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocRef), marginBottom: 14 }]}>
+                <Ionicons name="card-outline" size={16} color={C.textMut} />
+                <TextInput
+                  placeholder="XXXX XXXX XXXX XXXX" placeholderTextColor={C.textMut}
+                  keyboardType="numeric" style={s.inputField} value={cardRef} onChangeText={setCardRef}
+                  onFocus={() => focusAnim(inputFocRef, 1)} onBlur={() => focusAnim(inputFocRef, 0)}
+                  returnKeyType="next"
+                />
+              </Animated.View>
+
+              {/* Numéro de contact */}
+              <Text style={s.fieldLabel}>Numéro de contact (en cas d'erreur)</Text>
+              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocCont) }]}>
+                <Text style={s.prefix}>+</Text>
+                <View style={s.prefixDivider} />
+                <TextInput
+                  placeholder="243812 345 678" placeholderTextColor={C.textMut}
+                  keyboardType="numeric" style={s.inputField} value={contactPhone} onChangeText={setContactPhone}
+                  onFocus={() => focusAnim(inputFocCont, 1)} onBlur={() => focusAnim(inputFocCont, 0)}
+                  returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
+                />
+              </Animated.View>
+
+              <View style={s.cardInfoNote}>
+                <Ionicons name="information-circle-outline" size={14} color={C.primary} />
+                <Text style={s.cardInfoText}>Notre équipe vous appellera sur ce numéro pour finaliser la recharge.</Text>
+              </View>
             </View>
-          </Animated.View>
+          )}
+
+          {/* ── RECAP ────────────────────────────────────────────────── */}
+          {amount && selectedMethod && (
+            <View style={s.recapCard}>
+              <View style={s.recapRow}>
+                <Text style={s.recapLabel}>Méthode</Text>
+                <Text style={s.recapVal}>{selectedMethod}</Text>
+              </View>
+              {isMobile && phone ? (
+                <View style={s.recapRow}>
+                  <Text style={s.recapLabel}>Numéro</Text>
+                  <Text style={s.recapVal}>+{phone}</Text>
+                </View>
+              ) : null}
+              {isCard && cardName ? (
+                <View style={s.recapRow}>
+                  <Text style={s.recapLabel}>Titulaire</Text>
+                  <Text style={s.recapVal}>{cardName}</Text>
+                </View>
+              ) : null}
+              <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
+                <Text style={s.recapLabel}>Montant</Text>
+                <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>{amount} EC</Text>
+              </View>
+            </View>
+          )}
+
+          {/* ── CTA ──────────────────────────────────────────────────── */}
+          <TouchableOpacity
+            style={s.ctaBtn}
+            onPress={handleConfirmPress}
+            disabled={false}
+            activeOpacity={0.88}
+          >
+            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
+              <>
+                <Ionicons name="send-outline" size={18} color={C.white} />
+                <Text style={s.ctaText}>Envoyer la demande</Text>
+              </>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <View style={s.secureRow}>
+            <Ionicons name="lock-closed-outline" size={12} color={C.textMut} />
+            <Text style={s.secureText}>Demande traitée manuellement par notre équipe BIM</Text>
+          </View>
 
           <View style={{ height: 60 }} />
         </ScrollView>
       </TouchableWithoutFeedback>
 
       {/* ─── PIN MODAL ─────────────────────────────────────────────────── */}
-      <Modal
-        isVisible={showPinModal}
-        onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        style={s.modalSlide}
-        avoidKeyboard
-      >
-        <View style={[
-          s.pinModal,
-          {
-            backgroundColor: t.modalBg,
-            borderColor: isDark ? t.border : "transparent",
-            borderWidth: isDark ? 1 : 0,
-          },
-        ]}>
-          <View style={[s.dragHandle, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }]} />
-          <View style={[s.lockIconWrap, { backgroundColor: t.lockIconBg }]}>
+      <Modal isVisible={showPinModal} onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
+        animationIn="slideInUp" animationOut="slideOutDown" style={pm.slide} avoidKeyboard>
+        <View style={[pm.sheet, { backgroundColor: C.surface }]}>
+          <View style={pm.handle} />
+          <View style={pm.lockWrap}>
             <Ionicons name="lock-closed" size={28} color={C.primary} />
           </View>
-          <Text style={[s.pinTitle, { color: t.text }]}>Mot de passe requis</Text>
-          <Text style={[s.pinSub, { color: t.textSecondary }]}>
-            Entrez votre code à 6 chiffres pour confirmer la recharge
-          </Text>
+          <Text style={pm.title}>Mot de passe requis</Text>
+          <Text style={pm.sub}>Entrez votre code à 6 chiffres pour confirmer l'envoi de la demande</Text>
           {amount.length > 0 && (
-            <View style={[s.amountReminder, { backgroundColor: t.recapBg, borderColor: t.border }]}>
+            <View style={pm.reminder}>
               <Ionicons name="wallet-outline" size={14} color={C.primary} />
-              <Text style={[s.amountReminderText, { color: t.text }]}>
-                {Number(normalizeDecimal(cleanAmount(amount))).toLocaleString("fr-FR")} EC
-              </Text>
-              {selectedMethod && (
-                <Text style={[s.amountReminderMethod, { color: t.textSecondary }]}>
-                  · {selectedMethod}
-                </Text>
-              )}
+              <Text style={pm.reminderAmt}>{amount} EC</Text>
+              {selectedMethod && <Text style={pm.reminderMethod}>· {selectedMethod}</Text>}
             </View>
           )}
           <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} t={t} />
+            <PinDots value={pinValue} />
           </Animated.View>
           {pinError.length > 0 && (
-            <View style={s.pinErrorRow}>
+            <View style={pm.errorRow}>
               <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-              <Text style={s.pinErrorText}>{pinError}</Text>
+              <Text style={pm.errorText}>{pinError}</Text>
             </View>
           )}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} t={t} />
-          <TouchableOpacity
-            style={[s.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
-            onPress={handleConfirmPin}
-            disabled={loadingVerify || pinValue.length < 6}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={[C.deep, C.primary]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={s.confirmGrad}
-            >
+          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
+          <TouchableOpacity style={[pm.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
+            onPress={handleConfirmPin} disabled={loadingVerify || pinValue.length < 6} activeOpacity={0.85}>
+            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={pm.confirmGrad}>
               {loadingVerify
-                ? <Ionicons name="sync" size={18} color={C.white} />
-                : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                    <Text style={s.confirmText}>Valider</Text>
-                  </>
-                )
-              }
+                ? <ActivityIndicator size="small" color={C.white} />
+                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={pm.confirmText}>Valider</Text></>}
             </LinearGradient>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setShowPinModal(false)}
-            style={s.cancelBtn}
-            disabled={loadingVerify}
-          >
-            <Text style={[s.cancelText, { color: t.textSecondary }]}>Annuler</Text>
+          <TouchableOpacity onPress={() => setShowPinModal(false)} style={pm.cancelBtn} disabled={loadingVerify}>
+            <Text style={pm.cancelText}>Annuler</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -1190,209 +683,88 @@ export default function RechargeEcoinsScreen() {
   );
 }
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  scroll: { paddingBottom: 20 },
+/* ─── STYLES ──────────────────────────────────────────────────────────── */
+function mkTb(C: typeof LIGHT) { return StyleSheet.create({
+  safe:      { backgroundColor: C.topBarBg, borderBottomWidth: 1, borderBottomColor: C.topBarBord },
+  bar:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
+  iconBtn:   { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  brand:     { fontFamily: "NexaBold", fontSize: 18, color: C.text },
+  badge:     { position: "absolute", top: -3, right: -3, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: C.white },
+  badgeText: { color: "#FFFFFF", fontSize: 9, fontFamily: "NexaBold", lineHeight: 12 },
+}); }
 
-  header: {
-    height: 220, overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    alignItems: "center", elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16,
-  },
-  deco1: {
-    position: "absolute", width: 180, height: 180,
-    borderRadius: 90, backgroundColor: "rgba(255,255,255,0.06)",
-    top: -50, right: -40,
-  },
-  deco2: {
-    position: "absolute", width: 120, height: 120,
-    borderRadius: 60, backgroundColor: "rgba(255,255,255,0.04)",
-    bottom: -20, left: -20,
-  },
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 8,
-  },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-  },
-  headerTitle: { color: "#FFFFFF", fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  headerIcon: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    marginTop: 12, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)",
-  },
-  headerSub: { color: "rgba(255,255,255,0.80)", fontSize: 12, fontFamily: "NexaLight", marginTop: 8 },
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
-  card: {
-    borderRadius: 28, padding: 20,
-    marginHorizontal: 16, marginTop: -28,
-    overflow: "hidden", elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10, shadowRadius: 14,
-  },
-  cardShimmer: {
-    position: "absolute", top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: "rgba(255,255,255,0.07)",
-  },
+  titleSection: { marginBottom: 20, marginTop: 8 },
+  pageTitle:    { fontFamily: "NexaBold", fontSize: 28, color: C.text, lineHeight: 34 },
+  pageSub:      { fontFamily: "NexaLight", fontSize: 15, color: C.textSec, marginTop: 4 },
 
-  inputBox: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 14, borderWidth: 1.5,
-    paddingHorizontal: 14, height: 50, gap: 10, marginBottom: 12,
-  },
-  currency:    { fontFamily: "NexaLight", fontSize: 15 },
-  prefixBadge: { fontFamily: "NexaLight", fontSize: 13, paddingRight: 4, borderRightWidth: 1 },
-  input:       { flex: 1, fontSize: 15, fontFamily: "NexaLight" },
+  glassCard: { backgroundColor: C.glassBg, borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: C.glassBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.04, shadowRadius: 16 },
+  sectionLabel: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.6 },
+  fieldLabel:   { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginBottom: 6 },
 
-  shortcuts: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 18 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
-  chipText: { fontFamily: "NexaLight", fontSize: 12 },
+  amountRow:      { flexDirection: "row", alignItems: "center", borderBottomWidth: 2, paddingBottom: 10, marginBottom: 16 },
+  amountCurrency: { fontFamily: "NexaBold", fontSize: 20, color: C.primary, marginRight: 6 },
+  amountInput:    { flex: 1, fontSize: 38, fontFamily: "NexaBold", color: C.text, padding: 0 },
+  shortcuts:      { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  chip:           { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1.5 },
+  chipText:       { fontSize: 12 },
 
-  methodsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 4 },
-  methodWrap:  { width: "48%", marginBottom: 12 },
+  section:      { marginBottom: 16 },
+  sectionTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 10 },
+  methodsList:  { gap: 10 },
 
-  recap: { borderRadius: 14, padding: 14, marginBottom: 16, marginTop: 4, borderWidth: 1 },
-  recapRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1 },
-  recapLabel: { fontFamily: "NexaLight", fontSize: 12 },
-  recapVal:   { fontFamily: "NexaLight", fontSize: 12 },
+  inputRow:      { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderRadius: 16, height: 50, paddingHorizontal: 14, gap: 10 },
+  prefix:        { fontFamily: "NexaLight", fontSize: 15, color: C.primary },
+  prefixDivider: { width: 1, height: 20, backgroundColor: C.border },
+  inputField:    { flex: 1, fontSize: 15, fontFamily: "NexaLight", color: C.text },
 
-  cta: { marginTop: 4 },
-  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 12 },
-  secureText: { fontFamily: "NexaLight", fontSize: 11 },
+  cardOption:  { borderRadius: 20, overflow: "hidden", height: 168, padding: 20, justifyContent: "space-between", borderWidth: 2, borderColor: "transparent", elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10 },
+  cardDeco1:   { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.05)", top: -50, right: -40 },
+  cardDeco2:   { position: "absolute", width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -20 },
+  cardCheck:   { position: "absolute", top: 10, right: 10, zIndex: 10, width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFD700", alignItems: "center", justifyContent: "center" },
+  cardRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardBank:    { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 16, letterSpacing: 3, fontWeight: "700" },
+  cardChip:    { width: 34, height: 26, borderRadius: 5, backgroundColor: "#D4A017", justifyContent: "center", alignItems: "center", overflow: "hidden" },
+  cardChipH:   { position: "absolute", width: "100%", height: 1, backgroundColor: "rgba(0,0,0,0.2)" },
+  cardChipV:   { position: "absolute", width: 1, height: "100%", backgroundColor: "rgba(0,0,0,0.2)" },
+  cardNum:     { color: "rgba(255,255,255,0.90)", fontFamily: "NexaLight", fontSize: 18, letterSpacing: 4, textAlign: "center" },
+  cardBottom:  { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
+  cardLabel:   { color: "rgba(255,255,255,0.50)", fontFamily: "NexaLight", fontSize: 8, letterSpacing: 1, marginBottom: 2 },
+  cardValue:   { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 12, letterSpacing: 1 },
+  cardVisa:    { color: "#FFFFFF", fontSize: 22, fontStyle: "italic", fontWeight: "700", letterSpacing: 1 },
 
-  modalSlide: { justifyContent: "flex-end", margin: 0 },
-  pinModal: {
-    borderTopLeftRadius: 32, borderTopRightRadius: 32,
-    padding: 24, paddingBottom: 36, alignItems: "center",
-    elevation: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18, shadowRadius: 20,
-  },
-  dragHandle: { width: 40, height: 4, borderRadius: 2, marginBottom: 20 },
-  lockIconWrap: {
-    width: 66, height: 66, borderRadius: 33,
-    alignItems: "center", justifyContent: "center", marginBottom: 14,
-  },
-  pinTitle: { fontFamily: "NexaLight", fontSize: 18, marginBottom: 6, letterSpacing: 0.2 },
-  pinSub: {
-    fontFamily: "NexaLight", fontSize: 12,
-    textAlign: "center", lineHeight: 18,
-    marginBottom: 18, paddingHorizontal: 10,
-  },
-  amountReminder: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22,
-  },
-  amountReminderText:   { fontFamily: "NexaLight", fontSize: 15, fontWeight: "600" },
-  amountReminderMethod: { fontFamily: "NexaLight", fontSize: 13 },
-  pinErrorRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
-  pinErrorText: { fontFamily: "NexaLight", fontSize: 12, color: C.error },
-  confirmBtn: { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 20 },
-  confirmGrad: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 10, paddingVertical: 15,
-  },
-  confirmText: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 15 },
-  cancelBtn: { marginTop: 14, paddingVertical: 8 },
-  cancelText: { fontFamily: "NexaLight", fontSize: 13 },
-});
+  cardInfoNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 14, backgroundColor: C.cardInfoBg, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: C.cardInfoBord },
+  cardInfoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
 
-/* ─── METHOD CARD STYLES ─────────────────────────────────────────────── */
-const ms = StyleSheet.create({
-  card: {
-    borderRadius: 18, paddingVertical: 18,
-    alignItems: "center", overflow: "hidden",
-    borderWidth: 2, borderColor: "transparent",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 6,
-  },
-  deco: {
-    position: "absolute", width: 80, height: 80,
-    borderRadius: 40, backgroundColor: "rgba(255,255,255,0.07)",
-    top: -20, right: -20,
-  },
-  checkBadge: {
-    position: "absolute", top: 8, right: 8,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: C.gold, alignItems: "center", justifyContent: "center",
-  },
-  logo: { width: 48, height: 48, marginBottom: 8 },
-  name: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 11, textAlign: "center" },
-});
+  recapCard:   { backgroundColor: C.glassBg, borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.glassBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
+  recapRow:    { flexDirection: "row", justifyContent: "space-between", paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.recapBord },
+  recapLabel:  { fontFamily: "NexaLight", fontSize: 13, color: C.textMut },
+  recapVal:    { fontFamily: "NexaLight", fontSize: 13, color: C.text },
 
-/* ─── VISA CARD STYLES ───────────────────────────────────────────────── */
-const vc = StyleSheet.create({
-  outer: {
-    width: "100%", borderRadius: 20, overflow: "hidden",
-    marginBottom: 16, borderWidth: 2.5, borderColor: "transparent",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.20, shadowRadius: 10,
-  },
-  selected: { borderColor: C.gold },
-  checkBadge: {
-    position: "absolute", top: 10, right: 10, zIndex: 10,
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: C.gold, alignItems: "center", justifyContent: "center",
-  },
-  card: { padding: 20, height: 168, justifyContent: "space-between" },
-  deco1: {
-    position: "absolute", width: 150, height: 150, borderRadius: 75,
-    backgroundColor: "rgba(255,255,255,0.05)", top: -50, right: -40,
-  },
-  deco2: {
-    position: "absolute", width: 100, height: 100, borderRadius: 50,
-    backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -20,
-  },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  bankName: { color: C.white, fontFamily: "NexaLight", fontSize: 16, letterSpacing: 3, fontWeight: "700" },
-  chip: {
-    width: 34, height: 26, borderRadius: 5,
-    backgroundColor: "#D4A017",
-    justifyContent: "center", alignItems: "center",
-    overflow: "hidden",
-  },
-  chipH: { position: "absolute", width: "100%", height: 1, backgroundColor: "rgba(0,0,0,0.2)" },
-  chipV: { position: "absolute", width: 1, height: "100%", backgroundColor: "rgba(0,0,0,0.2)" },
-  cardNum: {
-    color: "rgba(255,255,255,0.90)", fontFamily: "NexaLight",
-    fontSize: 18, letterSpacing: 4, textAlign: "center",
-  },
-  bottomRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
-  cardLabel: {
-    color: "rgba(255,255,255,0.50)", fontFamily: "NexaLight",
-    fontSize: 8, letterSpacing: 1, marginBottom: 2,
-  },
-  cardValue: { color: C.white, fontFamily: "NexaLight", fontSize: 12, letterSpacing: 1 },
-  visaText:  { color: C.white, fontSize: 22, fontStyle: "italic", fontWeight: "700", letterSpacing: 1 },
-});
+  ctaBtn:    { borderRadius: 24, overflow: "hidden", marginBottom: 14 },
+  ctaGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
+  ctaText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
+  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 8 },
+  secureText:{ fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textAlign: "center" },
+}); }
 
-/* ─── SECTION LABEL STYLES ───────────────────────────────────────────── */
-const sl = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, marginTop: 4 },
-  text: { fontFamily: "NexaLight", fontSize: 11, color: C.primary, textTransform: "uppercase", letterSpacing: 0.8 },
-});
+function mkMs(C: typeof LIGHT) { return StyleSheet.create({
+  card:     { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.glassBg, borderRadius: 20, borderWidth: 1.5, borderColor: C.border, paddingVertical: 14, paddingHorizontal: 16, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10 },
+  logoBox:  { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  logo:     { width: 34, height: 34 },
+  name:     { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 3 },
+  fee:      { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
+  radio:    { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary },
+}); }
 
-/* ─── PIN DOTS STYLES ────────────────────────────────────────────────── */
 const pd = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, marginBottom: 10 },
   dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
 });
 
-/* ─── KEYPAD STYLES ──────────────────────────────────────────────────── */
 const kp = StyleSheet.create({
   grid:    { flexDirection: "row", flexWrap: "wrap", width: 280, gap: 12, justifyContent: "center", marginTop: 10 },
   key:     { width: 78, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1 },
@@ -1400,60 +772,57 @@ const kp = StyleSheet.create({
   keyText: { fontSize: 20, fontFamily: "NexaLight", fontWeight: "600" },
 });
 
-/* ─── PENDING VIEW STYLES ────────────────────────────────────────────── */
-const pv = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  loaderWrap: { alignItems: "center", justifyContent: "center", marginBottom: 32, width: 120, height: 120 },
-  ring: {
-    position: "absolute", width: 120, height: 120, borderRadius: 60, borderWidth: 2,
-  },
-  innerCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    alignItems: "center", justifyContent: "center",
-  },
-  title:  { fontFamily: "NexaLight", fontSize: 20, textAlign: "center", marginBottom: 10, letterSpacing: 0.2 },
-  sub:    { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", lineHeight: 20, marginBottom: 20 },
-  refBox: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 8, marginBottom: 20,
-  },
-  refText:    { fontFamily: "NexaLight", fontSize: 11 },
-  hint:       { fontFamily: "NexaLight", fontSize: 11, textAlign: "center", lineHeight: 18, opacity: 0.7, marginBottom: 20, paddingHorizontal: 8 },
-  verifyBtn:  { width: "100%", borderRadius: 14, overflow: "hidden", marginBottom: 14 },
-  verifyGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
-  verifyText: { color: C.white, fontFamily: "NexaLight", fontSize: 14 },
-  cancelBtn:  { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 20, borderWidth: 1.5 },
-  cancelText: { fontFamily: "NexaLight", fontSize: 13 },
-  autoCheckBadge: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 10, borderWidth: 1,
-    paddingHorizontal: 14, paddingVertical: 7, marginBottom: 20,
-  },
-  autoCheckText: { fontFamily: "NexaLight", fontSize: 11, opacity: 0.8 },
-});
+function mkPm(C: typeof LIGHT) { return StyleSheet.create({
+  slide:       { justifyContent: "flex-end", margin: 0 },
+  sheet:       { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 36, alignItems: "center", elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.10, shadowRadius: 20 },
+  handle:      { width: 40, height: 4, borderRadius: 2, marginBottom: 20, backgroundColor: C.pmHandle },
+  lockWrap:    { width: 66, height: 66, borderRadius: 33, backgroundColor: C.pmLockBg, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  title:       { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 6 },
+  sub:         { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, textAlign: "center", lineHeight: 18, marginBottom: 18, paddingHorizontal: 10 },
+  reminder:    { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 12, borderWidth: 1, backgroundColor: C.pmReminderBg, borderColor: C.pmReminderBord, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22 },
+  reminderAmt: { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  reminderMethod: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+  errorRow:    { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  errorText:   { fontFamily: "NexaLight", fontSize: 12, color: C.error },
+  confirmBtn:  { width: "100%", borderRadius: 24, overflow: "hidden", marginTop: 20 },
+  confirmGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  confirmText: { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
+  cancelBtn:   { marginTop: 14, paddingVertical: 8 },
+  cancelText:  { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+}); }
 
-/* ─── SUCCESS VIEW STYLES ────────────────────────────────────────────── */
-const xv = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  iconGrad:  { width: 110, height: 110, borderRadius: 55, alignItems: "center", justifyContent: "center", marginBottom: 24 },
-  title:     { fontFamily: "NexaLight", fontSize: 24, textAlign: "center", marginBottom: 10, letterSpacing: 0.3 },
-  amount:    { fontFamily: "NexaLight", fontSize: 34, fontWeight: "700", marginBottom: 12 },
-  sub:       { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", lineHeight: 20, marginBottom: 36 },
-  btn:       { width: "100%", borderRadius: 16, overflow: "hidden" },
-  btnGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  btnText:   { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-});
+function mkPv(C: typeof LIGHT) { return StyleSheet.create({
+  container: { alignItems: "center", paddingTop: 20, paddingBottom: 20 },
 
-/* ─── FAILED VIEW STYLES ─────────────────────────────────────────────── */
-const fv = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  iconGrad:  { width: 110, height: 110, borderRadius: 55, alignItems: "center", justifyContent: "center", marginBottom: 24 },
-  title:     { fontFamily: "NexaLight", fontSize: 24, textAlign: "center", marginBottom: 10, letterSpacing: 0.3 },
-  sub:       { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", lineHeight: 20, marginBottom: 36 },
-  retryBtn:  { width: "100%", borderRadius: 16, overflow: "hidden", marginBottom: 12 },
-  retryGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  retryText: { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-  backBtn:   { paddingVertical: 10 },
-  backText:  { fontFamily: "NexaLight", fontSize: 13 },
-});
+  /* receipt */
+  receipt:           { width: "100%", borderRadius: 24, overflow: "hidden", marginBottom: 16, elevation: 4, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 18 },
+  receiptHeader:     { alignItems: "center", paddingTop: 28, paddingBottom: 24, paddingHorizontal: 20 },
+  receiptCheckCircle:{ width: 60, height: 60, borderRadius: 30, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  receiptTitle:      { fontFamily: "NexaBold", fontSize: 20, color: "#FFFFFF", marginBottom: 6 },
+  receiptSub:        { fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.80)", textAlign: "center" },
+  perfRow:           { flexDirection: "row", alignItems: "center", backgroundColor: C.receiptPerfBg },
+  perfHalf:          { flex: 1, height: 1, backgroundColor: C.receiptPerfBord },
+  perfDot:           { width: 10, height: 10, borderRadius: 5, backgroundColor: C.receiptPerfBg, borderWidth: 1, borderColor: C.receiptPerfBord, marginHorizontal: 2 },
+  receiptBody:       { backgroundColor: C.receiptBg, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
+  detailRow:         { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
+  detailLabel:       { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  detailVal:         { fontFamily: "NexaLight", fontSize: 12, color: C.text },
+  detailDivider:     { height: 1, backgroundColor: C.border, marginVertical: 8 },
+  amountVal:         { fontFamily: "NexaBold", fontSize: 18, color: C.primary },
+
+  /* steps */
+  stepsCard:      { width: "100%", backgroundColor: C.stepsCardBg, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: C.stepsCardBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
+  stepsTitle:     { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 16 },
+  step:           { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  stepConnector:  { width: 2, height: 16, backgroundColor: C.stepConnBg, marginLeft: 18, marginVertical: 4 },
+  stepNum:        { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  stepNumText:    { fontFamily: "NexaBold", fontSize: 15 },
+  stepTitle:      { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 3, marginTop: 2 },
+  stepDesc:       { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
+
+  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, width: "100%", backgroundColor: C.infoBannerBg, borderRadius: 16, padding: 14, marginBottom: 24, borderWidth: 1, borderColor: C.infoBannerBord },
+  infoText:   { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
+  backBtn:    { width: "100%", borderRadius: 24, overflow: "hidden" },
+  backGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
+  backText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
+}); }

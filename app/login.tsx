@@ -1,19 +1,16 @@
-import { C, Colors } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { jwtDecode } from "jwt-decode";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -23,50 +20,196 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 
 import logo from "@/assets/images/logo.jpeg";
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
+import { useAppTheme } from "@/app/_layout";
 import { API_URL_BASE } from "@/constants/api";
 import { useLoginMutation } from "@/services/authService";
-import { useTranslation } from "react-i18next";
 import { useCreateHistoryMutation } from "@/services/historyService";
-import { useCreateNotificationMutation } from "@/services/notificationService";
-import {
-  registerForPushNotificationsAsync
-} from "@/services/pushNotifications";
+import { registerForPushNotificationsAsync } from "@/services/pushNotifications";
+import { useTranslation } from "react-i18next";
 
-const {height } = Dimensions.get("window");
+const LIGHT = {
+  bg:      "#F8F9FF",
+  primary: "#0047FF",
+  text:    "#1A1C1C",
+  muted:   "#747688",
+  input:   "#F4F6FF",
+  border:  "#E8EDF5",
+  red:     "#DC0302",
+  green:   "#22C55E",
+  white:   "#FFFFFF",
+  cardBg:  "#FFFFFF",
+  cardElev: 6,
+  cardBord: "transparent",
+};
 
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark  = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
+const DARK: typeof LIGHT = {
+  bg:      "#0B1220",
+  primary: "#4D8DFF",
+  text:    "#EAF0FF",
+  muted:   "#9FB0D0",
+  input:   "#182033",
+  border:  "#1F2A44",
+  red:     "#FF5A5A",
+  green:   "#22C55E",
+  white:   "#FFFFFF",
+  cardBg:  "#1A2540",
+  cardElev: 0,
+  cardBord: "rgba(31,42,68,0.90)",
+};
+
+function mkS(C: typeof LIGHT) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: C.bg,
+    },
+
+    logoArea: {
+      alignItems: "center",
+      paddingTop: Platform.OS === "ios" ? 72 : 52,
+      marginBottom: 24,
+    },
+    logoWrap: {
+      width: 96, height: 96,
+      borderRadius: 26,
+      backgroundColor: C.white,
+      borderWidth: 2,
+      borderColor: "#C8D8FF",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+      elevation: 8,
+      shadowColor: C.primary,
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    logo: { width: 78, height: 78 },
+    brand: {
+      fontFamily: "NexaBold",
+      fontSize: 20,
+      color: C.primary,
+      marginTop: 12,
+      letterSpacing: 0.5,
+    },
+
+    card: {
+      marginHorizontal: 16,
+      backgroundColor: C.cardBg,
+      borderRadius: 28,
+      padding: 22,
+      elevation: C.cardElev,
+      borderWidth: 1.5,
+      borderColor: C.cardBord,
+      shadowColor: C.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.10,
+      shadowRadius: 16,
+    },
+
+    sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+    dot:           { width: 4, height: 16, borderRadius: 2, backgroundColor: C.primary },
+    sectionLabel:  { fontFamily: "NexaRegular", fontSize: 11, color: C.muted, letterSpacing: 1.2, textTransform: "uppercase" },
+
+    title:    { fontFamily: "NexaBold", fontSize: 22, color: C.text, marginBottom: 5 },
+    subtitle: { fontFamily: "NexaRegular", fontSize: 13, color: C.muted, lineHeight: 19, marginBottom: 22 },
+
+    label: {
+      fontFamily: "NexaRegular", fontSize: 11,
+      color: C.muted, letterSpacing: 0.8,
+      textTransform: "uppercase", marginBottom: 8,
+    },
+
+    inputRow: {
+      flexDirection: "row", alignItems: "center",
+      borderWidth: 1.5, borderColor: C.border,
+      borderRadius: 18, height: 54,
+      backgroundColor: C.input,
+      marginBottom: 16,
+      overflow: "hidden",
+      paddingRight: 12,
+    },
+    inputFocused: { borderColor: C.primary, backgroundColor: C.input },
+
+    iconBox: {
+      width: 44, height: 44,
+      borderRadius: 22,
+      justifyContent: "center", alignItems: "center",
+      marginHorizontal: 6,
+      backgroundColor: "transparent",
+    },
+    iconBoxFocused: { backgroundColor: "#0047FF12" },
+    trailIcon: { marginRight: 0 },
+
+    input: {
+      flex: 1, height: "100%",
+      fontSize: 14, color: C.text,
+      fontFamily: "NexaRegular",
+    },
+    eyeBtn: { padding: 4 },
+
+    forgotRow: {
+      flexDirection: "row", alignItems: "center",
+      alignSelf: "flex-end", gap: 5,
+      marginBottom: 20, marginTop: -4,
+    },
+    forgot: { fontFamily: "NexaRegular", fontSize: 13, color: C.muted },
+
+    btn: {
+      backgroundColor: C.primary,
+      borderRadius: 18,
+      height: 54,
+      alignItems: "center",
+      justifyContent: "center",
+      elevation: 4,
+      shadowColor: C.primary,
+      shadowOpacity: 0.3,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    btnText: { fontFamily: "NexaBold", fontSize: 15, color: C.white, letterSpacing: 0.5 },
+
+    divider: {
+      flexDirection: "row", alignItems: "center",
+      marginVertical: 20, gap: 12,
+    },
+    line:        { flex: 1, height: 1, backgroundColor: C.border },
+    dividerText: { fontFamily: "NexaRegular", fontSize: 11, color: C.muted, fontWeight: "700" },
+
+    outlineBtn: {
+      flexDirection: "row", alignItems: "center",
+      backgroundColor: C.input,
+      borderRadius: 18,
+      paddingVertical: 12, paddingHorizontal: 14,
+      gap: 12,
+      borderWidth: 1, borderColor: C.border,
+    },
+    outlineBtnMain: { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+    outlineBtnSub:  { fontFamily: "NexaRegular", fontSize: 11, color: C.muted, marginTop: 2 },
+  });
 }
 
-
-
-/* ─── LOGIN SCREEN ───────────────────────────────────────────────────── */
 export default function LoginScreen() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+
   const router = useRouter();
+  const { t: tr } = useTranslation();
 
-  const [login, { isLoading }] = useLoginMutation();
-  const [createHistory]        = useCreateHistoryMutation();
-  const [createNotification]   = useCreateNotificationMutation();
+  const [login]           = useLoginMutation();
+  const [createHistory]   = useCreateHistoryMutation();
 
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [focusedInput, setFocusedInput] = useState<"email" | "password" | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [email,       setEmail]       = useState("");
+  const [password,    setPassword]    = useState("");
+  const [focused,     setFocused]     = useState<"email" | "password" | null>(null);
+  const [showPwd,     setShowPwd]     = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
 
-  const scrollViewRef = useRef<any>(null);
-  const loginBtnRef   = useRef<View>(null);
-
-  /* ── Animations ── */
   const cardSlide = useRef(new Animated.Value(60)).current;
   const cardOpac  = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.7)).current;
@@ -79,28 +222,19 @@ export default function LoginScreen() {
       Animated.timing(logoOpac,  { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.timing(cardSlide, { toValue: 0, duration: 600, delay: 200, useNativeDriver: true }),
       Animated.timing(cardOpac,  { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
-    ]).start(() => {
-      // Après l'animation, scroll vers le bouton "Se connecter"
-      loginBtnRef.current?.measure((_x, _y, _w, _h, _px, py) => {
-        scrollViewRef.current?.scrollTo({ y: py - 20, animated: true });
-      });
-    });
+    ]).start();
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
-        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: -10, duration: 2800, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 2800, useNativeDriver: true }),
       ])
     ).start();
-  }, [cardOpac, cardSlide, floatY, logoOpac, logoScale]);
+  }, []);
 
-  const { isDark, t }  = useTheme();
-  const { t: tr }      = useTranslation();
-
-  /* ── Handlers ── */
   const handleLogin = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const deviceName = Device.deviceName || "Unknown device";
       const osName     = Device.osName || Platform.OS;
@@ -108,11 +242,13 @@ export default function LoginScreen() {
       const appVersion = Application.nativeApplicationVersion || "";
 
       let locationName = "Inconnue";
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        const loc = await Location.getCurrentPositionAsync({});
-        locationName = `${loc.coords.latitude}, ${loc.coords.longitude}`;
-      }
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getLastKnownPositionAsync();
+          if (loc) locationName = `${loc.coords.latitude}, ${loc.coords.longitude}`;
+        }
+      } catch {}
 
       const response = await login({
         email, password,
@@ -124,14 +260,15 @@ export default function LoginScreen() {
       if (!response) return;
 
       await AsyncStorage.multiSet([
-        ["token", response.token],
+        ["token",        response.token],
         ["refreshToken", response.refreshToken],
+        ["lastActivity", String(Date.now())],
       ]);
 
       const decoded: any = jwtDecode(response.token);
       await AsyncStorage.multiSet([
         ["userId", String(decoded?.userId)],
-        ["email", decoded?.email],
+        ["email",  decoded?.email],
       ]);
 
       const pushToken = await registerForPushNotificationsAsync();
@@ -151,94 +288,49 @@ export default function LoginScreen() {
           type: "connexion",
           description: "Une tentative de connexion a été détectée, mais elle a échoué.",
           userId: userId || null,
-          action: "Échec de la connexion ❌",
+          action: "Échec de la connexion",
         });
-
-      } catch {
-        Alert.alert("Une erreur est survenue");
-      }
+      } catch {}
       Alert.alert(dataMess?.data?.message || "Une erreur est survenue");
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
-  /* ── Render ── */
   return (
-    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={s.screen}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
 
-      {/* Gradient bg — même que FullScreenLoader du home */}
-      <LinearGradient
-        colors={
-          isDark
-            ? ["#060D1F", "#091528", "#0D1F3C"]
-            : [t.gradientStart, t.gradientEnd, t.accent]
-        }
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Cercles décoratifs — pattern home */}
-      <View style={[s.circle, s.circle1]} />
-      <View style={[s.circle, s.circle2]} />
-      <View style={[s.circle, s.circle3]} />
-      <View style={[s.circle, s.circle4]} />
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
-          ref={scrollViewRef}
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-
-          {/* ── Logo flottant ── */}
-          <Animated.View
-            style={[
-              s.logoArea,
-              { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] },
-            ]}
-          >
+          {/* Logo flottant */}
+          <Animated.View style={[s.logoArea, { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] }]}>
             <View style={s.logoWrap}>
               <Image source={logo} style={s.logo} resizeMode="contain" />
             </View>
-
-            {/* Barre accent tricolore — même pattern que sectorAccent du home */}
-            <View style={s.logoAccentBar}>
-              <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 2 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.red,     flex: 1 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 1 }]} />
-            </View>
+            <Text style={s.brand}>BIMNext</Text>
           </Animated.View>
 
-          {/* ── Card (même ombre / rayon que quickCard du home) ── */}
-          <Animated.View
-            style={[s.cardWrap, { opacity: cardOpac, transform: [{ translateY: cardSlide }] }]}
-          >
+          {/* Card */}
+          <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardSlide }] }]}>
 
-            {/* Section header — copie exacte du home */}
             <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: C.accent }]} />
+              <View style={s.dot} />
               <Text style={s.sectionLabel}>{tr("auth.loginSection")}</Text>
             </View>
 
             <Text style={s.title}>{tr("auth.loginWelcome")}</Text>
             <Text style={s.subtitle}>{tr("auth.loginSub")}</Text>
 
-            {/* ── EMAIL ── */}
+            {/* Email */}
             <Text style={s.label}>{tr("auth.email")}</Text>
-            <View style={[s.inputRow, focusedInput === "email" && s.inputFocused]}>
-              <View style={[s.iconCircle, { backgroundColor: focusedInput === "email" ? C.primary + "18" : C.f4 }]}>
-                <Ionicons
-                  name="mail-outline"
-                  size={18}
-                  color={focusedInput === "email" ? C.primary : C.muted}
-                />
+            <View style={[s.inputRow, focused === "email" && s.inputFocused]}>
+              <View style={[s.iconBox, focused === "email" && s.iconBoxFocused]}>
+                <Ionicons name="mail-outline" size={18} color={focused === "email" ? C.primary : C.muted} />
               </View>
               <TextInput
                 style={s.input}
@@ -248,23 +340,17 @@ export default function LoginScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                onFocus={() => setFocusedInput("email")}
-                onBlur={() => setFocusedInput(null)}
+                onFocus={() => setFocused("email")}
+                onBlur={() => setFocused(null)}
               />
-              {email.length > 0 && (
-                <Ionicons name="checkmark-circle" size={18} color="#22C55E" style={{ marginRight: 12 }} />
-              )}
+              {email.length > 0 && <Ionicons name="checkmark-circle" size={18} color={C.green} style={s.trailIcon} />}
             </View>
 
-            {/* ── PASSWORD ── */}
+            {/* Password */}
             <Text style={s.label}>{tr("auth.password")}</Text>
-            <View style={[s.inputRow, focusedInput === "password" && s.inputFocused]}>
-              <View style={[s.iconCircle, { backgroundColor: focusedInput === "password" ? C.primary + "18" : C.f4 }]}>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={18}
-                  color={focusedInput === "password" ? C.primary : C.muted}
-                />
+            <View style={[s.inputRow, focused === "password" && s.inputFocused]}>
+              <View style={[s.iconBox, focused === "password" && s.iconBoxFocused]}>
+                <Ionicons name="lock-closed-outline" size={18} color={focused === "password" ? C.primary : C.muted} />
               </View>
               <TextInput
                 style={s.input}
@@ -272,318 +358,66 @@ export default function LoginScreen() {
                 placeholderTextColor={C.muted}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                onFocus={() => setFocusedInput("password")}
-                onBlur={() => setFocusedInput(null)}
+                secureTextEntry={!showPwd}
+                onFocus={() => setFocused("password")}
+                onBlur={() => setFocused(null)}
               />
-              <TouchableOpacity onPress={() => setShowPassword(p => !p)} style={s.eyeBtn}>
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={18}
-                  color={C.muted}
-                />
+              <TouchableOpacity onPress={() => setShowPwd(p => !p)} style={s.eyeBtn}>
+                <Ionicons name={showPwd ? "eye-off-outline" : "eye-outline"} size={18} color={C.muted} />
               </TouchableOpacity>
             </View>
 
-            {/* Forgot */}
-            <TouchableOpacity
-              onPress={() => router.push("/forgot-password")}
-              style={s.forgotRow}
-            >
-              <FontAwesome6 name="circle-question" size={12} color={C.red} />
+            {/* Mot de passe oublié */}
+            <TouchableOpacity onPress={() => router.push("/forgot-password")} style={s.forgotRow}>
+              <Ionicons name="help-circle-outline" size={14} color={C.muted} />
               <Text style={s.forgot}>{tr("auth.forgotPwd")}</Text>
             </TouchableOpacity>
 
-            {/* Login button */}
-            <View ref={loginBtnRef}>
-              <GradientButton
-                isLoad={isSubmitting}
-                title={tr("auth.loginBtn")}
-                onPress={handleLogin}
-                leftIcon={<ArrowIcon width={20} height={14} />}
-                rightIcon={<ArrowRightIcon width={30} height={24} />}
-              />
-            </View>
+            {/* Bouton connexion */}
+            <TouchableOpacity style={s.btn} onPress={handleLogin} activeOpacity={0.88} disabled={submitting}>
+              {submitting
+                ? <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Ionicons name="reload-outline" size={18} color={C.white} />
+                    <Text style={s.btnText}>Connexion...</Text>
+                  </View>
+                : <Text style={s.btnText}>{tr("auth.loginBtn")}</Text>}
+            </TouchableOpacity>
 
-            {/* Divider */}
+            {/* Séparateur */}
             <View style={s.divider}>
               <View style={s.line} />
-              <View style={s.dividerBadge}>
-                <Text style={s.dividerText}>{tr("common.or")}</Text>
-              </View>
+              <Text style={s.dividerText}>{tr("common.or")}</Text>
               <View style={s.line} />
             </View>
 
-            {/* Register — même btn style que ActionButton du home */}
-            <TouchableOpacity
-              style={s.registerBtn}
-              onPress={() => router.push("/register")}
-              activeOpacity={0.85}
-            >
-              <View style={[s.iconCircle, { backgroundColor: C.violet + "18" }]}>
-                <FontAwesome6 name="user-plus" size={16} color={C.violet} />
+            {/* Créer un compte */}
+            <TouchableOpacity style={s.outlineBtn} onPress={() => router.push("/register")} activeOpacity={0.85}>
+              <View style={[s.iconBox, { backgroundColor: "#0047FF18" }]}>
+                <FontAwesome6 name="user-plus" size={16} color={C.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.registerMain}>{tr("auth.registerBtn")}</Text>
-                <Text style={s.registerSub}>{tr("auth.joinUs")}</Text>
+                <Text style={s.outlineBtnMain}>{tr("auth.registerBtn")}</Text>
+                <Text style={s.outlineBtnSub}>{tr("auth.joinUs")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </TouchableOpacity>
 
             {/* Espace Livreur */}
-            <TouchableOpacity
-              style={[s.registerBtn, { marginTop: 8 }]}
-              onPress={() => router.push("/livreur/login")}
-              activeOpacity={0.85}
-            >
-              <View style={[s.iconCircle, { backgroundColor: "#22C55E18" }]}>
-                <Ionicons name="bicycle" size={18} color="#22C55E" />
+            <TouchableOpacity style={[s.outlineBtn, { marginTop: 8 }]} onPress={() => router.push("/livreur/login")} activeOpacity={0.85}>
+              <View style={[s.iconBox, { backgroundColor: "#22C55E18" }]}>
+                <Ionicons name="bicycle" size={18} color={C.green} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[s.registerMain, { color: "#22C55E" }]}>Espace Livreur</Text>
-                <Text style={s.registerSub}>Accéder à votre espace de livraison</Text>
+                <Text style={s.outlineBtnMain}>Espace Livreur</Text>
+                <Text style={s.outlineBtnSub}>Accéder à votre espace de livraison</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={C.muted} />
             </TouchableOpacity>
 
           </Animated.View>
-
           <View style={{ height: 60 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
-
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  bg: {
-    flex: 1,
-    backgroundColor: C.deep,
-  },
-
-  /* Cercles décoratifs */
-  circle: {
-    position: "absolute",
-    borderRadius: 999,
-  },
-  circle1: {
-    width: 320, height: 320,
-    top: -140, right: -130,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  circle2: {
-    width: 160, height: 160,
-    top: 80, right: -40,
-    backgroundColor: "rgba(220,3,2,0.12)",
-  },
-  circle3: {
-    width: 200, height: 200,
-    bottom: 160, left: -90,
-    backgroundColor: "rgba(57,6,199,0.15)",
-  },
-  circle4: {
-    width: 70, height: 70,
-    top: height * 0.32, left: 24,
-    backgroundColor: "rgba(77,150,255,0.13)",
-  },
-
-  /* Logo */
-  logoArea: {
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 72 : 52,
-    marginBottom: 22,
-  },
-  logoWrap: {
-    width: 96, height: 96,
-    borderRadius: 26,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    elevation: 14,
-    shadowColor: C.black,
-    shadowOpacity: 0.3,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  logo: {
-    width: 78, height: 78,
-  },
-  logoAccentBar: {
-    flexDirection: "row",
-    width: 56, height: 3,
-    borderRadius: 2,
-    marginTop: 14,
-    overflow: "hidden",
-    gap: 2,
-  },
-  logoAccentSeg: {
-    height: "100%",
-    borderRadius: 2,
-  },
-
-  /* Card — même ombre que quickCard du home */
-  cardWrap: {
-    marginHorizontal: 16,
-    backgroundColor: C.white,
-    borderRadius: 28,
-    padding: 22,
-    elevation: 10,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-  },
-
-  /* Section header — copie exacte du home */
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
-  },
-  sectionDot: {
-    width: 4, height: 16,
-    borderRadius: 2,
-  },
-  sectionLabel: {
-    fontFamily: "NexaLight",
-    fontSize: 11,
-    color: C.muted,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-  },
-
-  title: {
-    fontFamily: "NexaLight",
-    fontSize: 23,
-    fontWeight: "700",
-    color: C.text,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontFamily: "NexaLight",
-    fontSize: 13,
-    color: C.muted,
-    lineHeight: 19,
-    marginBottom: 24,
-  },
-
-  label: {
-    fontFamily: "NexaLight",
-    fontSize: 11,
-    color: C.muted,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
-    marginBottom: 8,
-  },
-
-  /* Input row — même forme arrondie que btn du home */
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#E8EDF5",
-    borderRadius: 18,
-    height: 54,
-    backgroundColor: C.f4,
-    marginBottom: 16,
-    overflow: "hidden",
-    paddingRight: 12,
-  },
-  inputFocused: {
-    borderColor: C.primary,
-    backgroundColor: "#EEF4FF",
-  },
-
-  /* iconCircle — copie exacte du home */
-  iconCircle: {
-    width: 44, height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 6,
-  },
-
-  input: {
-    flex: 1,
-    height: "100%",
-    fontSize: 14,
-    color: C.text,
-    fontFamily: "NexaLight",
-  },
-  eyeBtn: {
-    padding: 4,
-  },
-
-  forgotRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-end",
-    gap: 5,
-    marginBottom: 20,
-    marginTop: -4,
-  },
-  forgot: {
-    fontFamily: "NexaLight",
-    fontSize: 13,
-    color: C.red,
-    fontWeight: "600",
-  },
-
-  /* Divider */
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 20,
-    gap: 10,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E8EDF5",
-  },
-  dividerBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: C.f4,
-    borderWidth: 1,
-    borderColor: "#E8EDF5",
-  },
-  dividerText: {
-    fontFamily: "NexaLight",
-    fontSize: 11,
-    color: C.muted,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-
-  /* Register — ActionButton style du home */
-  registerBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: C.f4,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    gap: 12,
-  },
-  registerMain: {
-    fontFamily: "NexaLight",
-    fontSize: 14,
-    fontWeight: "700",
-    color: C.text,
-  },
-  registerSub: {
-    fontFamily: "NexaLight",
-    fontSize: 11,
-    color: C.muted,
-    marginTop: 2,
-  },
-});

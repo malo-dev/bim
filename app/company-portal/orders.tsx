@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useGetCompanyOrdersQuery, useUpdateOrderStatusMutation } from "@/services/orderService";
+import { useAppTheme } from "@/app/_layout";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -28,10 +28,6 @@ const TH = {
   light: { bg: "#F0F4FF", card: "#FFFFFF", text: "#0D1B3E", sub: "#7B8DB0", border: "rgba(3,83,204,0.10)", headerGrad: [C.deep, C.primary] as [string, string] },
   dark:  { bg: "#0A0F1E", card: "#111827", text: "#E2E8F0", sub: "#64748B", border: "rgba(255,255,255,0.08)", headerGrad: ["#060B18", "#0D1B3E"] as [string, string] },
 };
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? TH.dark : TH.light };
-}
 
 type OrderStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
 
@@ -152,7 +148,8 @@ function OrderCard({
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function CompanyOrders() {
   const router         = useRouter();
-  const { isDark, t }  = useTheme();
+  const { isDark } = useAppTheme();
+  const t = isDark ? TH.dark : TH.light;
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
 
   const { data, isLoading, refetch, isFetching } = useGetCompanyOrdersQuery({ paginate: false });

@@ -1,9 +1,6 @@
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useGetUserByIdQuery,
@@ -14,86 +11,224 @@ import { useCreateHistoryMutation } from "@/services/historyService";
 import { useCreateNotificationMutation } from "@/services/notificationService";
 import { Image } from "expo-image";
 import {
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
-  StatusBar,
-  useColorScheme,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { API_URL_BASE } from "@/constants/api";
-import { Colors } from "@/constants/theme";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── Hook thème (même pattern) ─────────────────────────────────────── */
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-/* ─── PALETTE BRAND (fixe) ───────────────────────────────────────────── */
-const B = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
+/* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:    "#0035C5",
+  bg:         "#F9F9F9",
+  surface:    "#FFFFFF",
+  onSurface:  "#1A1C1C",
+  onSurfVar:  "#434657",
+  secondary:  "#5C5E63",
+  outlineVar: "#C4C5DA",
+  outline:    "#747688",
+  green:      "#22C55E",
+  amber:      "#F59E0B",
+  error:      "#DC2626",
 };
 
-/* ─── FIELD CONFIG is now built inside the component to use tr() ─────── */
+const DARK: typeof LIGHT = {
+  primary:    "#4D8DFF",
+  bg:         "#0B1220",
+  surface:    "#121A2B",
+  onSurface:  "#EAF0FF",
+  onSurfVar:  "#9FB0D0",
+  secondary:  "#9FB0D0",
+  outlineVar: "#1F2A44",
+  outline:    "#9FB0D0",
+  green:      "#22C55E",
+  amber:      "#F59E0B",
+  error:      "#FF5A5A",
+};
+
+/* ─── STYLES FACTORY ──────────────────────────────────────────────────── */
+function mkS(C: typeof LIGHT) {
+  const s = StyleSheet.create({
+    fill: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center" },
+    loadTxt: { fontFamily: "NexaLight", fontSize: 14, color: C.outline, marginTop: 12 },
+
+    /* top bar */
+    topBar: {
+      position: "absolute", top: 0, left: 0, right: 0, zIndex: 50,
+      backgroundColor: C.surface,
+      borderBottomWidth: 1, borderBottomColor: C.outlineVar + "2E",
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      paddingHorizontal: 16, paddingBottom: 12,
+      elevation: 2,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05, shadowRadius: 4,
+    },
+    topBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+    topTitle: {
+      fontFamily: "NexaBold", fontSize: 17, color: C.primary,
+    },
+    notifDot: {
+      position: "absolute", top: 8, right: 8,
+      width: 8, height: 8, borderRadius: 4,
+      backgroundColor: C.primary,
+      borderWidth: 2, borderColor: C.surface,
+    },
+
+    scroll: { paddingHorizontal: 16 },
+
+    /* avatar */
+    avatarSection: { alignItems: "center", marginBottom: 24 },
+    avatarWrap:    { position: "relative", marginBottom: 12 },
+    avatarRing: {
+      width: 112, height: 112, borderRadius: 56,
+      backgroundColor: C.outlineVar + "40",
+      borderWidth: 3, borderColor: C.surface,
+      overflow: "hidden", alignItems: "center", justifyContent: "center",
+      elevation: 4,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.10, shadowRadius: 8,
+    },
+    avatarImg: { width: "100%", height: "100%" },
+    cameraBadge: {
+      position: "absolute", bottom: 2, right: 2,
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: C.primary,
+      alignItems: "center", justifyContent: "center",
+      borderWidth: 2.5, borderColor: C.surface,
+      elevation: 3,
+      shadowColor: C.primary, shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3, shadowRadius: 4,
+    },
+    profileName:  { fontFamily: "NexaBold", fontSize: 20, color: C.onSurface },
+    profilePoste: {
+      fontFamily: "NexaLight", fontSize: 11, color: C.secondary,
+      textTransform: "uppercase", letterSpacing: 1.5, marginTop: 2, opacity: 0.8,
+    },
+
+    /* form card */
+    card: {
+      backgroundColor: C.surface,
+      borderRadius: 20, padding: 20, marginBottom: 16,
+      borderWidth: 1, borderColor: C.outlineVar + "26",
+      elevation: 2,
+      shadowColor: "rgba(0,71,255,0.06)",
+      shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12,
+    },
+    cardTitle: {
+      fontFamily: "NexaBold", fontSize: 17, color: C.onSurface, marginBottom: 16,
+    },
+
+    /* save button */
+    saveBtn: {
+      marginTop: 8, backgroundColor: C.primary,
+      borderRadius: 14, paddingVertical: 16,
+      alignItems: "center",
+      elevation: 3,
+      shadowColor: C.primary, shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25, shadowRadius: 8,
+    },
+    saveTxt: { fontFamily: "NexaBold", fontSize: 15, color: "#FFFFFF" },
+
+    /* sections */
+    section: { marginBottom: 16 },
+    group: {
+      backgroundColor: C.surface,
+      borderRadius: 16, overflow: "hidden",
+      borderWidth: 1, borderColor: C.outlineVar + "26",
+      elevation: 1,
+      shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04, shadowRadius: 4,
+    },
+    divider: { height: 1, backgroundColor: C.outlineVar + "26", marginHorizontal: 16 },
+  });
+
+  const f = StyleSheet.create({
+    wrap:  { marginBottom: 12 },
+    label: {
+      fontFamily: "NexaLight", fontSize: 10, color: C.onSurfVar,
+      textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 5, marginLeft: 2,
+    },
+    box: {
+      flexDirection: "row", alignItems: "center", gap: 10,
+      backgroundColor: C.bg, borderWidth: 1.5,
+      borderRadius: 14, paddingHorizontal: 14, height: 50,
+    },
+    input: {
+      flex: 1, fontFamily: "NexaLight", fontSize: 14, color: C.onSurface,
+    },
+  });
+
+  const mr = StyleSheet.create({
+    row: {
+      flexDirection: "row", alignItems: "center", gap: 14,
+      padding: 16, backgroundColor: C.surface,
+    },
+    dangerRow: { backgroundColor: "rgba(255,218,214,0.25)" },
+    iconBox: {
+      width: 40, height: 40, borderRadius: 12,
+      alignItems: "center", justifyContent: "center",
+    },
+    title: { fontFamily: "NexaBold", fontSize: 14, color: C.onSurface },
+    sub:   { fontFamily: "NexaLight", fontSize: 12, color: C.secondary, marginTop: 1 },
+  });
+
+  const sl = StyleSheet.create({
+    text: {
+      fontFamily: "NexaLight", fontSize: 10, color: C.onSurfVar,
+      textTransform: "uppercase", letterSpacing: 1.5,
+      marginBottom: 8, marginLeft: 2,
+    },
+  });
+
+  return { s, f, mr, sl };
+}
+
+type Styles = ReturnType<typeof mkS>;
 
 type FieldKey = "username" | "nom" | "poste" | "email" | "tel" | "adresse";
 
-/* ─── ANIMATED INPUT ─────────────────────────────────────────────────── */
-function AnimatedField({
-  fieldKey, label, icon, keyboard, placeholder, value, onChange, isDark, t,
+/* ─── FIELD ROW ──────────────────────────────────────────────────────── */
+function FieldRow({
+  label, icon, value, onChange, placeholder, keyboard, fieldKey,
+  C, fst,
 }: {
-  fieldKey: FieldKey; label: string; icon: any; keyboard: any;
-  placeholder: string; value: string;
+  label: string; icon: string; value: string; placeholder: string;
+  keyboard: any; fieldKey: FieldKey;
   onChange: (k: FieldKey, v: string) => void;
-  isDark: boolean; t: any;
+  C: typeof LIGHT; fst: Styles["f"];
 }) {
-  const focused = useRef(new Animated.Value(0)).current;
+  const border = useRef(new Animated.Value(0)).current;
+  const focus  = () => Animated.timing(border, { toValue: 1, duration: 180, useNativeDriver: false }).start();
+  const blur   = () => Animated.timing(border, { toValue: 0, duration: 180, useNativeDriver: false }).start();
 
-  const focus = () => Animated.timing(focused, { toValue: 1, duration: 200, useNativeDriver: false }).start();
-  const blur  = () => Animated.timing(focused, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-
-  const borderColor = focused.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [
-      isDark ? "rgba(77,150,255,0.20)" : "rgba(3,83,204,0.12)",
-      B.primary,
-    ],
-  });
-  const bgColor = focused.interpolate({
-    inputRange:  [0, 1],
-    outputRange: [
-      isDark ? "rgba(30,42,60,0.80)" : "rgba(3,83,204,0.06)",
-      isDark ? "rgba(30,58,110,0.60)" : "rgba(3,83,204,0.10)",
-    ],
+  const borderCol = border.interpolate({
+    inputRange: [0, 1],
+    outputRange: [C.outlineVar + "80", C.primary],
   });
 
   return (
-    <View style={s.fieldWrap}>
-      <Text style={[s.label, { color: isDark ? "#93C5FD" : B.primary }]}>
-        {label}
-      </Text>
-      <Animated.View style={[s.inputBox, { borderColor, backgroundColor: bgColor }]}>
-        <Ionicons name={icon} size={18} color={isDark ? "#93C5FD" : B.primary} style={{ opacity: 0.75 }} />
+    <View style={fst.wrap}>
+      <Text style={fst.label}>{label}</Text>
+      <Animated.View style={[fst.box, { borderColor: borderCol }]}>
+        <Ionicons name={icon as any} size={18} color={C.primary + "59"} />
         <TextInput
-          style={[s.input, { color: isDark ? t.text : "#0D1B3E" }]}
+          style={fst.input}
           value={value}
-          onChangeText={(v) => onChange(fieldKey, v)}
+          onChangeText={v => onChange(fieldKey, v)}
           placeholder={placeholder}
-          placeholderTextColor={isDark ? "rgba(148,163,184,0.5)" : "#7B8DB0"}
-          keyboardType={keyboard as any}
+          placeholderTextColor={C.outline}
+          keyboardType={keyboard}
           onFocus={focus}
           onBlur={blur}
           returnKeyType="next"
@@ -103,21 +238,56 @@ function AnimatedField({
   );
 }
 
-/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
+/* ─── MENU ROW ───────────────────────────────────────────────────────── */
+function MenuRow({
+  icon, iconBg, iconColor, title, sub, onPress, danger = false,
+  C, mst,
+}: {
+  icon: string; iconBg: string; iconColor: string;
+  title: string; sub: string; onPress: () => void; danger?: boolean;
+  C: typeof LIGHT; mst: Styles["mr"];
+}) {
+  return (
+    <TouchableOpacity
+      style={[mst.row, danger && mst.dangerRow]}
+      onPress={onPress}
+      activeOpacity={0.78}
+    >
+      <View style={[mst.iconBox, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon as any} size={20} color={iconColor} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[mst.title, danger && { color: C.error }]}>{title}</Text>
+        <Text style={[mst.sub, danger && { color: C.error + "B3" }]}>{sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={danger ? C.error : C.outlineVar} />
+    </TouchableOpacity>
+  );
+}
+
+/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
+function SLabel({ title, sst }: { title: string; sst: Styles["sl"] }) {
+  return <Text style={sst.text}>{title}</Text>;
+}
+
+/* ─── MAIN ────────────────────────────────────────────────────────────── */
 export default function ProfileScreen() {
-  const router = useRouter();
-  const { isDark, t } = useTheme();
-  const { t: tr } = useTranslation();
+  const router  = useRouter();
+  const insets  = useSafeAreaInsets();
+  const { t }   = useTranslation();
+
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const { s, f, mr, sl } = useMemo(() => mkS(C), [isDark]);
 
   const FIELDS = [
-    { key: "username", label: tr("profile.username"),  icon: "person-circle-outline", keyboard: "default",       placeholder: tr("profile.usernamePH")    },
-    { key: "nom",      label: tr("profile.fullName"),   icon: "person-outline",        keyboard: "default",       placeholder: tr("profile.fullNamePH")     },
-    { key: "poste",    label: tr("profile.position"),   icon: "briefcase-outline",     keyboard: "default",       placeholder: tr("profile.positionPH")     },
-    { key: "email",    label: tr("profile.email"),      icon: "mail-outline",          keyboard: "email-address", placeholder: tr("profile.emailPH")        },
-    { key: "tel",      label: tr("profile.phone"),      icon: "call-outline",          keyboard: "phone-pad",     placeholder: tr("profile.phonePH")        },
-    { key: "adresse",  label: tr("profile.address"),    icon: "location-outline",      keyboard: "default",       placeholder: tr("profile.addressPH")      },
+    { key: "username", label: t("profile.username"),  icon: "person-circle-outline",  keyboard: "default",       placeholder: t("profile.usernamePH")  },
+    { key: "nom",      label: t("profile.fullName"),  icon: "person-outline",          keyboard: "default",       placeholder: t("profile.fullNamePH")  },
+    { key: "poste",    label: t("profile.position"),  icon: "briefcase-outline",       keyboard: "default",       placeholder: t("profile.positionPH")  },
+    { key: "email",    label: t("profile.email"),     icon: "mail-outline",            keyboard: "email-address", placeholder: t("profile.emailPH")     },
+    { key: "tel",      label: t("profile.phone"),     icon: "call-outline",            keyboard: "phone-pad",     placeholder: t("profile.phonePH")     },
+    { key: "adresse",  label: t("profile.address"),   icon: "location-outline",        keyboard: "default",       placeholder: t("profile.addressPH")   },
   ] as const;
-  const scrollAnim = useRef(new Animated.Value(0)).current;
 
   const [userId,  setUserId]  = useState<string | null>(null);
   const [profile, setProfile] = useState({
@@ -126,8 +296,8 @@ export default function ProfileScreen() {
 
   const { data: user, isLoading, isError, refetch } = useGetUserByIdQuery(userId!, { skip: !userId });
   const [updateUser,         { isLoading: isUpdating }]  = useUpdateUserMutation();
-  const [createHistory,      { isLoading: isLoadHist }]  = useCreateHistoryMutation();
-  const [createNotification, { isLoading: isLoadNotif }] = useCreateNotificationMutation();
+  const [createHistory]                                   = useCreateHistoryMutation();
+  const [createNotification]                              = useCreateNotificationMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
@@ -142,14 +312,13 @@ export default function ProfileScreen() {
       adresse:  user.adresse   || "",
       photo:    user.imageUrl
         ? user.imageUrl.startsWith("http") ? user.imageUrl : `${API_URL_BASE}${user.imageUrl}`
-        : "https://www.w3schools.com/howto/img_avatar.png",
+        : "",
     });
   }, [user]);
 
   const handleChange = (field: FieldKey | "photo", value: string) =>
     setProfile(p => ({ ...p, [field]: value }));
 
-  /* ── upload image ── */
   const uploadImage = async (uri: string) => {
     const token    = await AsyncStorage.getItem("token");
     if (!userId) return;
@@ -167,7 +336,7 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert(tr("common.permDenied"), tr("profile.permDenied")); return; }
+    if (!granted) { Alert.alert(t("common.permDenied"), t("profile.permDenied")); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images as any,
       quality: 0.7, allowsEditing: true,
@@ -175,12 +344,15 @@ export default function ProfileScreen() {
     if (!result.canceled) {
       const uri = result.assets[0].uri;
       handleChange("photo", uri);
-      try { await uploadImage(uri); refetch(); Alert.alert("✅ Succès", tr("profile.photoSuccess")); }
-      catch { Alert.alert("Erreur", tr("profile.photoError")); }
+      try {
+        await uploadImage(uri); refetch();
+        Alert.alert("✅", t("profile.photoSuccess"));
+      } catch {
+        Alert.alert("Erreur", t("profile.photoError"));
+      }
     }
   };
 
-  /* ── save ── */
   const handleSave = async () => {
     if (!userId) return;
     try {
@@ -191,372 +363,164 @@ export default function ProfileScreen() {
       fd.append("email",     profile.email);
       fd.append("telephone", profile.tel);
       fd.append("adresse",   profile.adresse);
-      const res = await updateUser({ id: userId, formData: fd });
-      if (res) {
-        await createHistory({ type: "MODIFICATION_PROFIL", description: "Profil mis à jour.", userId, action: "Profil modifié ✅" });
-        await createNotification({ title: "Profil mis à jour", message: "Votre profil a été mis à jour avec succès.", type: "SUCCESS", userId });
-      }
-      Alert.alert("✅ Succès", tr("profile.profileSuccess"));
+      await updateUser({ id: userId, formData: fd });
+      await createHistory({ type: "MODIFICATION_PROFIL", description: "Profil mis à jour.", userId, action: "Profil modifié ✅" });
+      await createNotification({ title: "Profil mis à jour", message: "Votre profil a été mis à jour avec succès.", type: "SUCCESS", userId });
+      Alert.alert("✅", t("profile.profileSuccess"));
     } catch (err: any) {
-      await createHistory({ type: "MODIFICATION_PROFIL", description: "Échec de la mise à jour.", userId, action: "Échec ❌" });
-      await createNotification({ title: "Erreur", message: "Mise à jour du profil échouée.", type: "ERREUR", userId });
       Alert.alert("Erreur", err?.message || "Impossible de mettre à jour");
     }
   };
 
-  /* ── header shrink ── */
-  const headerHeight = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [190, 120], extrapolate: "clamp" });
-  const avatarScale  = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [1, 0.7],   extrapolate: "clamp" });
-  const avatarTop    = scrollAnim.interpolate({ inputRange: [0, 80], outputRange: [110, 65],   extrapolate: "clamp" });
-
-  /* ── gradient selon thème ── */
-  const headerGradient: [string, string] = isDark
-    ? ["#1A1F3A", "#0A1628"]
-    : [B.deep, B.primary];
+  const TOP_H = (Platform.OS === "ios" ? insets.top : StatusBar.currentHeight ?? 0) + 56;
 
   if (isLoading) return (
-    <View style={[s.centerFill, { backgroundColor: isDark ? "#0A1628" : B.primary }]}>
-      <LinearGradient colors={headerGradient} style={StyleSheet.absoluteFill} />
-      <Text style={{ color: B.white, fontSize: 16, fontFamily: "NexaLight" }}>{tr("common.loading")}</Text>
+    <View style={s.fill}>
+      <Text style={s.loadTxt}>Chargement…</Text>
     </View>
   );
 
   if (isError) return (
-    <View style={[s.centerFill, { backgroundColor: isDark ? t.background : "#f0f4ff" }]}>
-      <Ionicons name="cloud-offline-outline" size={48} color={isDark ? "#4D96FF" : "#7B8DB0"} />
-      <Text style={{ color: isDark ? "#93C5FD" : "#7B8DB0", marginTop: 12, fontFamily: "NexaLight" }}>
-        {tr("profile.loadError")}
-      </Text>
+    <View style={s.fill}>
+      <Ionicons name="cloud-offline-outline" size={48} color={C.outlineVar} />
+      <Text style={s.loadTxt}>{t("profile.loadError")}</Text>
     </View>
   );
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <StatusBar barStyle="light-content" />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.surface} />
 
-      <View style={[s.root, { backgroundColor: isDark ? t.background : B.white }]}>
+      {/* ── TOP BAR (fixe) ── */}
+      <View style={[s.topBar, {
+        paddingTop: Platform.OS === "ios" ? insets.top : (StatusBar.currentHeight ?? 0) + 8,
+      }]}>
+        <TouchableOpacity onPress={() => router.back()} style={s.topBtn}>
+          <Ionicons name="arrow-back" size={22} color={C.onSurface} />
+        </TouchableOpacity>
 
-        {/* ── ANIMATED HEADER ── */}
-        <Animated.View style={[s.header, {
-          height: headerHeight,
-          shadowColor: isDark ? "#000" : B.primary,
-        }]}>
-          <LinearGradient
-            colors={headerGradient}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[s.deco1, {
-            backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(255,255,255,0.06)",
-            borderWidth: isDark ? 1 : 0,
-            borderColor: "rgba(77,150,255,0.15)",
-          }]} />
-          <View style={[s.deco2, {
-            backgroundColor: isDark ? "rgba(57,6,199,0.18)" : "rgba(255,255,255,0.04)",
-          }]} />
+        <Text style={s.topTitle}>Mon Profil</Text>
 
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={22} color={B.white} />
-            </TouchableOpacity>
-            <Text style={s.headerTitle}>{tr("profile.title")}</Text>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-              <Ionicons name="notifications-outline" size={22} color={B.white} />
-              <View style={[s.notifDot, { borderColor: isDark ? "#1A1F3A" : B.deep }]} />
+        <TouchableOpacity onPress={() => router.push("/notification")} style={s.topBtn}>
+          <Ionicons name="notifications-outline" size={22} color={C.onSurface} />
+          <View style={s.notifDot} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── SCROLL ── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[s.scroll, { paddingTop: TOP_H + 16 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+
+        {/* ── AVATAR ── */}
+        <View style={s.avatarSection}>
+          <View style={s.avatarWrap}>
+            <View style={s.avatarRing}>
+              {profile.photo
+                ? <Image source={{ uri: profile.photo }} contentFit="cover" style={s.avatarImg} />
+                : <Ionicons name="person" size={52} color={C.outlineVar} />
+              }
+            </View>
+            <TouchableOpacity style={s.cameraBadge} onPress={handlePickImage}>
+              <Ionicons name="camera" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </Animated.View>
-
-        {/* ── FLOATING AVATAR ── */}
-        <Animated.View style={[s.avatarOuter, { top: avatarTop, transform: [{ scale: avatarScale }] }]}>
-          <TouchableOpacity onPress={handlePickImage} activeOpacity={0.85}>
-            <View style={[s.avatarRing, {
-              borderColor: isDark ? "#4D96FF" : B.gold,
-              shadowColor: isDark ? "#4D96FF" : B.primary,
-            }]}>
-              <Image source={{ uri: profile.photo }} contentFit="cover" transition={300} style={s.avatar} />
-            </View>
-            <View style={s.cameraBadge}>
-              <Ionicons name="camera" size={14} color={B.white} />
-            </View>
-          </TouchableOpacity>
-
-          <Text style={[s.profileName, { color: isDark ? t.text : "#0D1B3E" }]}>
-            {profile.nom || profile.username || "Votre nom"}
-          </Text>
-          <Text style={[s.profilePoste, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>
-            {profile.poste || tr("profile.defaultPosition")}
-          </Text>
-        </Animated.View>
+          <Text style={s.profileName}>{profile.nom || profile.username || "Votre nom"}</Text>
+          <Text style={s.profilePoste}>{profile.poste || t("profile.defaultPosition")}</Text>
+        </View>
 
         {/* ── FORM CARD ── */}
-        <Animated.ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={s.scrollContent}
-          showsVerticalScrollIndicator={false}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollAnim } } }],
-            { useNativeDriver: false }
-          )}
-          scrollEventThrottle={16}
-        >
-          <View style={[s.card, {
-            backgroundColor: isDark ? t.card : B.white,
-            shadowColor:     isDark ? "#000" : "#000",
-            shadowOpacity:   isDark ? 0.3 : 0.07,
-            // Bordure subtile en dark
-            borderWidth:  isDark ? 1 : 0,
-            borderColor:  isDark ? "rgba(77,150,255,0.15)" : "transparent",
-          }]}>
-            <Text style={[s.sectionTitle, { color: isDark ? t.text : "#0D1B3E" }]}>
-              {tr("profile.infoSection")}
-            </Text>
+        <View style={s.card}>
+          <Text style={s.cardTitle}>Informations personnelles</Text>
 
-            {FIELDS.map(f => (
-              <AnimatedField
-                key={f.key}
-                fieldKey={f.key}
-                label={f.label}
-                icon={f.icon}
-                keyboard={f.keyboard}
-                placeholder={f.placeholder}
-                value={profile[f.key]}
-                onChange={handleChange}
-                isDark={isDark}
-                t={t}
-              />
-            ))}
+          {FIELDS.map(fi => (
+            <FieldRow
+              key={fi.key}
+              fieldKey={fi.key}
+              label={fi.label}
+              icon={fi.icon}
+              keyboard={fi.keyboard}
+              placeholder={fi.placeholder}
+              value={profile[fi.key]}
+              onChange={handleChange}
+              C={C}
+              fst={f}
+            />
+          ))}
 
-            <View style={s.saveBtn}>
-              <GradientButton
-                isLoad={isUpdating || isLoadHist || isLoadNotif}
-                title={tr("profile.save")}
-                onPress={handleSave}
-                leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
-                rightIcon={<ArrowRightIcon width={26} height={20} />}
-              />
-            </View>
+          <TouchableOpacity
+            style={[s.saveBtn, isUpdating && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={isUpdating}
+            activeOpacity={0.85}
+          >
+            {isUpdating
+              ? <Ionicons name="hourglass-outline" size={18} color="#fff" />
+              : <Text style={s.saveTxt}>Enregistrer les modifications</Text>
+            }
+          </TouchableOpacity>
+        </View>
+
+        {/* ── ACTIVITÉS ── */}
+        <View style={s.section}>
+          <SLabel title="ACTIVITÉS" sst={sl} />
+          <View style={s.group}>
+            <MenuRow
+              icon="receipt-outline" iconBg={C.primary + "0F"} iconColor={C.primary}
+              title="Mes commandes" sub="Suivre et consulter vos commandes"
+              onPress={() => router.push("/mes-commandes" as any)}
+              C={C} mst={mr}
+            />
+            <View style={s.divider} />
+            <MenuRow
+              icon="cart-outline" iconBg={C.primary + "0F"} iconColor={C.primary}
+              title="Mon panier" sub="Voir et gérer votre panier d'achats"
+              onPress={() => router.push("/bim-supermarche/cart")}
+              C={C} mst={mr}
+            />
           </View>
+        </View>
 
-          {/* ── Mes commandes ── */}
-          <TouchableOpacity
-            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.10)" }]}
-            onPress={() => router.push("/bim-supermarche/my-orders")}
-            activeOpacity={0.82}
-          >
-            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(3,83,204,0.15)" : "rgba(3,83,204,0.08)" }]}>
-              <Ionicons name="receipt-outline" size={20} color={B.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.ordersTitle, { color: isDark ? t.text : "#0D1B3E" }]}>Mes commandes</Text>
-              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Suivre et consulter vos commandes</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
-          </TouchableOpacity>
+        {/* ── SERVICES ── */}
+        <View style={s.section}>
+          <SLabel title="SERVICES" sst={sl} />
+          <View style={s.group}>
+            <MenuRow
+              icon="bicycle" iconBg={C.green + "14"} iconColor={C.green}
+              title="Espace Livreur" sub="Accéder à votre espace de livraison"
+              onPress={() => router.push("/livreur/login")}
+              C={C} mst={mr}
+            />
+            <View style={s.divider} />
+            <MenuRow
+              icon="paper-plane-outline" iconBg={C.amber + "14"} iconColor={C.amber}
+              title="Devenir livreur" sub="Soumettre votre candidature"
+              onPress={() => router.push("/livreur/apply")}
+              C={C} mst={mr}
+            />
+          </View>
+        </View>
 
-          {/* ── Mon panier ── */}
-          <TouchableOpacity
-            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.10)", marginTop: 10 }]}
-            onPress={() => router.push("/bim-supermarche/cart")}
-            activeOpacity={0.82}
-          >
-            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(3,83,204,0.15)" : "rgba(3,83,204,0.08)" }]}>
-              <Ionicons name="cart-outline" size={20} color={B.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.ordersTitle, { color: isDark ? t.text : "#0D1B3E" }]}>Mon panier</Text>
-              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Voir et gérer votre panier d'achats</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
-          </TouchableOpacity>
+        {/* ── ASSISTANCE ── */}
+        <View style={s.section}>
+          <SLabel title="ASSISTANCE" sst={sl} />
+          <View style={s.group}>
+            <MenuRow
+              icon="warning" iconBg={C.error + "1F"} iconColor={C.error}
+              title="BIM SOS" sub="Sécurité · Urgence · Santé — signaler à BIM NEXT"
+              onPress={() => router.push("/bim-sos")}
+              danger
+              C={C} mst={mr}
+            />
+          </View>
+        </View>
 
-          {/* ── Espace Livreur ── */}
-          <TouchableOpacity
-            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.12)", marginTop: 10 }]}
-            onPress={() => router.push("/livreur/login")}
-            activeOpacity={0.82}
-          >
-            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(34,197,94,0.15)" : "rgba(34,197,94,0.08)" }]}>
-              <Ionicons name="bicycle" size={20} color="#22C55E" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.ordersTitle, { color: "#22C55E" }]}>Espace Livreur</Text>
-              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Accéder à votre espace de livraison</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
-          </TouchableOpacity>
-
-          {/* ── Candidature livreur ── */}
-          <TouchableOpacity
-            style={[s.ordersRow, { backgroundColor: isDark ? t.card : B.white, borderColor: isDark ? "rgba(255,215,0,0.15)" : "rgba(255,165,0,0.12)", marginTop: 10 }]}
-            onPress={() => router.push("/livreur/apply")}
-            activeOpacity={0.82}
-          >
-            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(255,165,0,0.15)" : "rgba(255,165,0,0.08)" }]}>
-              <Ionicons name="paper-plane-outline" size={20} color="#F59E0B" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.ordersTitle, { color: "#F59E0B" }]}>Devenir livreur</Text>
-              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Soumettre votre candidature</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={isDark ? t.textSecondary : "#7B8DB0"} />
-          </TouchableOpacity>
-
-          {/* ── BIM SOS ── */}
-          <TouchableOpacity
-            style={[s.ordersRow, { backgroundColor: isDark ? "rgba(220,38,38,0.12)" : "#FFF5F5", borderColor: isDark ? "rgba(220,38,38,0.3)" : "rgba(220,38,38,0.2)", marginTop: 10 }]}
-            onPress={() => router.push("/bim-sos")}
-            activeOpacity={0.82}
-          >
-            <View style={[s.ordersIcon, { backgroundColor: isDark ? "rgba(220,38,38,0.2)" : "rgba(220,38,38,0.1)" }]}>
-              <Ionicons name="warning-outline" size={20} color="#DC2626" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.ordersTitle, { color: "#DC2626" }]}>BIM SOS</Text>
-              <Text style={[s.ordersSub, { color: isDark ? t.textSecondary : "#7B8DB0" }]}>Sécurité · Urgence · Santé — signaler à BIM NEXT</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#DC2626" />
-          </TouchableOpacity>
-
-          <View style={{ height: 60 }} />
-        </Animated.ScrollView>
-      </View>
+        <View style={{ height: insets.bottom + 80 }} />
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const B_bg = "#0353CC";
-
-const s = StyleSheet.create({
-  root: { flex: 1 },
-
-  centerFill: {
-    flex: 1, justifyContent: "center", alignItems: "center",
-  },
-
-  header: {
-    width: "100%",
-    overflow: "hidden",
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-  },
-
-  deco1: {
-    position: "absolute", width: 200, height: 200,
-    borderRadius: 100,
-    top: -60, right: -50,
-  },
-  deco2: {
-    position: "absolute", width: 140, height: 140,
-    borderRadius: 70,
-    bottom: -30, left: -20,
-  },
-
-  topBar: {
-    marginTop: Platform.OS === "ios" ? 48 : 32,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-  },
-
-  headerTitle: {
-    color: B.white, fontSize: 18,
-    fontFamily: "NexaLight", letterSpacing: 0.3,
-  },
-
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-
-  notifDot: {
-    position: "absolute", top: 8, right: 8,
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: B.gold, borderWidth: 1.5,
-  },
-
-  avatarOuter: {
-    position: "absolute", left: 0, right: 0,
-    alignItems: "center", zIndex: 10,
-  },
-
-  avatarRing: {
-    width: 96, height: 96, borderRadius: 48,
-    borderWidth: 3,
-    overflow: "hidden",
-    elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8,
-  },
-
-  avatar: { width: "100%", height: "100%" },
-
-  cameraBadge: {
-    position: "absolute", bottom: 0, right: 0,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: B.accent,
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: B.white,
-  },
-
-  profileName: {
-    marginTop: 8, fontSize: 16,
-    fontFamily: "NexaLight", letterSpacing: 0.2,
-  },
-  profilePoste: {
-    fontSize: 12, marginTop: 1,
-    fontFamily: "NexaLight",
-  },
-
-  scrollContent: { paddingTop: 140, paddingHorizontal: 14 },
-
-  card: {
-    borderRadius: 24, padding: 16,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 12,
-  },
-
-  sectionTitle: {
-    fontSize: 14, fontFamily: "NexaLight",
-    marginBottom: 12, letterSpacing: 0.3,
-  },
-
-  fieldWrap: { marginBottom: 10 },
-
-  label: {
-    fontSize: 11, fontFamily: "NexaLight",
-    marginBottom: 4,
-    textTransform: "uppercase", letterSpacing: 0.8,
-  },
-
-  inputBox: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 12, borderWidth: 1.5,
-    paddingHorizontal: 12, height: 46, gap: 8,
-  },
-
-  input: {
-    flex: 1, fontSize: 13, fontFamily: "NexaLight",
-  },
-
-  saveBtn: { marginTop: 6 },
-
-  ordersRow: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    marginHorizontal: 16, marginTop: 14,
-    borderRadius: 20, padding: 16,
-    borderWidth: 1,
-    elevation: 2, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
-  },
-  ordersIcon:  { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  ordersTitle: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
-  ordersSub:   { fontFamily: "NexaLight", fontSize: 11, marginTop: 2 },
-});

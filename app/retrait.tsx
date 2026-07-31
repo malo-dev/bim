@@ -1,15 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
+/* eslint-disable */
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StatusBar,
@@ -19,161 +19,98 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  Alert,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Modal from "react-native-modal";
+import RNModal from "react-native-modal";
 import { useCreateRetraitMutation } from "@/services/tsxService";
 import { useVerifyPassMutation } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
-  red:     "#DC0302",
-  error:   "#EF4444",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:  "#0035C5",
+  deep:     "#001257",
+  blue:     "#0047FF",
+  red:      "#DC0302",
+  white:    "#FFFFFF",
+  error:    "#EF4444",
+  success:  "#22C55E",
+  bg:       "#F9F9F9",
+  surface:  "#FFFFFF",
+  text:     "#1A1C1C",
+  textSec:  "#434657",
+  textMut:  "#747688",
+  border:   "rgba(196,197,218,0.40)",
+  green:    "#10B981",
+  topBarBg: "rgba(255,255,255,0.90)",
+  topBord:  "rgba(196,197,218,0.18)",
+  inputBg:  "#F9F9F9",
+  amtBg:    "#F3F3F4",
+  keyBg:    "rgba(0,53,197,0.05)",
+  cardBord: "rgba(196,197,218,0.10)",
+  chipBg:   "#FFFFFF",
+  agtBord:  "rgba(196,197,218,0.30)",
+  recapBg:  "rgba(0,53,197,0.03)",
+  recapBord:"rgba(0,53,197,0.08)",
+  infoBg:   "rgba(0,53,197,0.05)",
+  infoBord: "rgba(0,53,197,0.10)",
+  reminderBg:"rgba(0,53,197,0.04)",
+  dragBg:   "rgba(0,0,0,0.10)",
 };
-
-const Colors = {
-  light: {
-    bg:            "#F0F4FF",
-    card:          "#FFFFFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.12)",
-    inputBg:       "rgba(3,83,204,0.06)",
-    inputFocBg:    "rgba(220,3,2,0.06)",
-    headerGrad:    [C.deep, C.red] as [string, string],
-    shadow:        C.red,
-    recapBg:       "rgba(3,83,204,0.05)",
-    modalBg:       "#FFFFFF",
-    pinBorder:     "rgba(220,3,2,0.20)",
-    pinFilled:     C.red,
-    lockIconBg:    "rgba(220,3,2,0.08)",
-    keyBg:         "rgba(3,83,204,0.06)",
-    keyDelBg:      "rgba(239,68,68,0.08)",
-    infoBg:        "rgba(3,83,204,0.06)",
-    infoBorder:    "rgba(3,83,204,0.12)",
-    infoText:      "#0D1B3E",
-  },
-  dark: {
-    bg:            "#07091A",
-    card:          "#0F1228",
-    text:          "#E2E8F0",
-    textSecondary: "#556080",
-    border:        "rgba(77,150,255,0.12)",
-    inputBg:       "rgba(77,150,255,0.07)",
-    inputFocBg:    "rgba(220,3,2,0.08)",
-    headerGrad:    ["#1a0505", "#3d0101"] as [string, string],
-    shadow:        "#000",
-    recapBg:       "rgba(77,150,255,0.06)",
-    modalBg:       "#0F1228",
-    pinBorder:     "rgba(220,3,2,0.25)",
-    pinFilled:     "#ff4444",
-    lockIconBg:    "rgba(220,3,2,0.15)",
-    keyBg:         "rgba(77,150,255,0.07)",
-    keyDelBg:      "rgba(239,68,68,0.12)",
-    infoBg:        "rgba(77,150,255,0.07)",
-    infoBorder:    "rgba(77,150,255,0.12)",
-    infoText:      "#8899BB",
-  },
+const DARK: typeof LIGHT = {
+  primary:  "#4D8DFF",
+  deep:     "#0B1220",
+  blue:     "#4D8DFF",
+  red:      "#DC0302",
+  white:    "#FFFFFF",
+  error:    "#EF4444",
+  success:  "#22C55E",
+  bg:       "#0B1220",
+  surface:  "#1A2540",
+  text:     "#EAF0FF",
+  textSec:  "#9FB0D0",
+  textMut:  "#6B7A99",
+  border:   "rgba(31,42,68,0.80)",
+  green:    "#10B981",
+  topBarBg: "#1A2540",
+  topBord:  "rgba(31,42,68,0.80)",
+  inputBg:  "#0F1A2E",
+  amtBg:    "#0F1A2E",
+  keyBg:    "rgba(77,150,255,0.06)",
+  cardBord: "rgba(31,42,68,0.80)",
+  chipBg:   "#0F1A2E",
+  agtBord:  "rgba(31,42,68,0.80)",
+  recapBg:  "rgba(77,150,255,0.05)",
+  recapBord:"rgba(77,150,255,0.12)",
+  infoBg:   "rgba(77,150,255,0.05)",
+  infoBord: "rgba(77,150,255,0.12)",
+  reminderBg:"rgba(77,150,255,0.06)",
+  dragBg:   "rgba(255,255,255,0.12)",
 };
-
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-/* ─── METHODS ────────────────────────────────────────────────────────── */
-const METHODS = [
-  { id: "bim", name: "AgentBim", logo: "https://www.cit.fr/uploads/media/20944196.jpg", color: "#0353CC" },
-];
 
 const SHORTCUTS = ["500", "1000", "2500", "5000"];
 
-/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
-function SectionLabel({ title, icon }: { title: string; icon: string }) {
-  return (
-    <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color={C.red} style={{ opacity: 0.8 }} />
-      <Text style={sl.text}>{title}</Text>
-    </View>
-  );
-}
-
-/* ─── METHOD CARD ────────────────────────────────────────────────────── */
-function MethodCard({
-  item, selected, onPress,
-}: { item: typeof METHODS[number]; selected: boolean; onPress: () => void }) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.94, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
-
-  return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
-      <Animated.View style={[
-        ms.card,
-        selected && { borderColor: C.gold, borderWidth: 2.5 },
-        { transform: [{ scale }] },
-      ]}>
-        <LinearGradient
-          colors={[C.deep, C.red + "CC"]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={ms.deco} />
-        {selected && (
-          <View style={ms.checkBadge}>
-            <Ionicons name="checkmark" size={10} color={C.deep} />
-          </View>
-        )}
-        <Image source={{ uri: item.logo }} style={ms.logo} contentFit="contain" transition={200} />
-        <Text style={ms.name}>{item.name}</Text>
-        <View style={ms.agentBadge}>
-          <Ionicons name="person-outline" size={10} color={C.white} />
-          <Text style={ms.agentText}>Agent officiel</Text>
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
 /* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value, t }: { value: string; t: typeof Colors.light }) {
+function PinDots({ value }: { value: string }) {
   return (
     <View style={pd.row}>
       {Array.from({ length: 6 }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            pd.dot,
-            {
-              backgroundColor: i < value.length ? t.pinFilled : "transparent",
-              borderColor:     i < value.length ? t.pinFilled : t.pinBorder,
-            },
-          ]}
-        />
+        <View key={i} style={[pd.dot, {
+          backgroundColor: i < value.length ? C.red : "transparent",
+          borderColor:     i < value.length ? C.red : "rgba(220,3,2,0.22)",
+        }]} />
       ))}
     </View>
   );
 }
 
 /* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({
-  onPress, onDelete, t, isDark,
-}: {
-  onPress: (v: string) => void;
-  onDelete: () => void;
-  t: typeof Colors.light;
-  isDark: boolean;
-}) {
+function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return (
     <View style={kp.grid}>
@@ -183,17 +120,14 @@ function Keypad({
         return (
           <TouchableOpacity
             key={i}
-            style={[
-              kp.key,
-              {
-                backgroundColor: isDel ? t.keyDelBg : t.keyBg,
-                borderColor:     isDel ? "rgba(239,68,68,0.20)" : t.border,
-              },
-            ]}
+            style={[kp.key, {
+              backgroundColor: C.keyBg,
+              borderColor:     C.border,
+            }]}
             onPress={() => isDel ? onDelete() : onPress(k)}
             activeOpacity={0.7}
           >
-            <Text style={[kp.keyText, { color: isDel ? C.error : t.text }]}>{k}</Text>
+            <Text style={[kp.keyText, { color: C.text }]}>{k}</Text>
           </TouchableOpacity>
         );
       })}
@@ -201,17 +135,20 @@ function Keypad({
   );
 }
 
-/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
+/* ─── SCREEN ─────────────────────────────────────────────────────────── */
 export default function RetraitScreen() {
   const router = useRouter();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s  = useMemo(() => mkS(C), [isDark]);
+  const fb = useMemo(() => mkFb(C), [isDark]);
+  const { unread } = useUnreadNotifications();
 
-  const [amount,         setAmount]         = useState("");
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
-  const [phone,          setPhone]          = useState("");
-  const [userId,         setUserId]         = useState<string | null>(null);
+  const [amount,        setAmount]        = useState("");
+  const [agentSelected, setAgentSelected] = useState(false);
+  const [phone,         setPhone]         = useState("");
+  const [userId,        setUserId]        = useState<string | null>(null);
 
-  /* PIN modal */
   const [showPinModal,  setShowPinModal]  = useState(false);
   const [pinValue,      setPinValue]      = useState("");
   const [pinError,      setPinError]      = useState("");
@@ -219,287 +156,270 @@ export default function RetraitScreen() {
   const [loadingPay,    setLoadingPay]    = useState(false);
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  const inputFocAmt = useRef(new Animated.Value(0)).current;
-  const inputFocPh  = useRef(new Animated.Value(0)).current;
-  const cardAnim    = useRef(new Animated.Value(50)).current;
-  const cardOpac    = useRef(new Animated.Value(0)).current;
+  const [feedback,    setFeedback]    = useState<"success" | "error" | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const fbScale = useRef(new Animated.Value(0.85)).current;
+  const fbOpac  = useRef(new Animated.Value(0)).current;
 
   const [createRetrait] = useCreateRetraitMutation();
   const [verifyPass]    = useVerifyPassMutation();
 
-  useEffect(() => {
-    AsyncStorage.getItem("userId").then(setUserId);
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+
+  const showFeedback = (type: "success" | "error", msg: string) => {
+    setFeedbackMsg(msg); setFeedback(type);
+    fbScale.setValue(0.85); fbOpac.setValue(0);
     Animated.parallel([
-      Animated.timing(cardAnim, { toValue: 0, duration: 420, delay: 100, useNativeDriver: true }),
-      Animated.timing(cardOpac, { toValue: 1, duration: 420, delay: 100, useNativeDriver: true }),
+      Animated.spring(fbScale, { toValue: 1, friction: 7, useNativeDriver: true }),
+      Animated.timing(fbOpac,  { toValue: 1, duration: 250, useNativeDriver: true }),
     ]).start();
-  }, []);
+  };
 
-  const focusAnim = (anim: Animated.Value, v: number) =>
-    Animated.timing(anim, { toValue: v, duration: 200, useNativeDriver: false }).start();
+  const hideFeedback = () => {
+    const wasSuccess = feedback === "success";
+    Animated.timing(fbOpac, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setFeedback(null);
+      if (wasSuccess) { setAmount(""); setPhone(""); setAgentSelected(false); }
+    });
+  };
 
-  const borderAmt = inputFocAmt.interpolate({ inputRange: [0, 1], outputRange: [t.border, C.red] });
-  const bgAmt     = inputFocAmt.interpolate({ inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
-  const borderPh  = inputFocPh.interpolate({  inputRange: [0, 1], outputRange: [t.border, C.red] });
-  const bgPh      = inputFocPh.interpolate({  inputRange: [0, 1], outputRange: [t.inputBg, t.inputFocBg] });
-
-  /* ── Step 1 : validate → open PIN ── */
   const handleConfirmPress = () => {
-    if (!amount || !selectedMethod || !phone) {
-      Alert.alert("Champs manquants", "Veuillez remplir tous les champs.");
-      return;
+    if (!amount || !agentSelected || !phone) {
+      showFeedback("error", "Veuillez remplir tous les champs."); return;
     }
     if (!userId) {
-      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter.");
-      return;
+      showFeedback("error", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
-    setPinValue("");
-    setPinError("");
-    setShowPinModal(true);
+    setPinValue(""); setPinError(""); setShowPinModal(true);
   };
 
-  /* Shake on wrong PIN */
-  const shakePin = () => {
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  0,  duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
+  const shakePin = () => Animated.sequence([
+    Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
+    Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
+  ]).start();
 
   const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
   const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
 
-  /* ── Step 2 : verifyPass → Step 3 : retrait ── */
   const handleConfirmPin = async () => {
     if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
     if (!userId) return;
-
     try {
       setLoadingVerify(true);
       await verifyPass({ userId, password: pinValue }).unwrap();
     } catch {
-      shakePin();
-      setPinError("Mot de passe incorrect. Réessayez.");
-      setPinValue("");
-      setLoadingVerify(false);
-      return;
+      shakePin(); setPinError("Mot de passe incorrect. Réessayez."); setPinValue(""); setLoadingVerify(false); return;
     }
-    setLoadingVerify(false);
-    setShowPinModal(false);
-
-    /* ── Step 3 : proceed ── */
+    setLoadingVerify(false); setShowPinModal(false);
     try {
       setLoadingPay(true);
-      const res: any = await createRetrait({
-        amount:        normalizeDecimal(amount),
-        accountNumber: phone,
-        id:            userId,
-      }).unwrap();
-
-      if (res) {
-        Alert.alert("✅ Succès", `Retrait de ${amount} Ecoins réussi !`);
-      } else {
-        Alert.alert("Échec", "Retrait échoué, veuillez réessayer.");
-      }
+      const res: any = await createRetrait({ amount: normalizeDecimal(amount), accountNumber: phone, id: userId }).unwrap();
+      if (res) showFeedback("success", `Retrait de ${amount} EC effectué avec succès !`);
+      else     showFeedback("error", "Retrait échoué, veuillez réessayer.");
     } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue lors du retrait.");
-    } finally {
-      setLoadingPay(false);
-    }
+      showFeedback("error", err?.data?.message || "Une erreur est survenue lors du retrait.");
+    } finally { setLoadingPay(false); }
   };
 
   return (
     <KeyboardAvoidingView
-      style={[{ flex: 1 }, { backgroundColor: t.bg }]}
+      style={{ flex: 1, backgroundColor: C.bg }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      {/* ── TOP BAR ──────────────────────────────────────────────────── */}
+      <SafeAreaView edges={["top"]} style={s.safeTop}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <Text style={s.topBarTitle}>
+            Faire un retrait
+          </Text>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification" as any)}>
+            <Ionicons name="notifications-outline" size={22} color={C.primary} />
+            {unread > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView
-          contentContainerStyle={[s.scroll, { backgroundColor: t.bg }]}
+          contentContainerStyle={s.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* ── HEADER ── */}
-          <View style={[s.header, { shadowColor: t.shadow }]}>
-            <LinearGradient
-              colors={t.headerGrad}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={s.deco1} />
-            <View style={s.deco2} />
-
-            <SafeAreaView edges={["top"]} style={{ width: "100%" }}>
-              <View style={s.topBar}>
-                <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-                  <Ionicons name="arrow-back" size={22} color={C.white} />
-                </TouchableOpacity>
-                <Text style={s.headerTitle}>Faire un retrait</Text>
-                <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-                  <Ionicons name="notifications-outline" size={22} color={C.white} />
-                </TouchableOpacity>
-              </View>
-            </SafeAreaView>
-
-            <View style={s.headerIcon}>
-              <Ionicons name="arrow-down-circle-outline" size={32} color={C.white} />
+          {/* ── HERO ─────────────────────────────────────────────────── */}
+          <View style={s.hero}>
+            <View style={s.heroIconWrap}>
+              <Ionicons name="wallet-outline" size={36} color={C.primary} />
             </View>
-            <Text style={s.headerSub}>Retirez vos Ecoins via un agent BIM</Text>
-          </View>
-
-          {/* ── INFO BANNER ── */}
-          <View style={[s.infoBanner, { backgroundColor: t.infoBg, borderColor: t.infoBorder }]}>
-            <Ionicons name="information-circle-outline" size={16} color={C.accent} />
-            <Text style={[s.infoText, { color: t.infoText }]}>
-              Présentez-vous chez un agent BIM agréé avec votre numéro de compte
+            <Text style={s.heroSub}>
+              Retirez vos Ecoins via un agent BIM agréé en quelques secondes.
             </Text>
           </View>
 
-          {/* ── FORM CARD ── */}
-          <Animated.View style={[
-            s.card,
-            {
-              backgroundColor: t.card,
-              shadowColor: t.shadow,
-              borderColor: isDark ? t.border : "transparent",
-              borderWidth: isDark ? 1 : 0,
-              opacity: cardOpac,
-              transform: [{ translateY: cardAnim }],
-            },
-          ]}>
-            {isDark && <View style={s.cardShimmer} />}
+          {/* ── INFO BANNER ──────────────────────────────────────────── */}
+          <View style={s.infoBanner}>
+            <Ionicons name="information-circle-outline" size={18} color={C.primary} />
+            <Text style={s.infoText}>
+              Présentez-vous chez un agent BIM agréé avec votre numéro de compte pour valider l'opération.
+            </Text>
+          </View>
 
-            {/* Montant */}
-            <SectionLabel title="MONTANT À RETIRER" icon="cash-outline" />
-            <Animated.View style={[s.inputBox, { borderColor: borderAmt, backgroundColor: bgAmt }]}>
-              <Text style={[s.currency, { color: C.red }]}>EC</Text>
+          {/* ── FORM CARD ────────────────────────────────────────────── */}
+          <View style={s.card}>
+
+            {/* Amount section */}
+            <View style={s.sectionHead}>
+              <Ionicons name="cash-outline" size={17} color={C.primary} />
+              <Text style={s.sectionLabel}>MONTANT À RETIRER</Text>
+            </View>
+            <View style={s.amountWrap}>
+              <Text style={s.ecPrefix}>EC</Text>
               <TextInput
                 placeholder="0"
-                placeholderTextColor={t.textSecondary}
+                placeholderTextColor="rgba(0,53,197,0.20)"
                 keyboardType="numeric"
-                style={[s.input, { color: t.text }]}
+                style={s.amountInput}
                 value={amount}
                 onChangeText={setAmount}
-                onFocus={() => focusAnim(inputFocAmt, 1)}
-                onBlur={() => focusAnim(inputFocAmt, 0)}
                 returnKeyType="done"
-                
               />
-             {(String(normalizeDecimal(amount ?? '')) ?? '').length > 0 && (
-  <TouchableOpacity onPress={() => setAmount("")}>
-    <Ionicons name="close-circle" size={18} color={t.textSecondary} />
-  </TouchableOpacity>
-)}
-            </Animated.View>
-
-            {/* Raccourcis */}
+            </View>
             <View style={s.shortcuts}>
               {SHORTCUTS.map((v) => {
                 const active = amount === v;
                 return (
                   <TouchableOpacity
                     key={v}
-                    style={[
-                      s.chip,
-                      {
-                        backgroundColor: active ? C.red : t.inputBg,
-                        borderColor:     active ? C.red : t.border,
-                      },
-                    ]}
+                    style={[s.chip, active && s.chipActive]}
                     onPress={() => setAmount(v)}
+                    activeOpacity={0.8}
                   >
-                    <Text style={[s.chipText, { color: active ? C.white : t.textSecondary }]}>
-                      {v} EC
-                    </Text>
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{v} EC</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            {/* Méthode */}
-            <SectionLabel title="SELECTIONE UNE MÉTHODE DE RETRAIT" icon="person-circle-outline" />
-            <View style={s.methodsGrid}>
-              {METHODS.map((item) => (
-                <View key={item.id} style={s.methodWrap}>
-                  <MethodCard
-                    item={item}
-                    selected={selectedMethod === item.name}
-                    onPress={() => setSelectedMethod(item.name)}
-                  />
-                </View>
-              ))}
+            {/* Method section */}
+            <View style={[s.sectionHead, { marginTop: 6 }]}>
+              <Ionicons name="person-circle-outline" size={17} color={C.primary} />
+              <Text style={s.sectionLabel}>MÉTHODE DE RETRAIT</Text>
             </View>
+            <TouchableOpacity
+              style={[s.agentCard, agentSelected && s.agentCardActive]}
+              onPress={() => setAgentSelected(v => !v)}
+              activeOpacity={0.85}
+            >
+              <View style={s.agentLogoWrap}>
+                <Image
+                  source={{ uri: "https://www.cit.fr/uploads/media/20944196.jpg" }}
+                  style={s.agentLogo}
+                  contentFit="contain"
+                />
+              </View>
+              <View style={s.agentInfo}>
+                <Text style={s.agentName}>AgentBim</Text>
+                <View style={s.agentStatusRow}>
+                  <View style={s.greenDot} />
+                  <Text style={s.agentStatusText}>AGENT OFFICIEL</Text>
+                </View>
+              </View>
+              <Ionicons
+                name={agentSelected ? "checkmark-circle" : "checkmark-circle-outline"}
+                size={24}
+                color={agentSelected ? C.primary : "rgba(0,53,197,0.25)"}
+              />
+            </TouchableOpacity>
 
-            {/* Numéro compte agent */}
-            {selectedMethod && (
-              <>
-                <SectionLabel title={`NUMÉRO DE COMPTE AGENT (${selectedMethod})`} icon="card-outline" />
-                <Animated.View style={[s.inputBox, { borderColor: borderPh, backgroundColor: bgPh }]}>
-                  <Ionicons name="card-outline" size={16} color={t.textSecondary} />
+            {/* Account number (shown when agent selected) */}
+            {agentSelected && (
+              <View style={s.phoneWrap}>
+                <View style={s.sectionHead}>
+                  <Ionicons name="card-outline" size={17} color={C.primary} />
+                  <Text style={s.sectionLabel}>NUMÉRO DE COMPTE AGENT</Text>
+                </View>
+                <View style={s.phoneInput}>
+                  <Ionicons name="card-outline" size={16} color={C.textMut} />
                   <TextInput
                     placeholder="Numéro de compte de l'agent"
-                    placeholderTextColor={t.textSecondary}
+                    placeholderTextColor={C.textMut}
                     keyboardType="numeric"
-                    style={[s.input, { color: t.text }]}
+                    style={s.phoneField}
                     value={phone}
                     onChangeText={setPhone}
-                    onFocus={() => focusAnim(inputFocPh, 1)}
-                    onBlur={() => focusAnim(inputFocPh, 0)}
                     returnKeyType="done"
                     onSubmitEditing={Keyboard.dismiss}
                   />
                   {phone.length > 0 && (
                     <TouchableOpacity onPress={() => setPhone("")}>
-                      <Ionicons name="close-circle" size={18} color={t.textSecondary} />
+                      <Ionicons name="close-circle" size={18} color={C.textMut} />
                     </TouchableOpacity>
                   )}
-                </Animated.View>
-              </>
+                </View>
+              </View>
             )}
 
-            {/* Récap */}
-            {amount && selectedMethod && (
-              <View style={[s.recap, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-                <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Via</Text>
-                  <Text style={[s.recapVal, { color: t.text }]}>{selectedMethod}</Text>
+            {/* Recap */}
+            {amount && agentSelected && (
+              <View style={s.recap}>
+                <View style={[s.recapRow, { borderBottomWidth: 1, borderBottomColor: C.border }]}>
+                  <Text style={s.recapLabel}>Via</Text>
+                  <Text style={s.recapVal}>AgentBim</Text>
                 </View>
-                <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                  <Text style={[s.recapLabel, { color: t.textSecondary }]}>Montant</Text>
-                  <Text style={[s.recapVal, { color: C.red }]}>{amount} EC</Text>
+                <View style={s.recapRow}>
+                  <Text style={s.recapLabel}>Montant</Text>
+                  <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>{amount} EC</Text>
                 </View>
               </View>
             )}
 
             {/* CTA */}
-            <View style={s.cta}>
-              <GradientButton
-                title={loadingPay ? "Traitement…" : "Confirmer le retrait"}
-                onPress={handleConfirmPress}
-                leftIcon={<ArrowIcon width={18} height={12} color={C.violet} />}
-                rightIcon={<ArrowRightIcon width={26} height={20} />}
-                isLoad={loadingPay}
-              />
-            </View>
+            <TouchableOpacity
+              style={[s.ctaBtn, { opacity: loadingPay ? 0.72 : 1 }]}
+              onPress={handleConfirmPress}
+              disabled={loadingPay}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={[C.blue, C.deep]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={s.ctaGrad}
+              >
+                {loadingPay
+                  ? <ActivityIndicator size="small" color={C.white} />
+                  : <>
+                      <Ionicons name="checkmark-circle-outline" size={22} color={C.white} />
+                      <Text style={s.ctaText}>Confirmer le retrait</Text>
+                    </>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
 
+            {/* Secure footer */}
             <View style={s.secureRow}>
-              <Ionicons name="lock-closed-outline" size={12} color={t.textSecondary} />
-              <Text style={[s.secureText, { color: t.textSecondary }]}>Opération sécurisée par BIM</Text>
+              <Ionicons name="lock-closed-outline" size={12} color={C.textMut} />
+              <Text style={s.secureText}>Opération sécurisée par BIMNext</Text>
             </View>
-          </Animated.View>
+          </View>
 
           <View style={{ height: 60 }} />
         </ScrollView>
       </TouchableWithoutFeedback>
 
-      {/* ══════════════════════════════════════════════
-          ── PIN MODAL ──
-      ══════════════════════════════════════════════ */}
-      <Modal
+      {/* ─── PIN MODAL ──────────────────────────────────────────────────── */}
+      <RNModal
         isVisible={showPinModal}
         onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
         animationIn="slideInUp"
@@ -507,59 +427,32 @@ export default function RetraitScreen() {
         style={s.modalSlide}
         avoidKeyboard
       >
-        <View style={[
-          s.pinModal,
-          {
-            backgroundColor: t.modalBg,
-            borderColor: isDark ? t.border : "transparent",
-            borderWidth: isDark ? 1 : 0,
-          },
-        ]}>
-          {/* Drag handle */}
-          <View style={[s.dragHandle, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)" }]} />
-
-          {/* Lock icon — rouge pour distinguer du paiement */}
-          <View style={[s.lockIconWrap, { backgroundColor: t.lockIconBg }]}>
+        <View style={s.pinModal}>
+          <View style={s.dragHandle} />
+          <View style={s.lockIconWrap}>
             <Ionicons name="lock-closed" size={28} color={C.red} />
           </View>
-
-          <Text style={[s.pinTitle, { color: t.text }]}>Mot de passe requis</Text>
-          <Text style={[s.pinSub, { color: t.textSecondary }]}>
-            Entrez votre code à 6 chiffres pour confirmer le retrait
-          </Text>
-
-          {/* Amount reminder */}
+          <Text style={s.pinTitle}>Mot de passe requis</Text>
+          <Text style={s.pinSub}>Entrez votre code à 6 chiffres pour confirmer le retrait</Text>
           {amount.length > 0 && (
-            <View style={[s.amountReminder, { backgroundColor: t.recapBg, borderColor: t.border }]}>
+            <View style={s.amountReminder}>
               <Ionicons name="arrow-down-circle-outline" size={14} color={C.red} />
-              <Text style={[s.amountReminderText, { color: t.text }]}>
+              <Text style={s.amountReminderText}>
                 {Number(normalizeDecimal(amount)).toLocaleString("fr-FR")} EC
               </Text>
-              {selectedMethod && (
-                <Text style={[s.amountReminderMethod, { color: t.textSecondary }]}>
-                  · {selectedMethod}
-                </Text>
-              )}
+              <Text style={s.amountReminderMethod}>· AgentBim</Text>
             </View>
           )}
-
-          {/* PIN dots */}
           <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} t={t} />
+            <PinDots value={pinValue} />
           </Animated.View>
-
-          {/* Error */}
           {pinError.length > 0 && (
             <View style={s.pinErrorRow}>
               <Ionicons name="alert-circle-outline" size={14} color={C.error} />
               <Text style={s.pinErrorText}>{pinError}</Text>
             </View>
           )}
-
-          {/* Keypad */}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} t={t} isDark={isDark} />
-
-          {/* Confirm */}
+          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
           <TouchableOpacity
             style={[s.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
             onPress={handleConfirmPin}
@@ -567,197 +460,181 @@ export default function RetraitScreen() {
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={[C.red + "DD", C.red]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              colors={[C.blue, C.deep]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={s.confirmGrad}
             >
               {loadingVerify
-                ? <Ionicons name="sync" size={18} color={C.white} />
-                : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                    <Text style={s.confirmText}>Valider</Text>
-                  </>
-                )
+                ? <ActivityIndicator size="small" color={C.white} />
+                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.confirmText}>Valider</Text></>
               }
             </LinearGradient>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setShowPinModal(false)}
-            style={s.cancelBtn}
-            disabled={loadingVerify}
-          >
-            <Text style={[s.cancelText, { color: t.textSecondary }]}>Annuler</Text>
+          <TouchableOpacity onPress={() => setShowPinModal(false)} style={s.cancelBtn} disabled={loadingVerify}>
+            <Text style={s.cancelText}>Annuler</Text>
           </TouchableOpacity>
         </View>
+      </RNModal>
+
+      {/* ─── FEEDBACK MODAL ─────────────────────────────────────────────── */}
+      <Modal transparent visible={feedback !== null} animationType="none" onRequestClose={hideFeedback}>
+        <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={hideFeedback}>
+          <Animated.View style={[fb.sheet, { opacity: fbOpac, transform: [{ scale: fbScale }] }]}>
+            <View style={[fb.iconWrap, {
+              backgroundColor: feedback === "success" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+            }]}>
+              <Ionicons
+                name={feedback === "success" ? "checkmark-circle" : "close-circle"}
+                size={56}
+                color={feedback === "success" ? C.success : C.error}
+              />
+            </View>
+            <Text style={fb.title}>{feedback === "success" ? "Retrait réussi !" : "Opération échouée"}</Text>
+            <Text style={fb.msg}>{feedbackMsg}</Text>
+            <TouchableOpacity
+              style={[fb.btn, { backgroundColor: feedback === "success" ? C.success : C.error }]}
+              onPress={hideFeedback}
+              activeOpacity={0.85}
+            >
+              <Text style={fb.btnText}>OK</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
       </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  scroll: { paddingBottom: 20 },
-
-  header: {
-    height: 220, overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    alignItems: "center", elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16,
-  },
-  deco1: {
-    position: "absolute", width: 180, height: 180,
-    borderRadius: 90, backgroundColor: "rgba(255,255,255,0.06)",
-    top: -50, right: -40,
-  },
-  deco2: {
-    position: "absolute", width: 120, height: 120,
-    borderRadius: 60, backgroundColor: "rgba(255,255,255,0.04)",
-    bottom: -20, left: -20,
-  },
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  safeTop: { backgroundColor: C.topBarBg },
   topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 8,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: C.topBarBg,
+    borderBottomWidth: 1, borderBottomColor: C.topBord,
   },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
+  iconBtn:     { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  topBarTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.primary, flex: 1, textAlign: "center" },
+  badge:     { position: "absolute", top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#DC0302", alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: "#FFFFFF" },
+  badgeText: { color: "#FFFFFF", fontSize: 9, fontFamily: "NexaBold" },
+
+  scroll: { paddingHorizontal: 16, paddingTop: 8 },
+
+  hero:         { alignItems: "center", paddingVertical: 24, gap: 12 },
+  heroIconWrap: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: C.infoBg,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
+    shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12,
+    elevation: 2,
   },
-  headerTitle: { color: "#FFFFFF", fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  headerIcon: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    marginTop: 12, borderWidth: 2, borderColor: "rgba(255,255,255,0.25)",
-  },
-  headerSub: { color: "rgba(255,255,255,0.80)", fontSize: 12, fontFamily: "NexaLight", marginTop: 8 },
+  heroSub: { fontFamily: "NexaLight", fontSize: 14, color: C.textSec, textAlign: "center", maxWidth: 280, lineHeight: 20 },
 
   infoBanner: {
-    flexDirection: "row", alignItems: "flex-start", gap: 8,
-    marginHorizontal: 16, marginTop: 14,
-    borderRadius: 14, padding: 12,
-    borderWidth: 1,
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: C.infoBg,
+    borderRadius: 16, borderWidth: 1, borderColor: C.infoBord,
+    padding: 14, marginBottom: 16,
   },
-  infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, lineHeight: 18 },
+  infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.primary, lineHeight: 19 },
 
   card: {
-    borderRadius: 28, padding: 20,
-    marginHorizontal: 16, marginTop: 14,
-    overflow: "hidden", elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10, shadowRadius: 14,
-  },
-  cardShimmer: {
-    position: "absolute", top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: C.surface, borderRadius: 28, padding: 20,
+    borderWidth: 1, borderColor: C.cardBord,
+    elevation: 4, shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.06, shadowRadius: 20,
   },
 
-  inputBox: {
+  sectionHead:  { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
+  sectionLabel: { fontFamily: "NexaBold", fontSize: 11, color: C.primary, letterSpacing: 1.2, textTransform: "uppercase" },
+
+  amountWrap: {
     flexDirection: "row", alignItems: "center",
-    borderRadius: 14, borderWidth: 1.5,
-    paddingHorizontal: 14, height: 50, gap: 10, marginBottom: 12,
+    backgroundColor: C.amtBg,
+    borderRadius: 18, paddingHorizontal: 20, paddingVertical: 14,
+    marginBottom: 14,
   },
-  currency: { fontFamily: "NexaLight", fontSize: 15 },
-  input:    { flex: 1, fontSize: 15, fontFamily: "NexaLight" },
+  ecPrefix:    { fontFamily: "NexaBold", fontSize: 20, color: "rgba(0,53,197,0.35)", marginRight: 10 },
+  amountInput: { flex: 1, fontFamily: "NexaBold", fontSize: 34, color: C.primary },
 
-  shortcuts: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 18 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
-  chipText: { fontFamily: "NexaLight", fontSize: 12 },
+  shortcuts:      { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
+  chip:           { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: C.chipBg, borderWidth: 1, borderColor: C.border },
+  chipActive:     { backgroundColor: C.primary, borderColor: C.primary },
+  chipText:       { fontFamily: "NexaBold", fontSize: 12, color: C.textSec },
+  chipTextActive: { color: "#FFFFFF" },
 
-  methodsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", marginBottom: 4, gap: 12 },
-  methodWrap: { width: "60%" },
+  agentCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: C.surface, borderRadius: 24, padding: 16,
+    borderWidth: 1.5, borderColor: C.agtBord,
+    marginBottom: 16,
+    elevation: 2, shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10,
+  },
+  agentCardActive: { borderColor: C.primary, borderWidth: 2 },
+  agentLogoWrap: {
+    width: 54, height: 54, borderRadius: 16,
+    backgroundColor: C.surface,
+    borderWidth: 1, borderColor: C.agtBord,
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+    elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6,
+  },
+  agentLogo:       { width: "100%", height: "100%" },
+  agentInfo:       { flex: 1 },
+  agentName:       { fontFamily: "NexaBold", fontSize: 17, color: C.text, marginBottom: 4 },
+  agentStatusRow:  { flexDirection: "row", alignItems: "center", gap: 6 },
+  greenDot:        { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" },
+  agentStatusText: { fontFamily: "NexaBold", fontSize: 10, color: C.textMut, letterSpacing: 0.6 },
 
-  recap: { borderRadius: 14, padding: 14, marginBottom: 16, marginTop: 4, borderWidth: 1 },
-  recapRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1 },
-  recapLabel: { fontFamily: "NexaLight", fontSize: 12 },
-  recapVal:   { fontFamily: "NexaLight", fontSize: 12 },
+  phoneWrap:  { marginBottom: 16 },
+  phoneInput: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.inputBg, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 14, height: 50,
+  },
+  phoneField: { flex: 1, fontSize: 14, fontFamily: "NexaLight", color: C.text },
 
-  cta: { marginTop: 4 },
-  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 12 },
-  secureText: { fontFamily: "NexaLight", fontSize: 11 },
+  recap: {
+    borderRadius: 14, overflow: "hidden",
+    backgroundColor: C.recapBg,
+    borderWidth: 1, borderColor: C.recapBord,
+    marginBottom: 16,
+  },
+  recapRow:   { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  recapLabel: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+  recapVal:   { fontFamily: "NexaLight", fontSize: 13, color: C.text },
 
-  /* ── PIN modal ── */
+  ctaBtn:  { borderRadius: 18, overflow: "hidden", marginTop: 4 },
+  ctaGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 18 },
+  ctaText: { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 17 },
+
+  secureRow:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 14, opacity: 0.40 },
+  secureText: { fontFamily: "NexaBold", fontSize: 10, color: C.text, textTransform: "uppercase", letterSpacing: 0.6 },
+
   modalSlide: { justifyContent: "flex-end", margin: 0 },
   pinModal: {
-    borderTopLeftRadius: 32, borderTopRightRadius: 32,
+    backgroundColor: C.surface, borderTopLeftRadius: 32, borderTopRightRadius: 32,
     padding: 24, paddingBottom: 36, alignItems: "center",
-    elevation: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18, shadowRadius: 20,
+    elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.10, shadowRadius: 20,
   },
-  dragHandle: { width: 40, height: 4, borderRadius: 2, marginBottom: 20 },
-  lockIconWrap: {
-    width: 66, height: 66, borderRadius: 33,
-    alignItems: "center", justifyContent: "center", marginBottom: 14,
-  },
-  pinTitle: { fontFamily: "NexaLight", fontSize: 18, marginBottom: 6, letterSpacing: 0.2 },
-  pinSub: {
-    fontFamily: "NexaLight", fontSize: 12,
-    textAlign: "center", lineHeight: 18,
-    marginBottom: 18, paddingHorizontal: 10,
-  },
-  amountReminder: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22,
-  },
-  amountReminderText:   { fontFamily: "NexaLight", fontSize: 15, fontWeight: "600" },
-  amountReminderMethod: { fontFamily: "NexaLight", fontSize: 13 },
-
-  pinErrorRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
-  pinErrorText: { fontFamily: "NexaLight", fontSize: 12, color: C.error },
-
-  confirmBtn: { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 20 },
-  confirmGrad: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 10, paddingVertical: 15,
-  },
-  confirmText: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 15 },
-
-  cancelBtn: { marginTop: 14, paddingVertical: 8 },
-  cancelText: { fontFamily: "NexaLight", fontSize: 13 },
-});
-
-const ms = StyleSheet.create({
-  card: {
-    borderRadius: 18, paddingVertical: 18, paddingHorizontal: 12,
-    alignItems: "center", overflow: "hidden",
-    borderWidth: 2, borderColor: "transparent",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10, shadowRadius: 6,
-  },
-  deco: {
-    position: "absolute", width: 80, height: 80,
-    borderRadius: 40, backgroundColor: "rgba(255,255,255,0.07)",
-    top: -20, right: -20,
-  },
-  checkBadge: {
-    position: "absolute", top: 8, right: 8,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: C.gold, alignItems: "center", justifyContent: "center",
-  },
-  logo:      { width: 48, height: 48, marginBottom: 8 },
-  name:      { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 12, textAlign: "center", marginBottom: 6 },
-  agentBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
-  },
-  agentText: { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 9 },
-});
-
-const sl = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, marginTop: 4 },
-  text: { fontFamily: "NexaLight", fontSize: 11, color: C.red, textTransform: "uppercase", letterSpacing: 0.8, opacity: 0.9 },
-});
+  dragHandle:           { width: 40, height: 4, borderRadius: 2, marginBottom: 20, backgroundColor: C.dragBg },
+  lockIconWrap:         { width: 66, height: 66, borderRadius: 33, backgroundColor: "rgba(220,3,2,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  pinTitle:             { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 6, letterSpacing: 0.2 },
+  pinSub:               { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, textAlign: "center", lineHeight: 18, marginBottom: 18, paddingHorizontal: 10 },
+  amountReminder:       { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 12, borderWidth: 1, backgroundColor: C.reminderBg, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22 },
+  amountReminderText:   { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  amountReminderMethod: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+  pinErrorRow:          { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  pinErrorText:         { fontFamily: "NexaLight", fontSize: 12, color: "#EF4444" },
+  confirmBtn:           { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 20 },
+  confirmGrad:          { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  confirmText:          { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
+  cancelBtn:            { marginTop: 14, paddingVertical: 8 },
+  cancelText:           { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
+}); }
 
 const pd = StyleSheet.create({
   row: { flexDirection: "row", gap: 12, marginBottom: 10 },
@@ -770,3 +647,13 @@ const kp = StyleSheet.create({
   empty:   { width: 78, height: 56 },
   keyText: { fontSize: 20, fontFamily: "NexaLight", fontWeight: "600" },
 });
+
+function mkFb(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 32 },
+  sheet:   { backgroundColor: C.surface, borderRadius: 28, padding: 28, alignItems: "center", width: "100%", elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20 },
+  iconWrap:{ width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  title:   { fontFamily: "NexaBold", fontSize: 20, color: C.text, marginBottom: 10, textAlign: "center" },
+  msg:     { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  btn:     { paddingHorizontal: 40, paddingVertical: 13, borderRadius: 14 },
+  btnText: { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
+}); }

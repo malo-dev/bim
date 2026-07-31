@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useGetUserOrdersQuery } from "@/services/orderService";
+import { useAppTheme } from "@/app/_layout";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -30,18 +30,16 @@ const TH = {
     border: "rgba(3,83,204,0.12)",
     filterBg: "#FFFFFF", filterBorder: "rgba(3,83,204,0.18)", filterText: "#3D4F70",
     headerGrad: [C.deep, C.primary] as [string, string],
+    primary: C.primary,
   },
   dark: {
     bg: "#0A0F1E", card: "#111827", text: "#E2E8F0", sub: "#94A3B8",
     border: "rgba(255,255,255,0.10)",
     filterBg: "#1E2A3A", filterBorder: "rgba(255,255,255,0.14)", filterText: "#CBD5E1",
     headerGrad: ["#060B18", "#0D1B3E"] as [string, string],
+    primary: "#4D8DFF",
   },
 };
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? TH.dark : TH.light };
-}
 
 /* ─── STATUS META ─────────────────────────────────────────────────────── */
 type OrderStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
@@ -114,7 +112,7 @@ function OrderCard({
           <View style={[oc.itemsBox, { borderColor: t.border }]}>
             {items.slice(0, 2).map((item, i) => (
               <View key={i} style={oc.itemRow}>
-                <View style={[oc.itemDot, { backgroundColor: C.primary }]} />
+                <View style={[oc.itemDot, { backgroundColor: t.primary }]} />
                 <Text style={[oc.itemName, { color: t.text }]} numberOfLines={1}>
                   {item.product?.name || "Produit"}
                 </Text>
@@ -131,14 +129,14 @@ function OrderCard({
 
         {/* Footer : total + bouton */}
         <View style={oc.footer}>
-          <Text style={[oc.totalVal, { color: C.primary }]}>
+          <Text style={[oc.totalVal, { color: t.primary }]}>
             {order.grandTotal?.toFixed(2) ?? "—"} EC
           </Text>
-          <View style={[oc.trackBtn, { backgroundColor: isActive ? C.primary + "12" : t.border }]}>
-            <Text style={[oc.trackText, { color: isActive ? C.primary : t.sub }]}>
+          <View style={[oc.trackBtn, { backgroundColor: isActive ? t.primary + "12" : t.border }]}>
+            <Text style={[oc.trackText, { color: isActive ? t.primary : t.sub }]}>
               {isActive ? "Suivre" : "Détails"}
             </Text>
-            <Ionicons name="chevron-forward" size={13} color={isActive ? C.primary : t.sub} />
+            <Ionicons name="chevron-forward" size={13} color={isActive ? t.primary : t.sub} />
           </View>
         </View>
       </View>
@@ -149,7 +147,8 @@ function OrderCard({
 /* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
 export default function MyOrders() {
   const router = useRouter();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const t = isDark ? TH.dark : TH.light;
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
 
   const { data, isLoading, isFetching, refetch } = useGetUserOrdersQuery({});

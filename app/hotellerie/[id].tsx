@@ -1,298 +1,327 @@
+/* eslint-disable */
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { Image } from "expo-image";
 import {
   Animated,
+  Dimensions,
   FlatList,
-  Platform,
+  Modal,
   RefreshControl,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
-import Svg, {
-  Defs,
-  LinearGradient as SvgGradient,
-  Stop,
-  Rect,
-  Circle,
-  Path,
-  Polygon,
-} from "react-native-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGetAllProductsQuery } from "@/services/productServices";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import NoData from "@/components/ui/noData";
 import { API_URL_BASE } from "@/constants/api";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary:   "#0353CC",
-  violet:    "#3906C7",
-  deep:      "#302E99",
-  accent:    "#4D96FF",
-  gold:      "#C9A84C",
-  goldLight: "#F0D080",
-  white:     "#FFFFFF",
+const { width: W, height: H } = Dimensions.get("window");
+
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  white:      "#FFFFFF",
+  bg:         "#FAFAFA",
+  surface:    "#FFFFFF",
+  surfLow:    "#F4F5F7",
+  text:       "#1A1C1C",
+  textSec:    "#555770",
+  textMut:    "#9496A8",
+  border:     "rgba(0,0,0,0.07)",
+  gold:       "#C9A84C",
+  goldLt:     "#F0D484",
+  blue:       "#0035C5",
+  blueDark:   "#001A80",
+  error:      "#EF4444",
+  green:      "#10B981",
+  card:       "#FFFFFF",
+  perNightBg: "rgba(0,53,197,0.07)",
+};
+const DARK: typeof LIGHT = {
+  white:      "#FFFFFF",
+  bg:         "#0B1220",
+  surface:    "#1A2540",
+  surfLow:    "#0F1A2E",
+  text:       "#EAF0FF",
+  textSec:    "#A3B4D0",
+  textMut:    "#6B7A99",
+  border:     "rgba(31,42,68,0.80)",
+  gold:       "#C9A84C",
+  goldLt:     "#F0D484",
+  blue:       "#4D8DFF",
+  blueDark:   "#2A5FCC",
+  error:      "#DC2626",
+  green:      "#059669",
+  card:       "#1A2540",
+  perNightBg: "rgba(77,141,255,0.12)",
 };
 
-const Colors = {
-  light: {
-    bg:            "#F0F4FF",
-    card:          "#FFFFFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.10)",
-    inputBg:       "rgba(3,83,204,0.05)",
-    searchBg:      "#FFFFFF",
-    imageFallback: ["#EEF1FA", "#DDE3F5"] as [string, string],
-    headerGrad:    [C.deep, C.primary] as [string, string],
-    shadow:        C.primary,
-    ratingBg:      "rgba(255,255,255,0.92)",
-    divider:       "rgba(3,83,204,0.08)",
-  },
-  dark: {
-    bg:            "#07091A",
-    card:          "#0F1228",
-    text:          "#E2E8F0",
-    textSecondary: "#556080",
-    border:        "rgba(77,150,255,0.10)",
-    inputBg:       "rgba(77,150,255,0.07)",
-    searchBg:      "#0F1228",
-    imageFallback: ["#111827", "#1a2040"] as [string, string],
-    headerGrad:    ["#05081A", "#0D1535"] as [string, string],
-    shadow:        "#000000",
-    ratingBg:      "rgba(15,18,40,0.90)",
-    divider:       "rgba(255,255,255,0.06)",
-  },
-};
+/* ─── HOTEL ROOM FALLBACK IMAGES ─────────────────────────────────────── */
+const FALLBACK = [
+  "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
+  "https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=800&q=80",
+  "https://images.unsplash.com/photo-1564501049412-61c2a3083791?w=800&q=80",
+  "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=800&q=80",
+  "https://images.unsplash.com/photo-1540541338537-71acf588f9c5?w=800&q=80",
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuDQ8nSucgb7yIGmUn1cusxX94lbpaxYyprHKjsWtHr1-PmNuB2pITmGLL7hKeWazbuBIcmzH5Uqvlr2app0EUk_8yThBZZPyU7UQ6r9uy3Hhg_ouIB_BZjJ4XOAoS8cfQI1i1gnHGjIk2z3ZXHMLbCVLqXm6WV5AgVKArXFXFX7sFgRxpHpvn2IrbjZWpdrJCltiV9vkcaZUa7LfZxfk-ALEdScpBwXQmkODBs_aC-kwthBlFbRJgRmVJWtfq-Iw37VhfhSCFYZ_1w",
+];
 
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
+function getImgUri(item: any, index: number): string {
+  if (item.imageUrl)
+    return item.imageUrl.startsWith("http") ? item.imageUrl : `${API_URL_BASE}${item.imageUrl}`;
+  return FALLBACK[index % FALLBACK.length];
 }
 
-/* ─── SVG COMPONENTS ─────────────────────────────────────────────────── */
-function HotelBadge() {
-  return (
-    <Svg width={44} height={44} viewBox="0 0 48 48">
-      <Defs>
-        <SvgGradient id="hotelBg" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={C.deep} />
-          <Stop offset="1" stopColor={C.violet} />
-        </SvgGradient>
-      </Defs>
-      <Rect x={0} y={0} width={48} height={48} rx={14} fill="url(#hotelBg)" />
-      <Circle cx={18} cy={20} r={7} stroke={C.gold} strokeWidth={3} fill="none" />
-      <Circle cx={18} cy={20} r={3} fill={C.gold} opacity={0.6} />
-      <Path d="M23 24l12 12" stroke={C.gold} strokeWidth={3} strokeLinecap="round" />
-      <Path d="M30 31v4M34 33v3" stroke={C.gold} strokeWidth={2.5} strokeLinecap="round" />
-    </Svg>
-  );
+function getStars(item: any): number {
+  return item.stars ?? ((item.productId % 3) + 3);
 }
 
-function StarRating({ count = 4 }: { count?: number }) {
+/* ─── STARS ──────────────────────────────────────────────────────────── */
+function Stars({ count, size = 12 }: { count: number; size?: number }) {
   return (
-    <View style={{ flexDirection: "row", gap: 3 }}>
+    <View style={{ flexDirection: "row", gap: 2 }}>
       {Array.from({ length: 5 }).map((_, i) => (
-        <Svg key={i} width={12} height={12} viewBox="0 0 24 24">
-          <Polygon
-            points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
-            fill={i < count ? C.gold : "rgba(201,168,76,0.2)"}
-            stroke={i < count ? C.gold : "rgba(201,168,76,0.3)"}
-            strokeWidth={1}
-          />
-        </Svg>
+        <Ionicons key={i} name={i < count ? "star" : "star-outline"} size={size}
+          color={i < count ? LIGHT.gold : "rgba(201,168,76,0.30)"} />
       ))}
     </View>
   );
 }
 
-function MoonIcon() {
+/* ─── CHIP ───────────────────────────────────────────────────────────── */
+function Chip({ icon, label }: { icon: string; label: string }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const ch = useMemo(() => mkCh(C), [isDark]);
   return (
-    <Svg width={16} height={16} viewBox="0 0 24 24">
-      <Path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" fill={C.gold} opacity={0.85} />
-    </Svg>
-  );
-}
-
-function ArrowIcon() {
-  return (
-    <Svg width={16} height={16} viewBox="0 0 18 18">
-      <Path
-        d="M3 9h12M11 5l4 4-4 4"
-        stroke={C.white} strokeWidth={1.8}
-        strokeLinecap="round" strokeLinejoin="round" fill="none"
-      />
-    </Svg>
-  );
-}
-
-function DecoCircle({ size, opacity }: { size: number; opacity: number }) {
-  return (
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={C.white} opacity={opacity} />
-    </Svg>
-  );
-}
-
-function DecoStar({ size, opacity }: { size: number; opacity: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Polygon
-        points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
-        fill={C.white} opacity={opacity}
-      />
-    </Svg>
-  );
-}
-
-/* ─── AMENITY CHIP ───────────────────────────────────────────────────── */
-function AmenityChip({
-  icon, label, isDark, t,
-}: {
-  icon: string; label: string; isDark: boolean; t: typeof Colors.light;
-}) {
-  return (
-    <View style={[
-      ac.chip,
-      {
-        backgroundColor: t.inputBg,
-        borderColor: t.border,
-      },
-    ]}>
-      <Ionicons name={icon as any} size={11} color={C.primary} />
-      <Text style={[ac.label, { color: C.primary }]}>{label}</Text>
+    <View style={ch.wrap}>
+      <Ionicons name={icon as any} size={11} color={C.textSec} />
+      <Text style={ch.text}>{label}</Text>
     </View>
   );
 }
 
-/* ─── HOTEL CARD ─────────────────────────────────────────────────────── */
-function HotelCard({
-  item, onPress, isDark, t, index,
+/* ─── DETAIL SHEET ───────────────────────────────────────────────────── */
+function DetailSheet({
+  visible, item, index, onClose, onPay,
 }: {
-  item: any; onPress: () => void; isDark: boolean; t: typeof Colors.light; index: number;
+  visible: boolean; item: any | null; index: number;
+  onClose: () => void; onPay: () => void;
 }) {
-  const pressAnim = useRef(new Animated.Value(1)).current;
-  const slideY    = useRef(new Animated.Value(24)).current;
-  const opac      = useRef(new Animated.Value(0)).current;
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const ds = useMemo(() => mkDs(C), [isDark]);
+  const slideY = useRef(new Animated.Value(H)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideY, { toValue: 0, friction: 8, tension: 52, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(slideY, { toValue: H, duration: 260, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
+  if (!item) return null;
+
+  const imgUri   = getImgUri(item, index);
+  const stars    = getStars(item);
+  const price    = parseFloat(item.price ?? 0);
+  const hasStock = (item.qty ?? 1) > 0;
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      {/* Overlay */}
+      <TouchableOpacity style={ds.overlay} activeOpacity={1} onPress={onClose} />
+
+      <Animated.View style={[ds.sheet, { transform: [{ translateY: slideY }] }]}>
+        {/* Handle */}
+        <View style={ds.handle} />
+
+        {/* Image */}
+        <View style={ds.imgWrap}>
+          <Image source={{ uri: imgUri }} style={ds.img} contentFit="cover" transition={300} />
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.50)"]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 0, y: 1 }}
+          />
+          {/* Stars on image */}
+          <View style={ds.imgStars}>
+            <Stars count={stars} size={13} />
+            <Text style={ds.imgStarsLabel}>{stars} étoile{stars > 1 ? "s" : ""}</Text>
+          </View>
+          {/* Close */}
+          <TouchableOpacity style={ds.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={18} color={C.white} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={ds.body}>
+          {/* Name + location */}
+          <Text style={ds.name}>{item.name}</Text>
+          {item.company?.name ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 }}>
+              <Ionicons name="location-outline" size={13} color={C.textMut} />
+              <Text style={ds.location}>{item.company.name}</Text>
+            </View>
+          ) : null}
+
+          {/* Description */}
+          {item.description ? (
+            <Text style={ds.desc}>{item.description}</Text>
+          ) : null}
+
+          {/* Amenities */}
+          <Text style={ds.sectionTitle}>Services inclus</Text>
+          <View style={ds.chips}>
+            <Chip icon="wifi-outline"         label="Wi-Fi gratuit"  />
+            <Chip icon="restaurant-outline"   label="Restaurant"     />
+            <Chip icon="car-outline"          label="Parking"        />
+            <Chip icon="snow-outline"         label="Climatisation"  />
+            <Chip icon="tv-outline"           label="Smart TV"       />
+            <Chip icon="fitness-outline"      label="Salle de sport" />
+          </View>
+
+          <View style={ds.divider} />
+
+          {/* Price */}
+          <View style={ds.priceRow}>
+            <View>
+              <Text style={ds.fromLabel}>Prix par nuit</Text>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+                <Text style={ds.price}>{price.toFixed(2)}</Text>
+                <Text style={ds.priceSuffix}>EC</Text>
+              </View>
+            </View>
+            <View style={ds.perNightBadge}>
+              <Ionicons name="moon-outline" size={13} color={C.blue} />
+              <Text style={ds.perNightText}>/ nuit</Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Pay button */}
+        <View style={ds.footer}>
+          <TouchableOpacity onPress={onPay} activeOpacity={0.88} disabled={!hasStock} style={{ flex: 1 }}>
+            <View style={[ds.payBtn, !hasStock && { opacity: 0.38 }]}>
+              <Ionicons name="card-outline" size={18} color={C.white} />
+              <Text style={ds.payBtnText}>
+                {hasStock ? `Payer ${price.toFixed(2)} EC` : "Complet"}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+/* ─── HOTEL CARD ─────────────────────────────────────────────────────── */
+function HotelCard({ item, index, onPress }: { item: any; index: number; onPress: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const cd = useMemo(() => mkCd(C), [isDark]);
+  const scale  = useRef(new Animated.Value(1)).current;
+  const slideY = useRef(new Animated.Value(28)).current;
+  const opac   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideY, { toValue: 0, duration: 380, delay: Math.min(index * 80, 400), useNativeDriver: true }),
-      Animated.timing(opac,   { toValue: 1, duration: 380, delay: Math.min(index * 80, 400), useNativeDriver: true }),
+      Animated.timing(slideY, { toValue: 0, duration: 400, delay: Math.min(index * 80, 400), useNativeDriver: true }),
+      Animated.timing(opac,   { toValue: 1, duration: 400, delay: Math.min(index * 80, 400), useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
+  const onIn  = () => Animated.spring(scale, { toValue: 0.975, useNativeDriver: true }).start();
+  const onOut = () => Animated.spring(scale, { toValue: 1,     useNativeDriver: true }).start();
 
-  const [expanded, setExpanded] = useState(false);
-  const stars    = item.productId ? ((item.productId % 3) + 3) : 4;
-  const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
+  const imgUri   = getImgUri(item, index);
+  const stars    = getStars(item);
+  const price    = parseFloat(item.price ?? 0);
+  const hasStock = (item.qty ?? 1) > 0;
 
   return (
-    <Animated.View style={[
-      cs.wrapper,
-      {
-        backgroundColor: t.card,
-        borderColor: isDark ? t.border : "transparent",
-        borderWidth: isDark ? 1 : 0,
-        shadowColor: t.shadow,
-        opacity: opac,
-        transform: [{ translateY: slideY }, { scale: pressAnim }],
-      },
-      isDark && cs.wrapperDark,
-    ]}>
-      <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
+    <Animated.View style={[cd.card, { opacity: opac, transform: [{ translateY: slideY }, { scale }] }]}>
+      <TouchableOpacity activeOpacity={1} onPressIn={onIn} onPressOut={onOut} onPress={onPress}>
 
-        {/* ── Image ── */}
-        <View style={cs.imageWrap}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={cs.image} contentFit="cover" transition={300} />
-          ) : (
-            <LinearGradient colors={t.imageFallback} style={cs.imageFallback}>
-              <Svg width={72} height={72} viewBox="0 0 48 48">
-                <Rect x={8} y={16} width={32} height={28} rx={2} fill={C.primary} opacity={isDark ? 0.3 : 0.15} />
-                <Polygon points="24,6 6,18 42,18" fill={C.primary} opacity={isDark ? 0.35 : 0.2} />
-                <Rect x={20} y={32} width={8} height={12} rx={1} fill={C.primary} opacity={isDark ? 0.4 : 0.25} />
-                <Rect x={11} y={22} width={6} height={5} rx={1} fill={C.primary} opacity={isDark ? 0.3 : 0.2} />
-                <Rect x={21} y={22} width={6} height={5} rx={1} fill={C.primary} opacity={isDark ? 0.3 : 0.2} />
-                <Rect x={31} y={22} width={6} height={5} rx={1} fill={C.primary} opacity={isDark ? 0.3 : 0.2} />
-              </Svg>
-            </LinearGradient>
-          )}
+        {/* Image */}
+        <View style={cd.imgWrap}>
+          <Image source={{ uri: imgUri }} style={cd.img} contentFit="cover" transition={300} />
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.48)"]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0.45 }}
+            end={{ x: 0, y: 1 }}
+          />
 
-          {imageUri && (
-            <LinearGradient
-              colors={["transparent", isDark ? "rgba(7,9,26,0.80)" : "rgba(13,27,62,0.62)"]}
-              style={cs.imageOverlay}
-            />
-          )}
-
-          <View style={cs.badgePos}>
-            <HotelBadge />
+          {/* Stars */}
+          <View style={cd.starsBadge}>
+            <Stars count={stars} size={11} />
           </View>
 
-          <View style={[cs.ratingPos, { backgroundColor: t.ratingBg }]}>
-            <StarRating count={stars} />
-          </View>
+          {/* Complet */}
+          {!hasStock && (
+            <View style={cd.fullBadge}>
+              <Text style={cd.fullText}>Complet</Text>
+            </View>
+          )}
 
-          <View style={cs.imageNameWrap}>
-            <Text style={cs.imageName} numberOfLines={1}>{item.name}</Text>
+          {/* Name overlay */}
+          <View style={cd.nameWrap}>
+            <Text style={cd.nameText} numberOfLines={1}>{item.name}</Text>
+            {item.company?.name ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.80)" />
+                <Text style={cd.locationText}>{item.company.name}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
-        {/* ── Content ── */}
-        <View style={cs.content}>
-          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={expanded ? undefined : 2}>
-            {item.description}
-          </Text>
-          {item.description && item.description.length > 80 && (
-            <TouchableOpacity onPress={() => setExpanded(e => !e)} style={cs.readMoreBtn}>
-              <Text style={[cs.readMoreText, { color: C.primary }]}>{expanded ? "Lire moins" : "Lire plus"}</Text>
-            </TouchableOpacity>
-          )}
+        {/* Body */}
+        <View style={cd.body}>
+          {item.description ? (
+            <Text style={cd.desc} numberOfLines={2}>{item.description}</Text>
+          ) : null}
 
-          <View style={cs.amenities}>
-            <AmenityChip icon="wifi-outline"       label="Wi-Fi"      isDark={isDark} t={t} />
-            <AmenityChip icon="restaurant-outline" label="Restaurant" isDark={isDark} t={t} />
-            <AmenityChip icon="car-outline"        label="Parking"    isDark={isDark} t={t} />
+          <View style={cd.chips}>
+            <Chip icon="wifi-outline"         label="Wi-Fi"      />
+            <Chip icon="restaurant-outline"   label="Restaurant" />
+            <Chip icon="car-outline"          label="Parking"    />
+            <Chip icon="snow-outline"         label="Climatisé"  />
           </View>
 
-          <View style={[cs.divider, { backgroundColor: t.divider }]} />
+          <View style={cd.divider} />
 
-          <View style={cs.footer}>
-            <View style={cs.priceBlock}>
-              <MoonIcon />
-              <View>
-                <Text style={[cs.price, { color: t.text }]}>
-                  {item.price}{" "}
-                  <Text style={cs.priceCurrency}>{item.currency?.code || "EC"}</Text>
-                </Text>
-                <Text style={[cs.priceLabel, { color: t.textSecondary }]}>par nuit</Text>
+          {/* Footer */}
+          <View style={cd.footer}>
+            <View>
+              <Text style={cd.fromLabel}>À partir de</Text>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 4 }}>
+                <Text style={cd.price}>{price.toFixed(2)}</Text>
+                <Text style={cd.priceSuffix}>EC / nuit</Text>
               </View>
             </View>
 
-            <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
-              <LinearGradient
-                colors={[C.deep, C.violet]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={cs.btn}
-              >
-                <Text style={cs.btnText}>Réserver</Text>
-                <ArrowIcon />
-              </LinearGradient>
+            <TouchableOpacity onPress={onPress} activeOpacity={0.88} disabled={!hasStock}>
+              <View style={[cd.btn, !hasStock && { opacity: 0.38 }]}>
+                <Ionicons name="eye-outline" size={14} color={C.white} />
+                <Text style={cd.btnText}>Voir</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
+
       </TouchableOpacity>
     </Animated.View>
   );
@@ -300,14 +329,19 @@ function HotelCard({
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function HotelsList() {
-  const router   = useRouter();
-  const { id }   = useLocalSearchParams();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+  const router     = useRouter();
+  const { id }     = useLocalSearchParams<{ id: string }>();
+  const { unread } = useUnreadNotifications();
 
   const [page,       setPage]       = useState(1);
   const [search,     setSearch]     = useState("");
   const [dataList,   setDataList]   = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [selected,   setSelected]   = useState<{ item: any; index: number } | null>(null);
+  const [sheetOpen,  setSheetOpen]  = useState(false);
 
   const { data, isFetching, refetch } = useGetAllProductsQuery({
     page, pageSize: 10, search, paginate: true, companyId: id,
@@ -316,126 +350,113 @@ export default function HotelsList() {
   useEffect(() => {
     if (data?.data) {
       if (page === 1) setDataList(data.data);
-      else setDataList((prev) => [...prev, ...data.data]);
+      else setDataList(prev => [...prev, ...data.data]);
     }
   }, [data, page]);
 
-  const loadMore = () => {
-    if (data?.totalPages && page < data.totalPages && !isFetching) setPage(page + 1);
+  const loadMore     = () => {
+    if (data?.totalPages && page < data.totalPages && !isFetching) setPage(p => p + 1);
   };
+  const onRefresh    = async () => { setRefreshing(true); setPage(1); await refetch(); setRefreshing(false); };
+  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1); }, []);
+  const clearSearch  = useCallback(() => { setSearch(""); setPage(1); }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    setPage(1);
-    await refetch();
-    setRefreshing(false);
-  };
+  const openDetail = useCallback((item: any, index: number) => {
+    setSelected({ item, index });
+    setSheetOpen(true);
+  }, []);
 
-  const handleSearchChange = (v: string) => { setSearch(v); setPage(1); };
-  const handleSearchClear  = () => { setSearch(""); setPage(1); };
+  const handlePay = useCallback(() => {
+    if (!selected) return;
+    setSheetOpen(false);
+    router.push(`/payment?productId=${selected.item.productId}&companyId=${id}` as any);
+  }, [selected, id, router]);
+
+  const companyName = dataList[0]?.company?.name ?? "Hôtellerie";
 
   return (
-    <View style={[s.root, { backgroundColor: t.bg }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.surface} />
 
-      {/* ── HEADER ── */}
-      <View style={[s.header, { shadowColor: t.shadow }]}>
-        <LinearGradient
-          colors={t.headerGrad}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+      {/* ── HEADER full white ── */}
+      <SafeAreaView edges={["top"]} style={s.headerWrap}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
 
-        {/* Gold warmth overlay for hotel theme */}
-        <View style={s.goldOverlay} />
-
-        {/* Décos */}
-        <View style={{ position: "absolute", top: -40, right: -40 }}>
-          <DecoCircle size={200} opacity={0.06} />
-        </View>
-        <View style={{ position: "absolute", bottom: -30, left: -30 }}>
-          <DecoCircle size={130} opacity={0.04} />
-        </View>
-        <View style={{ position: "absolute", top: 48, right: 80 }}>
-          <DecoStar size={20} opacity={0.12} />
-        </View>
-        <View style={{ position: "absolute", top: 72, right: 50 }}>
-          <DecoStar size={12} opacity={0.08} />
-        </View>
-        <View style={{ position: "absolute", top: 56, left: 100 }}>
-          <DecoStar size={16} opacity={0.07} />
-        </View>
-
-        <SafeAreaView edges={["top"]}>
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={20} color={C.white} />
-            </TouchableOpacity>
-
-            <View style={s.titleWrap}>
-              <Svg width={14} height={14} viewBox="0 0 48 48" style={{ marginRight: 6 }}>
-                <Circle cx={18} cy={20} r={9} stroke={C.goldLight} strokeWidth={4} fill="none" />
-                <Path d="M24 26l14 14M33 35v5M37 37v4" stroke={C.goldLight} strokeWidth={3.5} strokeLinecap="round" />
-              </Svg>
-              <Text style={s.headerTitle}>BIM HÔTELLERIE</Text>
+          <View style={s.titleBlock}>
+            <View style={s.titleRow}>
+              <View style={s.goldDot} />
+              <Text style={s.title}>BIM Hôtellerie</Text>
             </View>
-
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-              <Ionicons name="notifications-outline" size={20} color={C.white} />
-            </TouchableOpacity>
+            <Text style={s.subtitle}>
+              {isFetching && dataList.length === 0
+                ? "Chargement…"
+                : `${dataList.length} établissement${dataList.length !== 1 ? "s" : ""}`}
+            </Text>
           </View>
 
-          <Text style={s.headerSub}>Séjournez dans les meilleurs établissements</Text>
-
-          {/* Search */}
-          <View style={[s.searchWrap, { backgroundColor: t.searchBg, borderColor: t.border, shadowColor: t.shadow }]}>
-            <View style={[s.searchIconWrap, { backgroundColor: t.inputBg }]}>
-              <Ionicons name="search-outline" size={14} color={C.primary} />
-            </View>
-            <TextInput
-              style={[s.searchInput, { color: t.text }]}
-              placeholder="Rechercher un hôtel ou destination…"
-              placeholderTextColor={t.textSecondary}
-              value={search}
-              onChangeText={handleSearchChange}
-              autoCorrect={false}
-              blurOnSubmit={false}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={handleSearchClear}>
-                <Ionicons name="close-circle" size={17} color={t.textSecondary} />
-              </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification" as any)}>
+            <Ionicons name="notifications-outline" size={22} color={C.text} />
+            {unread > 0 && (
+              <View style={s.badge}>
+                <Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text>
+              </View>
             )}
-          </View>
-        </SafeAreaView>
-      </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.premiumRow}>
+          <Ionicons name="star" size={11} color={C.gold} />
+          <Text style={s.premiumText}>Séjournez dans les meilleurs établissements</Text>
+        </View>
+
+        <View style={s.searchWrap}>
+          <Ionicons name="search-outline" size={16} color={C.textMut} />
+          <TextInput
+            style={s.searchInput}
+            placeholder="Rechercher un hôtel, une chambre…"
+            placeholderTextColor={C.textMut}
+            value={search}
+            onChangeText={handleSearch}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={clearSearch}>
+              <Ionicons name="close-circle" size={16} color={C.textMut} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </SafeAreaView>
 
       {/* ── LIST ── */}
       {dataList.length === 0 && !isFetching ? (
-        <View style={s.noData}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <NoData />
+          <Text style={{ fontFamily: "NexaBold", color: C.text, marginTop: 12, fontSize: 15 }}>
+            Aucun établissement trouvé
+          </Text>
+          <Text style={{ fontFamily: "NexaLight", color: C.textMut, fontSize: 13, marginTop: 4 }}>
+            Essayez une autre recherche
+          </Text>
         </View>
       ) : (
         <FlatList
           data={dataList}
-          keyExtractor={(item) => `${item.productId}`}
-          contentContainerStyle={[s.list, { backgroundColor: t.bg }]}
+          keyExtractor={item => `${item.productId}`}
+          contentContainerStyle={{ padding: 16, paddingBottom: 60 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={isDark ? C.accent : C.violet}
-              colors={[C.violet]}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.gold} colors={[C.gold]} />
           }
           ListFooterComponent={
             isFetching ? (
               <View style={{ paddingVertical: 20, alignItems: "center" }}>
-                <Ionicons name="ellipsis-horizontal" size={24} color={isDark ? C.accent : C.primary} />
+                <Ionicons name="ellipsis-horizontal" size={24} color={C.textMut} />
               </View>
             ) : null
           }
@@ -443,175 +464,100 @@ export default function HotelsList() {
             <HotelCard
               item={item}
               index={index}
-              isDark={isDark}
-              t={t}
-              onPress={() => router.push(`/payment?productId=${item.productId}&companyId=${id}`)}
+              onPress={() => openDetail(item, index)}
             />
           )}
         />
       )}
+
+      {/* ── DETAIL SHEET ── */}
+      <DetailSheet
+        visible={sheetOpen}
+        item={selected?.item ?? null}
+        index={selected?.index ?? 0}
+        onClose={() => setSheetOpen(false)}
+        onPay={handlePay}
+      />
     </View>
   );
 }
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root: { flex: 1 },
+/* ─── HEADER STYLES ──────────────────────────────────────────────────── */
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  headerWrap:  { backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 3, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  topBar:      { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, gap: 12 },
+  iconBtn:     { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surfLow, alignItems: "center", justifyContent: "center" },
+  badge:       { position: "absolute", top: 2, right: 2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: C.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
+  badgeText:   { fontFamily: "NexaBold", fontSize: 8, color: C.white },
+  titleBlock:  { flex: 1 },
+  titleRow:    { flexDirection: "row", alignItems: "center", gap: 8 },
+  goldDot:     { width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold },
+  title:       { fontFamily: "NexaBold", fontSize: 19, color: C.text },
+  subtitle:    { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 2 },
+  premiumRow:  { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4 },
+  premiumText: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  searchWrap:  { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginBottom: 14, marginTop: 6, backgroundColor: C.surfLow, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12 },
+  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+}); }
 
-  header: {
-    paddingBottom: 20,
-    overflow: "hidden",
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-  },
+/* ─── CARD STYLES ─────────────────────────────────────────────────────── */
+function mkCd(C: typeof LIGHT) { return StyleSheet.create({
+  card:        { backgroundColor: C.card, borderRadius: 28, marginBottom: 18, overflow: "hidden", elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  imgWrap:     { width: "100%", height: 210 },
+  img:         { width: "100%", height: "100%" },
+  starsBadge:  { position: "absolute", top: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.88)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  fullBadge:   { position: "absolute", top: 12, right: 12, backgroundColor: "rgba(239,68,68,0.88)", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  fullText:    { fontFamily: "NexaBold", fontSize: 10, color: C.white },
+  nameWrap:    { position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 14 },
+  nameText:    { fontFamily: "NexaBold", fontSize: 20, color: C.white },
+  locationText:{ fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.82)" },
+  body:        { padding: 16, gap: 10 },
+  desc:        { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, lineHeight: 19 },
+  chips:       { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  divider:     { height: 1, backgroundColor: C.border },
+  footer:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  fromLabel:   { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginBottom: 2 },
+  price:       { fontFamily: "NexaBold", fontSize: 22, color: C.text },
+  priceSuffix: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  btn:         { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: C.blue, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 18 },
+  btnText:     { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+}); }
 
-  /* Subtle gold warmth to reinforce hotel luxury feel */
-  goldOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(201,168,76,0.04)",
-  },
+/* ─── DETAIL SHEET STYLES ─────────────────────────────────────────────── */
+function mkDs(C: typeof LIGHT) { return StyleSheet.create({
+  overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  sheet:         { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.card, borderTopLeftRadius: 36, borderTopRightRadius: 36, maxHeight: H * 0.90, elevation: 24, shadowColor: "#000", shadowOpacity: 0.20, shadowRadius: 28, shadowOffset: { width: 0, height: -4 } },
+  handle:        { width: 44, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.10)", alignSelf: "center", marginTop: 14, marginBottom: 0 },
 
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.10)",
-  },
-  titleWrap: { flexDirection: "row", alignItems: "center" },
-  headerTitle: {
-    color: C.white, fontSize: 16,
-    fontFamily: "NexaLight", letterSpacing: 1.5,
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.60)",
-    fontFamily: "NexaLight", fontSize: 12,
-    paddingHorizontal: 20, marginTop: 8, marginBottom: 14,
-    textAlign: "center",
-  },
+  imgWrap:       { width: "100%", height: 220, marginTop: 10, overflow: "hidden" },
+  img:           { width: "100%", height: "100%" },
+  imgStars:      { position: "absolute", top: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.88)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  imgStarsLabel: { fontFamily: "NexaBold", fontSize: 10, color: C.gold },
+  closeBtn:      { position: "absolute", top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.40)", alignItems: "center", justifyContent: "center" },
 
-  searchWrap: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 16, marginHorizontal: 16,
-    paddingHorizontal: 12, paddingVertical: 10,
-    gap: 10, elevation: 4, borderWidth: 1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10, shadowRadius: 10,
-  },
-  searchIconWrap: {
-    width: 28, height: 28, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
-  searchInput: {
-    flex: 1, fontFamily: "NexaLight", fontSize: 13,
-  },
+  body:          { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+  name:          { fontFamily: "NexaBold", fontSize: 22, color: C.text },
+  location:      { fontFamily: "NexaLight", fontSize: 13, color: C.textMut },
+  desc:          { fontFamily: "NexaLight", fontSize: 14, color: C.textSec, lineHeight: 21, marginTop: 12 },
 
-  list:   { padding: 16, paddingBottom: 60 },
-  noData: { flex: 1, justifyContent: "center", alignItems: "center" },
-});
+  sectionTitle:  { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginTop: 16, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.8 },
+  chips:         { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  divider:       { height: 1, backgroundColor: C.border, marginVertical: 16 },
 
-const cs = StyleSheet.create({
-  wrapper: {
-    borderRadius: 22,
-    marginBottom: 20,
-    overflow: "hidden",
-    elevation: 5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10, shadowRadius: 12,
-  },
-  wrapperDark: {
-    elevation: 8,
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-  },
+  priceRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  fromLabel:     { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginBottom: 3 },
+  price:         { fontFamily: "NexaBold", fontSize: 28, color: C.text },
+  priceSuffix:   { fontFamily: "NexaLight", fontSize: 14, color: C.textMut },
+  perNightBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.perNightBg, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8 },
+  perNightText:  { fontFamily: "NexaBold", fontSize: 13, color: C.blue },
 
-  imageWrap:     { width: "100%", height: 200, position: "relative" },
-  image:         { width: "100%", height: "100%" },
-  imageFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
-  imageOverlay:  { ...StyleSheet.absoluteFillObject, top: "30%" },
+  footer:        { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: C.border },
+  payBtn:        { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.blue, borderRadius: 22, paddingVertical: 17 },
+  payBtnText:    { fontFamily: "NexaBold", fontSize: 17, color: C.white, letterSpacing: 0.3 },
+}); }
 
-  badgePos: {
-    position: "absolute", top: 12, left: 12,
-    elevation: 4,
-    shadowColor: C.deep,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35, shadowRadius: 6,
-  },
-  ratingPos: {
-    position: "absolute", top: 16, right: 12,
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-    flexDirection: "row", alignItems: "center",
-  },
-  imageNameWrap: {
-    position: "absolute", bottom: 0, left: 0, right: 0,
-    paddingHorizontal: 16, paddingBottom: 12,
-  },
-  imageName: {
-    color: C.white, fontFamily: "NexaLight",
-    fontSize: 19, letterSpacing: 0.3,
-  },
-
-  content: { padding: 16 },
-
-  desc: {
-    fontFamily: "NexaLight", fontSize: 13,
-    lineHeight: 19, marginBottom: 12,
-  },
-
-  amenities: {
-    flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 12,
-  },
-
-  divider: { height: 1, marginBottom: 12 },
-
-  footer: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-  },
-  priceBlock: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-  },
-  price: {
-    fontFamily: "NexaLight", fontSize: 18,
-  },
-  priceCurrency: { fontSize: 12, color: C.gold },
-  priceLabel: {
-    fontFamily: "NexaLight", fontSize: 10,
-    letterSpacing: 0.3, marginTop: -2,
-  },
-
-  btn: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderRadius: 14, elevation: 4,
-    shadowColor: C.violet,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.30, shadowRadius: 8,
-  },
-  btnText: {
-    color: C.white, fontFamily: "NexaLight",
-    fontSize: 13, letterSpacing: 0.3,
-  },
-  readMoreBtn:  { marginTop: 2, marginBottom: 6, alignSelf: "flex-start" },
-  readMoreText: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
-});
-
-const ac = StyleSheet.create({
-  chip: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    borderRadius: 8, borderWidth: 1,
-    paddingHorizontal: 8, paddingVertical: 4,
-  },
-  label: {
-    fontFamily: "NexaLight", fontSize: 10, letterSpacing: 0.3,
-  },
-});
+/* ─── CHIP STYLES ─────────────────────────────────────────────────────── */
+function mkCh(C: typeof LIGHT) { return StyleSheet.create({
+  wrap: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.surfLow, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5 },
+  text: { fontFamily: "NexaLight", fontSize: 10, color: C.textSec },
+}); }

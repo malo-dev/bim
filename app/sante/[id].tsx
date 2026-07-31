@@ -1,323 +1,186 @@
-import NoData from "@/components/ui/noData";
-import { API_URL_BASE } from "@/constants/api";
-import { useGetAllProductsQuery } from "@/services/productServices";
+/* eslint-disable */
 import { Ionicons } from "@expo/vector-icons";
-import { useTranslation } from "react-i18next";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   RefreshControl,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Defs, Path, Rect, Stop, LinearGradient as SvgGradient } from "react-native-svg";
+import { useGetAllProductsQuery } from "@/services/productServices";
+import { API_URL_BASE } from "@/constants/api";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import NoData from "@/components/ui/noData";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
-  text:    "#0D1B3E",
-  muted:   "#7B8DB0",
-  border:  "rgba(3,83,204,0.10)",
-  inputBg: "rgba(3,83,204,0.06)",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:    "#0035C5",
+  blue:       "#0047FF",
+  deep:       "#001257",
+  white:      "#FFFFFF",
+  bg:         "#F9F9F9",
+  surface:    "#F3F3F4",
+  text:       "#1A1C1C",
+  textSec:    "#434657",
+  textMut:    "#747688",
+  border:     "rgba(196,197,218,0.30)",
+  gold:       "#F59E0B",
+  error:      "#EF4444",
+  navBg:      "rgba(255,255,255,0.96)",
+  navBord:    "rgba(196,197,218,0.20)",
+  iconBtnBg:  "rgba(0,53,197,0.06)",
+  cardBg:     "#FFFFFF",
+  tagBg:      "rgba(0,53,197,0.05)",
+  tagGoldBg:  "rgba(219,226,250,0.80)",
+  tagGoldTxt: "#3F4759",
+  footBord:   "rgba(196,197,218,0.15)",
+  imgFallA:   "#DDE4F5",
+  imgFallB:   "#EEF2FF",
+};
+const DARK: typeof LIGHT = {
+  primary:    "#4D8DFF",
+  blue:       "#4D8DFF",
+  deep:       "#4D8DFF",
+  white:      "#FFFFFF",
+  bg:         "#0B1220",
+  surface:    "#0F1A2E",
+  text:       "#EAF0FF",
+  textSec:    "#A3B4D0",
+  textMut:    "#6B7A99",
+  border:     "rgba(31,42,68,0.80)",
+  gold:       "#F59E0B",
+  error:      "#EF4444",
+  navBg:      "rgba(11,18,32,0.94)",
+  navBord:    "rgba(31,42,68,0.80)",
+  iconBtnBg:  "rgba(77,141,255,0.08)",
+  cardBg:     "#1A2540",
+  tagBg:      "rgba(77,141,255,0.08)",
+  tagGoldBg:  "rgba(77,141,255,0.12)",
+  tagGoldTxt: "#A3B4D0",
+  footBord:   "rgba(31,42,68,0.60)",
+  imgFallA:   "#0F1A2E",
+  imgFallB:   "#1A2540",
 };
 
-const Colors = {
-  light: {
-    background:    "#F0F4FF",
-    card:          "#FFFFFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.10)",
-    inputBg:       "#FFFFFF",
-    divider:       "rgba(3,83,204,0.08)",
-    headerGrad:    [C.deep, C.primary] as [string, string],
-    shadow:        C.primary,
-  },
-  dark: {
-    background:    "#0A0F1E",
-    card:          "#111827",
-    text:          "#E2E8F0",
-    textSecondary: "#64748B",
-    border:        "rgba(255,255,255,0.08)",
-    inputBg:       "#111827",
-    divider:       "rgba(255,255,255,0.07)",
-    headerGrad:    ["#060B18", "#0D1B3E"] as [string, string],
-    shadow:        "#000",
-  },
-};
-
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-
-/* ─── SVG STABLES ────────────────────────────────────────────────────── */
-const HealthBadge = memo(() => (
-  <Svg width={44} height={44} viewBox="0 0 48 48">
-    <Defs>
-      <SvgGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <Stop offset="0" stopColor={C.deep} />
-        <Stop offset="1" stopColor={C.violet} />
-      </SvgGradient>
-    </Defs>
-    <Rect x={0} y={0} width={48} height={48} rx={14} fill="url(#bg)" />
-    {/* Croix médicale */}
-    <Rect x={20} y={10} width={8} height={28} rx={3} fill={C.white} opacity={0.90} />
-    <Rect x={10} y={20} width={28} height={8} rx={3} fill={C.white} opacity={0.90} />
-  </Svg>
-));
-HealthBadge.displayName = "HealthBadge";
-
-const CoinIcon = memo(() => (
-  <Svg width={18} height={18} viewBox="0 0 20 20">
-    <Circle cx={10} cy={10} r={10} fill={C.primary} opacity={0.1} />
-    <Path
-      d="M10 4.5v1M10 14.5V16M7.5 7.5C7.5 6.12 8.62 5 10 5s2.5 1.12 2.5 2.5c0 2-2.5 2.5-2.5 4.5M7.5 12.5C7.5 13.88 8.62 15 10 15s2.5-1.12 2.5-2.5"
-      stroke={C.primary} strokeWidth={1.3} strokeLinecap="round" fill="none"
-    />
-  </Svg>
-));
-CoinIcon.displayName = "CoinIcon";
-
-const ArrowSvg = memo(() => (
-  <Svg width={16} height={16} viewBox="0 0 18 18">
-    <Path
-      d="M3 9h12M11 5l4 4-4 4"
-      stroke={C.white} strokeWidth={1.8}
-      strokeLinecap="round" strokeLinejoin="round" fill="none"
-    />
-  </Svg>
-));
-ArrowSvg.displayName = "ArrowSvg";
-
-/* ── Icône fallback quand imageUrl est null ── */
-const ImageFallbackIcon = memo(({ isDark }: { isDark: boolean }) => (
-  <Svg width={72} height={72} viewBox="0 0 72 72">
-    <Defs>
-      <SvgGradient id="fallGrad" x1="0" y1="0" x2="1" y2="1">
-        <Stop offset="0" stopColor={isDark ? "#1E2A3A" : "#DDE4F5"} />
-        <Stop offset="1" stopColor={isDark ? "#111827" : "#EEF2FF"} />
-      </SvgGradient>
-    </Defs>
-    {/* Fond carré arrondi */}
-    <Rect x={12} y={12} width={48} height={48} rx={16} fill={`${C.primary}18`} />
-    {/* Stéthoscope simplifié */}
-    {/* Tête du stéthoscope — cercle */}
-    <Circle cx={36} cy={44} r={7} fill="none" stroke={C.primary} strokeWidth={2.2} opacity={0.55} />
-    {/* Tube */}
-    <Path
-      d="M29 44 C20 44 18 36 18 30 M18 30 C18 24 22 22 26 22 M46 44 C54 44 54 36 54 30 M54 30 C54 24 50 22 46 22"
-      fill="none" stroke={C.primary} strokeWidth={2} strokeLinecap="round" opacity={0.40}
-    />
-    {/* Écouteurs */}
-    <Circle cx={26} cy={22} r={3} fill={C.primary} opacity={0.45} />
-    <Circle cx={46} cy={22} r={3} fill={C.primary} opacity={0.45} />
-    {/* Croix médicale au centre */}
-    <Rect x={33} y={28} width={6} height={16} rx={2} fill={C.primary} opacity={0.22} />
-    <Rect x={28} y={33} width={16} height={6} rx={2} fill={C.primary} opacity={0.22} />
-  </Svg>
-));
-ImageFallbackIcon.displayName = "ImageFallbackIcon";
+/* ─── FILTRES ────────────────────────────────────────────────────────── */
+const FILTERS = ["Tout", "Santé", "Eco-insure", "Prévoyance"];
 
 /* ─── PRODUCT CARD ───────────────────────────────────────────────────── */
-type ProductCardProps = { item: any; onPress: () => void; isDark: boolean };
+function ProductCardBase({ item, onPress, index }: { item: any; onPress: () => void; index: number }) {
+  const { isDark } = useAppTheme();
+  const C  = isDark ? DARK : LIGHT;
+  const pc = useMemo(() => mkPc(C), [isDark]);
 
-function ProductCardBase({ item, onPress, isDark }: ProductCardProps) {
-  const t         = isDark ? Colors.dark : Colors.light;
-  const { t: tr } = useTranslation();
-  const pressAnim = useRef(new Animated.Value(1)).current;
-  const slideY    = useRef(new Animated.Value(20)).current;
-  const opac      = useRef(new Animated.Value(0)).current;
+  const slideY = useRef(new Animated.Value(28)).current;
+  const opac   = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideY, { toValue: 0, duration: 350, useNativeDriver: true }),
-      Animated.timing(opac,   { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.timing(slideY, { toValue: 0, duration: 380, delay: Math.min(index * 80, 400), useNativeDriver: true }),
+      Animated.timing(opac,   { toValue: 1, duration: 380, delay: Math.min(index * 80, 400), useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const pressIn  = () => Animated.spring(pressAnim, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true }).start();
-
-  const [expanded, setExpanded] = useState(false);
-
-  /* ── URL image — imageUrl peut être null ou string ── */
   const imageUri = item.imageUrl ? `${API_URL_BASE}${item.imageUrl}` : null;
+  const price    = Number(item.price ?? 0).toFixed(2);
+  const currency = item.currency?.code ?? "EC";
 
   return (
-    <Animated.View style={[
-      cs.wrapper,
-      {
-        backgroundColor: t.card,
-        borderColor: t.border,
-        shadowColor: t.shadow,
-        opacity: opac,
-        transform: [{ translateY: slideY }, { scale: pressAnim }],
-      },
-    ]}>
-      <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
+    <Animated.View style={[pc.card, { opacity: opac, transform: [{ translateY: slideY }] }]}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.92}>
 
-        {/* ── IMAGE ou FALLBACK ── */}
-        <View style={cs.imageWrap}>
+        {/* ── IMAGE ── */}
+        <View style={pc.imageWrap}>
           {imageUri ? (
-            /* Image réelle du produit */
-            <Image
-              source={{ uri: imageUri }}
-              style={cs.image}
-              contentFit="cover"
-              transition={300}
-              placeholder={{ thumbhash: "" }}
-            />
+            <Image source={{ uri: imageUri }} style={pc.image} contentFit="cover" transition={300} />
           ) : (
-            /* Fallback illustré */
-            <LinearGradient
-              colors={isDark ? ["#1A2238", "#111827"] : ["#DDE4F5", "#EEF2FF"]}
-              style={cs.imageFallback}
-            >
-              {/* Motif de fond subtil */}
-              <View style={cs.fallbackGrid} />
-              <ImageFallbackIcon isDark={isDark} />
-              <Text style={[cs.fallbackLabel, { color: isDark ? "rgba(255,255,255,0.18)" : "rgba(3,83,204,0.30)" }]}>
-                {tr("common.noImage")}
-              </Text>
+            <LinearGradient colors={[C.imgFallA, C.imgFallB]} style={pc.image}>
+              <Ionicons name="medical-outline" size={56} color={C.primary + "40"} />
             </LinearGradient>
           )}
 
-          {/* Overlay dégradé bas (sur image réelle seulement) */}
-          {imageUri && (
-            <LinearGradient
-              colors={["transparent", isDark ? "rgba(0,0,0,0.75)" : "rgba(13,27,62,0.55)"]}
-              style={cs.imageOverlay}
-            />
-          )}
+          <LinearGradient
+            colors={["transparent", "rgba(0,18,87,0.45)"]}
+            start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
 
-          {/* Badge Santé */}
-          <View style={cs.badgePos}>
-            <HealthBadge />
+          <View style={pc.badgeIcon}>
+            <Ionicons name="add-circle" size={28} color={C.white} />
           </View>
 
-          {/* Tag */}
-          <View style={[cs.tagPos, {
-            backgroundColor: isDark ? "rgba(17,24,39,0.90)" : "rgba(255,255,255,0.92)",
-          }]}>
-            <Text style={[cs.tagText, { color: t.text }]}>{tr("sectors.santeTag")}</Text>
+          <View style={pc.badgeCat}>
+            <Ionicons name="medical-outline" size={15} color={C.primary} />
+            <Text style={pc.badgeCatText}>Santé</Text>
           </View>
 
-          {/* Prix flottant — affiché même sur le fallback */}
-          <View style={[cs.priceOverlay, {
-            backgroundColor: imageUri
-              ? "rgba(255,255,255,0.15)"
-              : (isDark ? "rgba(3,83,204,0.22)" : "rgba(3,83,204,0.10)"),
-            borderColor: imageUri
-              ? "transparent"
-              : (isDark ? "rgba(77,150,255,0.22)" : "rgba(3,83,204,0.15)"),
-          }]}>
-            <CoinIcon />
-            <Text style={[cs.priceOverlayText, {
-              color: imageUri ? C.white : (isDark ? "#93C5FD" : C.primary),
-            }]}>
-              {item.price}{" "}
-              <Text style={[cs.priceOverlayCurrency, {
-                color: imageUri ? "rgba(255,255,255,0.7)" : (isDark ? "rgba(147,197,253,0.65)" : "rgba(3,83,204,0.60)"),
-              }]}>
-                {item.currency?.code || "EC"}
-              </Text>
-            </Text>
+          <View style={pc.priceWrap}>
+            <Text style={pc.priceValue}>{price}</Text>
+            <Text style={pc.priceCur}>{currency}</Text>
           </View>
         </View>
 
         {/* ── CONTENU ── */}
-        <View style={cs.content}>
-          <Text style={[cs.name, { color: t.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={[cs.desc, { color: t.textSecondary }]} numberOfLines={expanded ? undefined : 2}>
-            {item.description}
-          </Text>
-          {item.description && item.description.length > 80 && (
-            <TouchableOpacity onPress={() => setExpanded(e => !e)} style={cs.readMoreBtn}>
-              <Text style={[cs.readMoreText, { color: C.primary }]}>
-                {expanded ? tr("common.readLess") : tr("common.readMore")}
-              </Text>
-            </TouchableOpacity>
-          )}
+        <View style={pc.content}>
+          <Text style={pc.name} numberOfLines={1}>{item.name}</Text>
+          <Text style={pc.desc} numberOfLines={3}>{item.description}</Text>
 
-          <View style={[cs.divider, { backgroundColor: t.divider }]} />
-
-          {/* Footer */}
-          <View style={cs.footer}>
-            <View style={cs.metaRow}>
-              <View style={[cs.metaChip, {
-                backgroundColor: isDark ? "rgba(3,83,204,0.20)" : "rgba(3,83,204,0.08)",
-              }]}>
-                <Ionicons name="medical-outline" size={11} color={C.primary} />
-                <Text style={[cs.metaText, { color: C.primary }]}>{tr("sectors.santeTag")}</Text>
+          <View style={pc.footer}>
+            <View style={pc.tags}>
+              <View style={pc.tag}>
+                <Ionicons name="star-outline" size={11} color={C.primary} />
+                <Text style={pc.tagText}>SANTÉ</Text>
               </View>
-              {item.currency?.code && (
-                <View style={[cs.metaChip, {
-                  backgroundColor: isDark ? "rgba(255,215,0,0.12)" : "rgba(255,215,0,0.15)",
-                }]}>
-                  <Ionicons name="cash-outline" size={11} color={C.gold} />
-                  <Text style={[cs.metaText, { color: C.gold }]}>{item.currency.code}</Text>
-                </View>
-              )}
-              {/* Badge "Sans image" discret */}
-              {!imageUri && (
-                <View style={[cs.metaChip, {
-                  backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(3,83,204,0.05)",
-                }]}>
-                  <Ionicons name="image-outline" size={11} color={t.textSecondary} />
-                  <Text style={[cs.metaText, { color: t.textSecondary }]}>{tr("common.noImage")}</Text>
-                </View>
-              )}
+              <View style={[pc.tag, pc.tagGold]}>
+                <Ionicons name="card-outline" size={11} color={C.tagGoldTxt} />
+                <Text style={[pc.tagText, pc.tagTextGold]}>{currency}</Text>
+              </View>
             </View>
 
-            {/* Bouton CTA */}
-            <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+            <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={pc.btnWrap}>
               <LinearGradient
-                colors={[C.deep, C.violet]}
+                colors={[C.blue, C.deep]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={cs.btn}
+                style={pc.btn}
               >
-                <Text style={cs.btnText}>{tr("common.see")}</Text>
-                <ArrowSvg />
+                <Text style={pc.btnText}>Voir</Text>
+                <Ionicons name="arrow-forward" size={16} color={C.white} />
               </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
+
       </TouchableOpacity>
     </Animated.View>
   );
 }
 const ProductCard = memo(ProductCardBase);
-ProductCard.displayName = "ProductCard";
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
-export default function EnergyProductsList() {
-  const router        = useRouter();
-  const { id }        = useLocalSearchParams();
-  const { isDark, t } = useTheme();
-  const { t: tr }     = useTranslation();
+export default function SanteProducts() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+
+  const router     = useRouter();
+  const { id }     = useLocalSearchParams<{ id: string }>();
+  const { unread } = useUnreadNotifications();
 
   const [page,       setPage]       = useState(1);
   const [search,     setSearch]     = useState("");
+  const [filter,     setFilter]     = useState("Tout");
   const [dataList,   setDataList]   = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -328,7 +191,7 @@ export default function EnergyProductsList() {
   useEffect(() => {
     if (data?.data) {
       if (page === 1) setDataList(data.data);
-      else setDataList((prev) => [...prev, ...data.data]);
+      else setDataList(prev => [...prev, ...data.data]);
     }
   }, [data, page]);
 
@@ -340,94 +203,98 @@ export default function EnergyProductsList() {
     setRefreshing(true); setPage(1); await refetch(); setRefreshing(false);
   }, [refetch]);
 
-  const handleSearchChange = useCallback((v: string) => { setSearch(v); setPage(1); }, []);
-  const handleSearchClear  = useCallback(() => { setSearch(""); setPage(1); }, []);
+  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1); }, []);
+
+  const ListHeader = () => (
+    <View>
+      <View style={s.searchWrap}>
+        <View style={s.searchBox}>
+          <Ionicons name="search-outline" size={16} color={C.textMut} />
+          <TextInput
+            style={s.searchInput}
+            placeholder="Rechercher un produit Santé..."
+            placeholderTextColor={C.textMut}
+            value={search}
+            onChangeText={handleSearch}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => handleSearch("")}>
+              <Ionicons name="close-circle" size={16} color={C.textMut} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+        {FILTERS.map(f => (
+          <TouchableOpacity
+            key={f}
+            style={[s.chip, filter === f && s.chipActive]}
+            onPress={() => setFilter(f)}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.chipText, filter === f && s.chipTextActive]}>{f}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={s.countRow}>
+        <View style={s.countBar} />
+        <Text style={s.countText}>{dataList.length} PRODUIT{dataList.length !== 1 ? "S" : ""} DISPONIBLE{dataList.length !== 1 ? "S" : ""}</Text>
+      </View>
+    </View>
+  );
 
   return (
-    <View style={[s.root, { backgroundColor: t.background }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* ── HEADER ── */}
-      <View style={[s.header, { shadowColor: isDark ? "#000" : C.primary }]}>
-        <LinearGradient
-          colors={t.headerGrad}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={s.deco1} /><View style={s.deco2} /><View style={s.deco3} />
-
-        <SafeAreaView edges={["top"]}>
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={20} color={C.white} />
-            </TouchableOpacity>
-            <View style={s.titleWrap}>
-              <View style={s.titleBadge}>
-                <Svg width={13} height={13} viewBox="0 0 24 24">
-                  <Rect x={10} y={3} width={4} height={18} rx={1.5} fill={C.gold} />
-                  <Rect x={3}  y={10} width={18} height={4} rx={1.5} fill={C.gold} />
-                </Svg>
-              </View>
-              <Text style={s.headerTitle}>{tr("sectors.sante")}</Text>
-            </View>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-              <Ionicons name="notifications-outline" size={20} color={C.white} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={s.headerSub}>Trouvez votre offre santé idéale</Text>
-
-          <View style={[s.searchWrap, {
-            backgroundColor: t.inputBg,
-            borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
-            shadowColor: isDark ? "#000" : "#000",
-          }]}>
-            <View style={[s.searchIconWrap, { backgroundColor: isDark ? "rgba(3,83,204,0.25)" : C.inputBg }]}>
-              <Ionicons name="search-outline" size={14} color={C.primary} />
-            </View>
-            <TextInput
-              style={[s.searchInput, { color: t.text }]}
-              placeholder="Rechercher un produit Santé…"
-              placeholderTextColor={t.textSecondary}
-              value={search} onChangeText={handleSearchChange}
-              blurOnSubmit={false} autoCorrect={false}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={handleSearchClear}>
-                <Ionicons name="close-circle" size={16} color={t.textSecondary} />
-              </TouchableOpacity>
+      {/* ── TOP BAR ── */}
+      <SafeAreaView edges={["top"]} style={s.safeBar}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.primary} />
+          </TouchableOpacity>
+          <Text style={s.topTitle}>BIM Santé</Text>
+          <TouchableOpacity style={s.iconBtnRel} onPress={() => router.push("/notification" as any)}>
+            <Ionicons name="notifications-outline" size={22} color={C.textSec} />
+            {unread > 0 && (
+              <View style={s.badge}><Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text></View>
             )}
-          </View>
-        </SafeAreaView>
-      </View>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
       {/* ── LISTE ── */}
       {dataList.length === 0 && !isFetching ? (
-        <View style={s.noData}><NoData /></View>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <NoData />
+        </View>
       ) : (
         <FlatList
           data={dataList}
-          keyExtractor={(item) => `${item.productId}`}
-          contentContainerStyle={[s.list, { backgroundColor: t.background }]}
+          keyExtractor={item => `${item.productId}`}
+          ListHeaderComponent={<ListHeader />}
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
-          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.violet} colors={[C.violet]} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />
           }
-          ListHeaderComponent={
-            <View style={s.countRow}>
-              <View style={[s.countDot, { backgroundColor: C.accent }]} />
-              <Text style={[s.countText, { color: t.textSecondary }]}>
-                {dataList.length} produit{dataList.length !== 1 ? "s" : ""}
-              </Text>
+          ListFooterComponent={isFetching && !refreshing ? (
+            <View style={{ paddingVertical: 20, alignItems: "center" }}>
+              <ActivityIndicator color={C.primary} />
             </View>
-          }
-          renderItem={({ item }) => (
+          ) : null}
+          renderItem={({ item, index }) => (
             <ProductCard
               item={item}
-              isDark={isDark}
-              onPress={() => router.push(`/payment?productId=${item.productId}&companyId=${id}`)}
+              index={index}
+              onPress={() => router.push(`/sante/product/${item.productId}?companyId=${id}` as any)}
             />
           )}
         />
@@ -437,57 +304,57 @@ export default function EnergyProductsList() {
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    paddingBottom: 20, elevation: 12,
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16,
-  },
-  deco1: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.05)", top: -70, right: -60 },
-  deco2: { position: "absolute", width: 130, height: 130, borderRadius: 65,  backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -30 },
-  deco3: { position: "absolute", width: 60,  height: 60,  borderRadius: 30,  backgroundColor: "rgba(255,215,0,0.07)",  bottom: 30, right: 80 },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  titleWrap:  { flexDirection: "row", alignItems: "center", gap: 8 },
-  titleBadge: { width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(255,215,0,0.2)", alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: C.white, fontSize: 15, fontFamily: "NexaLight", letterSpacing: 2 },
-  headerSub:   { color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight", fontSize: 12, paddingHorizontal: 20, marginTop: 6, marginBottom: 14 },
-  searchWrap:  { flexDirection: "row", alignItems: "center", borderRadius: 16, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 9, gap: 10, borderWidth: 1, elevation: 3, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8 },
-  searchIconWrap: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
-  countRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4, paddingTop: 16, paddingBottom: 8 },
-  countDot:  { width: 4, height: 16, borderRadius: 2 },
-  countText: { fontFamily: "NexaLight", fontSize: 12 },
-  list:   { padding: 16, paddingTop: 4, paddingBottom: 60 },
-  noData: { flex: 1, justifyContent: "center", alignItems: "center" },
-});
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  safeBar:    { backgroundColor: C.navBg, borderBottomWidth: 1, borderBottomColor: C.navBord },
+  topBar:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
+  iconBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center" },
+  iconBtnRel: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  topTitle:   { fontFamily: "NexaBold", fontSize: 20, color: C.primary, letterSpacing: -0.3 },
+  badge:      { position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  badgeText:  { fontFamily: "NexaBold", fontSize: 9, color: C.white },
 
-const cs = StyleSheet.create({
-  wrapper: { borderRadius: 22, marginBottom: 18, overflow: "hidden", borderWidth: 1, elevation: 5, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12 },
-  imageWrap:     { width: "100%", height: 200, position: "relative" },
-  image:         { width: "100%", height: "100%" },
-  imageFallback: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  fallbackGrid:  { ...StyleSheet.absoluteFillObject, opacity: 0.04 },
-  fallbackLabel: { fontFamily: "NexaLight", fontSize: 10, letterSpacing: 0.5 },
-  imageOverlay:  { ...StyleSheet.absoluteFillObject, top: "40%" },
-  badgePos: { position: "absolute", top: 12, left: 12, elevation: 4, shadowColor: C.deep, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
-  tagPos:   { position: "absolute", top: 14, right: 12, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  tagText:  { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
-  priceOverlay: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
-  priceOverlayText:     { fontFamily: "NexaLight", fontSize: 15 },
-  priceOverlayCurrency: { fontSize: 11 },
-  content: { padding: 16 },
-  name:    { fontFamily: "NexaLight", fontSize: 16, letterSpacing: 0.2, marginBottom: 5 },
-  desc:    { fontFamily: "NexaLight", fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  divider: { height: 1, marginBottom: 12 },
-  footer:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  metaRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", flex: 1, marginRight: 8 },
-  metaChip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  metaText: { fontFamily: "NexaLight", fontSize: 11 },
-  btn:          { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, elevation: 4, shadowColor: C.violet, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 6 },
-  btnText:      { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
-  readMoreBtn:  { marginTop: 2, marginBottom: 6, alignSelf: "flex-start" },
-  readMoreText: { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 0.3 },
-});
+  searchWrap:    { paddingHorizontal: 20, paddingTop: 16 },
+  searchBox:     { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.surface, borderRadius: 18, paddingHorizontal: 14, height: 50, borderWidth: 1, borderColor: C.border },
+  searchInput:   { flex: 1, fontFamily: "NexaLight", fontSize: 14, color: C.text },
+
+  chips:         { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4, gap: 10 },
+  chip:          { paddingHorizontal: 20, paddingVertical: 9, borderRadius: 99, backgroundColor: C.surface },
+  chipActive:    { backgroundColor: C.blue, shadowColor: C.blue, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  chipText:      { fontFamily: "NexaBold", fontSize: 12, color: C.textSec },
+  chipTextActive:{ color: C.white },
+
+  countRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 10 },
+  countBar: { width: 4, height: 18, borderRadius: 2, backgroundColor: C.blue },
+  countText:{ fontFamily: "NexaBold", fontSize: 11, color: C.textMut, letterSpacing: 0.8 },
+
+  list: { paddingHorizontal: 20, paddingBottom: 80 },
+}); }
+
+function mkPc(C: typeof LIGHT) { return StyleSheet.create({
+  card:      { backgroundColor: C.cardBg, borderRadius: 24, marginBottom: 20, overflow: "hidden", elevation: 4, shadowColor: "rgba(0,71,255,0.06)", shadowOpacity: 1, shadowRadius: 24, shadowOffset: { width: 0, height: 8 } },
+  imageWrap: { height: 240, position: "relative", alignItems: "center", justifyContent: "center" },
+  image:     { width: "100%", height: "100%" },
+
+  badgeIcon:    { position: "absolute", top: 14, left: 14, width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.30)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.45)" },
+  badgeCat:     { position: "absolute", top: 14, right: 14, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.82)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: "rgba(255,255,255,0.50)" },
+  badgeCatText: { fontFamily: "NexaBold", fontSize: 12, color: "#1A1C1C" },
+
+  priceWrap:  { position: "absolute", bottom: 14, left: 14, flexDirection: "row", alignItems: "baseline", gap: 8, backgroundColor: "rgba(255,255,255,0.82)", borderRadius: 22, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: "rgba(255,255,255,0.28)" },
+  priceValue: { fontFamily: "NexaBold", fontSize: 24, color: C.primary },
+  priceCur:   { fontFamily: "NexaLight", fontSize: 13, color: "#434657" },
+
+  content: { padding: 24 },
+  name:    { fontFamily: "NexaBold", fontSize: 20, color: C.primary, marginBottom: 8 },
+  desc:    { fontFamily: "NexaLight", fontSize: 14, color: C.textSec, lineHeight: 21, marginBottom: 20 },
+
+  footer:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: C.footBord, paddingTop: 18 },
+  tags:        { flexDirection: "row", gap: 8, flexWrap: "wrap", flex: 1, marginRight: 12 },
+  tag:         { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.tagBg, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
+  tagGold:     { backgroundColor: C.tagGoldBg },
+  tagText:     { fontFamily: "NexaBold", fontSize: 10, color: C.primary, letterSpacing: 0.5 },
+  tagTextGold: { color: C.tagGoldTxt },
+
+  btnWrap: { borderRadius: 18, overflow: "hidden", elevation: 4, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  btn:     { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 28, paddingVertical: 13 },
+  btnText: { fontFamily: "NexaBold", fontSize: 13, color: C.white },
+}); }

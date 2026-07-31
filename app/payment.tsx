@@ -14,7 +14,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Modal from "react-native-modal";
@@ -23,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useCreatePaiementMutation } from "@/services/tsxService";
 import { useVerifyPassMutation } from "@/services/authService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
+import { useAppTheme } from "@/app/_layout";
 
 /* ─── THEME ──────────────────────────────────────────────────────────── */
 const C = {
@@ -68,11 +68,6 @@ const Colors = {
     pinFilledBg:   "rgba(77,150,255,0.15)",
   },
 };
-
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
 
 const SHORTCUTS      = ["500", "1000", "2500", "5000", "10000"];
 const SHORTCUT_LABELS = ["500", "1 000", "2 500", "5 000", "10 000"];
@@ -124,7 +119,8 @@ function Keypad({ onPress, onDelete, t, isDark }: {
 export default function Payment() {
   const router = useRouter();
   const { productId, companyId } = useLocalSearchParams();
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const t = isDark ? Colors.dark : Colors.light;
   const { t: tr } = useTranslation();
 
   const [payAmount,      setPayAmount]      = useState("");

@@ -1,18 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { slides } from "@/assets/mockdata/slidersOnboarding.mock";
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
 import { useRouter } from "expo-router";
-import { VideoView, useVideoPlayer } from "expo-video";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import logo from "@/assets/images/logo.jpeg";
-import  {Image} from 'expo-image'
+import { Image } from "expo-image";
 import {
   Animated,
   Dimensions,
   FlatList,
-   Platform,
+  Platform,
   Modal,
   ScrollView,
   StatusBar,
@@ -20,100 +16,98 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { C, Colors, FONTS } from "@/constants/theme";
+import { FONTS } from "@/constants/theme";
 import { PRIVACY_SECTIONS } from "@/assets/mockdata/privacyPolicy";
-
-/* ─── Hook thème local ───────────────────────────────────────────────── */
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark  = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
+import { useAppTheme } from "@/app/_layout";
 
 const { width, height } = Dimensions.get("window");
 
-/* ─── PALETTE BRAND (constantes non thémées) ─────────────────────────── */
-const B = {
-  violet: "#3906C7",
-  deep:   "#302E99",
-  accent: "#4D96FF",
-  gold:   "#FFD700",
+/* ─── PALETTES ───────────────────────────────────────────────────────── */
+const LIGHT = {
+  bg:           "#FFFFFF",
+  slideBg:      "#F8F9FF",
+  primary:      "#0047FF",
+  primaryLight: "rgba(0,71,255,0.08)",
+  glow:         "rgba(0,71,255,0.06)",
+  text:         "#1A1C1C",
+  textSub:      "#434657",
+  textMuted:    "#747688",
+  border:       "#E2E2E2",
+  inputBg:      "#F8FAFE",
+  chipBg:       "#FFFFFF",
+  dotIdle:      "#C4C5DA",
+  cardBg:       "#FFFFFF",
+  cardElev:     6,
+  cardBord:     "#E2E2E2",
 };
-
-
+const DARK: typeof LIGHT = {
+  bg:           "#0B1220",
+  slideBg:      "#0B1220",
+  primary:      "#4D8DFF",
+  primaryLight: "rgba(77,141,255,0.12)",
+  glow:         "rgba(77,141,255,0.06)",
+  text:         "#EAF0FF",
+  textSub:      "#A3B4D0",
+  textMuted:    "#6B7A99",
+  border:       "rgba(31,42,68,0.80)",
+  inputBg:      "#0F1A2E",
+  chipBg:       "#1A2540",
+  dotIdle:      "#2A3A5A",
+  cardBg:       "#1A2540",
+  cardElev:     0,
+  cardBord:     "rgba(31,42,68,0.90)",
+};
 
 /* ─── PRIVACY MODAL ──────────────────────────────────────────────────── */
 function PrivacyModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const pm = useMemo(() => mkPm(C), [isDark]);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
       <View style={pm.overlay}>
-        <View style={[pm.sheet, { backgroundColor: isDark ? t.card : "#F4F6FB" }]}>
+        <View style={pm.sheet}>
+          <View style={pm.handle} />
 
-          {/* Header gradient */}
-          <LinearGradient
-            colors={[t.gradientStart, t.gradientEnd]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={pm.header}
-          >
-            <View style={pm.headerRow}>
-              <View style={pm.headerIcon}>
-                <Ionicons name="shield-checkmark" size={20} color="#fff" />
-              </View>
-              <Text style={pm.headerTitle}>Politique de confidentialité</Text>
-              <TouchableOpacity style={pm.closeBtn} onPress={onClose}>
-                <Ionicons name="close" size={18} color="#fff" />
-              </TouchableOpacity>
+          <View style={pm.headerRow}>
+            <View style={pm.headerIcon}>
+              <Ionicons name="shield-checkmark" size={17} color={C.primary} />
             </View>
-            <Text style={pm.headerSub}>Dernière mise à jour : Mars 2026</Text>
-          </LinearGradient>
+            <Text style={pm.headerTitle}>Politique de confidentialité</Text>
+            <TouchableOpacity style={pm.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={17} color={C.textSub} />
+            </TouchableOpacity>
+          </View>
+          <Text style={pm.headerSub}>Dernière mise à jour : Mars 2026</Text>
 
-          {/* Content */}
-          <ScrollView
-            style={pm.scroll}
-            contentContainerStyle={pm.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={[pm.intro, { color: t.textSecondary }]}>
-              Chez BIMNEXT, la protection de vos données personnelles est une priorité absolue.
+          <ScrollView style={pm.scroll} contentContainerStyle={pm.scrollContent} showsVerticalScrollIndicator={false}>
+            <Text style={pm.intro}>
+              Chez BIM NEXT, la protection de vos données personnelles est une priorité absolue.
               Ce document explique comment nous collectons, utilisons et protégeons vos informations.
             </Text>
 
             {PRIVACY_SECTIONS.map((section, i) => (
-              <View key={i} style={[pm.sectionCard, {
-                backgroundColor: t.card,
-                shadowColor: isDark ? "#000" : "#0D1B3E",
-              }]}>
+              <View key={i} style={pm.sectionCard}>
                 <View style={pm.sectionHeader}>
-                  <View style={[pm.sectionIcon, { backgroundColor: t.primary + "15" }]}>
-                    <Ionicons name={section.icon as any} size={16} color={t.primary} />
+                  <View style={pm.sectionIcon}>
+                    <Ionicons name={section.icon as any} size={14} color={C.primary} />
                   </View>
-                  <Text style={[pm.sectionTitle, { color: t.text }]}>{section.title}</Text>
+                  <Text style={pm.sectionTitle}>{section.title}</Text>
                 </View>
-                <Text style={[pm.sectionBody, { color: t.textSecondary }]}>{section.body}</Text>
+                <Text style={pm.sectionBody}>{section.body}</Text>
               </View>
             ))}
 
-            <Text style={[pm.footer, { color: t.textSecondary }]}>
-              Pour toute question : support@bim.app
-            </Text>
+            <Text style={pm.footer}>Pour toute question : support@bimreseau.com</Text>
             <View style={{ height: 20 }} />
           </ScrollView>
 
-          {/* Bouton fermer */}
-          <View style={[pm.btnWrap, {
-            backgroundColor: isDark ? t.card : "#F4F6FB",
-            borderTopColor: t.border,
-          }]}>
-            <TouchableOpacity
-              style={[pm.closeFullBtn, { backgroundColor: t.primary }]}
-              onPress={onClose}
-            >
-              <Text style={pm.closeFullText}>{"J'ai compris"} </Text>
+          <View style={pm.btnWrap}>
+            <TouchableOpacity style={pm.acceptBtn} onPress={onClose} activeOpacity={0.85}>
+              <Text style={pm.acceptText}>J'ai compris</Text>
               <Ionicons name="checkmark" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -125,14 +119,30 @@ function PrivacyModal({ visible, onClose }: { visible: boolean; onClose: () => v
 
 /* ─── PRIVACY GATE ───────────────────────────────────────────────────── */
 function PrivacyGate({ onAccept }: { onAccept: () => void }) {
-    const logoScale = useRef(new Animated.Value(0.7)).current;
-  const logoOpac = useRef(new Animated.Value(0)).current;
-   
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const pg = useMemo(() => mkPg(C), [isDark]);
+
   const floatY    = useRef(new Animated.Value(0)).current;
-  const { isDark, t } = useTheme();
+  const logoScale = useRef(new Animated.Value(0.8)).current;
+  const logoOpac  = useRef(new Animated.Value(0)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+
   const [checked,      setChecked]      = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }),
+      Animated.timing(logoOpac,  { toValue: 1, duration: 600, useNativeDriver: true }),
+    ]).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatY, { toValue: -12, duration: 2800, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 2800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   const shake = () => {
     Animated.sequence([
@@ -144,608 +154,358 @@ function PrivacyGate({ onAccept }: { onAccept: () => void }) {
     ]).start();
   };
 
-
-
-   useEffect(() => {
-      Animated.parallel([
-        Animated.spring(logoScale, { toValue: 1, friction: 6, useNativeDriver: true }),
-        Animated.timing(logoOpac,  { toValue: 1, duration: 500, useNativeDriver: true })
-      ]).start();
-  
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
-          Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
-        ])
-      ).start();
-    }, [floatY, logoOpac, logoScale]);
-
-  const handleContinuer = () => {
+  const handleContinuer = async () => {
     if (!checked) { shake(); return; }
+    await AsyncStorage.setItem("privacyAcceptedAt", new Date().toISOString());
     onAccept();
   };
 
   return (
     <View style={pg.root}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="transparent"
-        translucent
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
 
-      {/* Background — brand en light, nuit profonde en dark */}
-      <LinearGradient
-        colors={
-          isDark
-            ? ["#060D1F", "#091528", "#0D1F3C"]
-            : [t.gradientStart, t.gradientEnd, t.accent]
-        }
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
+      <View style={pg.blob1} />
+      <View style={pg.blob2} />
 
-      {/* Cercles décoratifs — visibles en light ET dark */}
-      <View style={[pg.deco1, {
-        backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(255,255,255,0.06)",
-        borderWidth: 1,
-        borderColor: isDark ? "rgba(77,150,255,0.15)" : "rgba(255,255,255,0.08)",
-      }]} />
-      <View style={[pg.deco2, {
-        backgroundColor: isDark ? "rgba(57,6,199,0.20)" : "rgba(255,255,255,0.04)",
-      }]} />
-      <View style={[pg.deco3, {
-        backgroundColor: isDark ? "rgba(255,215,0,0.08)" : "rgba(255,255,255,0.06)",
-      }]} />
-      {/* Cercle supplémentaire bas droite en dark */}
-      {isDark && (
-        <View style={{
-          position: "absolute", width: 120, height: 120,
-          borderRadius: 60, bottom: 180, right: -30,
-          backgroundColor: "rgba(77,150,255,0.08)",
-          borderWidth: 1, borderColor: "rgba(77,150,255,0.12)",
-        }} />
-      )}
-
-      {/* Hero */}
       <View style={pg.hero}>
-         <Animated.View
-                    style={[
-                      s.logoArea,
-                      { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] },
-                    ]}
-                  >
-                    <View style={s.logoWrap}>
-                      <Image source={logo} style={s.logo} contentFit="contain" />
-                    </View>
-        
-                    {/* Barre accent tricolore — même pattern que sectorAccent du home */}
-                    <View style={s.logoAccentBar}>
-                      <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 2 }]} />
-                      <View style={[s.logoAccentSeg, { backgroundColor: C.red,     flex: 1 }]} />
-                      <View style={[s.logoAccentSeg, { backgroundColor: C.violet,  flex: 1 }]} />
-                    </View>
-                  </Animated.View>
-    
-       
-        <Text style={pg.tagline}>Bienvenue dans un réseau digital où tout ce qui est réel devient numérique</Text>
+        <Animated.View style={{ opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }], alignItems: "center" }}>
+          <View style={pg.logoGlow} />
+          <View style={pg.logoWrap}>
+            <Image source={logo} style={pg.logo} contentFit="contain" />
+          </View>
+        </Animated.View>
+        <Text style={pg.appName}>BIMNext</Text>
+        <Text style={pg.tagline}>Votre écosystème financier digital au Congo</Text>
       </View>
 
-      {/* Card consentement */}
-      <View style={[pg.card, {
-        backgroundColor: t.card,
-        shadowColor: isDark ? "#000" : t.gradientStart,
-      }]}>
-        <Text style={[pg.cardTitle, { color: t.text }]}>Avant de commencer</Text>
-        <Text style={[pg.cardSub, { color: t.textSecondary }]}>
-          {"Merci de lire et d'accepter notre politique de confidentialité pour utiliser BIM en toute sécurité."}
+      <View style={pg.card}>
+        <Text style={pg.cardTitle}>Avant de commencer</Text>
+        <Text style={pg.cardSub}>
+          Lisez et acceptez notre politique de confidentialité pour utiliser BIM NEXT en toute sécurité.
         </Text>
 
-        {/* Bouton lire politique */}
-        <TouchableOpacity
-          style={[pg.policyBtn, {
-            backgroundColor: isDark ? t.surface : t.primary + "0A",
-            borderColor: t.border,
-          }]}
-          onPress={() => setModalVisible(true)}
-          activeOpacity={0.75}
-        >
-          <View style={[pg.policyBtnIcon, { backgroundColor: t.primary + "18" }]}>
-            <Ionicons name="document-text-outline" size={16} color={t.primary} />
+        <TouchableOpacity style={pg.policyBtn} onPress={() => setModalVisible(true)} activeOpacity={0.75}>
+          <View style={pg.policyIcon}>
+            <Ionicons name="document-text-outline" size={15} color={C.primary} />
           </View>
-          <Text style={[pg.policyBtnText, { color: t.text }]}>
-            Lire la politique de confidentialité
-          </Text>
-          <Ionicons name="open-outline" size={14} color={t.textSecondary} />
+          <Text style={pg.policyText}>Lire la politique de confidentialité</Text>
+          <Ionicons name="open-outline" size={13} color={C.textMuted} />
         </TouchableOpacity>
 
-        {/* Checkbox */}
         <Animated.View style={[pg.checkRow, { transform: [{ translateX: shakeAnim }] }]}>
-          <TouchableOpacity
-            style={[
-              pg.checkbox,
-              { borderColor: t.primary },
-              checked && { backgroundColor: t.primary, borderColor: t.primary },
-            ]}
-            onPress={() => setChecked(!checked)}
-            activeOpacity={0.75}
-          >
-            {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
+          <TouchableOpacity style={[pg.checkbox, checked && pg.checkboxOn]} onPress={() => setChecked(!checked)} activeOpacity={0.75}>
+            {checked && <Ionicons name="checkmark" size={13} color="#fff" />}
           </TouchableOpacity>
-          <Text style={[pg.checkLabel, { color: t.text }]}>
-            {" J'ai lu et j'accepte la  "}
-            <Text style={[pg.checkLabelLink, { color: t.primary }]}
-              onPress={() => setModalVisible(true)}>
+          <Text style={pg.checkLabel}>
+            {"J'ai lu et j'accepte la "}
+            <Text style={pg.checkLink} onPress={() => setModalVisible(true)}>
               politique de confidentialité
-            </Text>{" "}
-            {"et les conditions d'utilisation de BIM NEXT."}
+            </Text>
+            {" et les conditions d'utilisation de BIM NEXT."}
           </Text>
         </Animated.View>
 
-        {!checked && (
-          <Text style={[pg.hintText, { color: t.danger }]}>
-            ☝️ Veuillez cocher la case pour continuer
-          </Text>
-        )}
+        {!checked && <Text style={pg.hintText}>Veuillez cocher la case pour continuer</Text>}
 
         <View style={{ height: 20 }} />
 
-        <GradientButton
-          title="Continuer"
-          onPress={handleContinuer}
-          leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
-          rightIcon={<ArrowRightIcon width={26} height={20} />}
-        />
+        <TouchableOpacity style={pg.btn} onPress={handleContinuer} activeOpacity={0.85}>
+          <Text style={pg.btnText}>Continuer</Text>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       <Text style={pg.version}>BIM NEXT · v1.0.0</Text>
-
       <PrivacyModal visible={modalVisible} onClose={() => setModalVisible(false)} />
     </View>
   );
 }
 
-/* ─── VIDEO SLIDE ────────────────────────────────────────────────────── */
-function VideoSlide({ source }: { source: any }) {
-  const player = useVideoPlayer(source, (p) => {
-    p.loop  = true;
-    p.muted = true;
-    p.play();
-  });
-  return <VideoView player={player} style={ob.media} contentFit="cover" />;
-}
-
-/* ─── IMAGE SLIDE ────────────────────────────────────────────────────── */
-function ImageSlide({ source }: { source: any }) {
-  return <Image source={source} style={ob.media} contentFit="cover" />;
-}
-
-/* ─── SLIDE ITEM ─────────────────────────────────────────────────────── */
-function SlideItem({ item }: any) {
-  const router     = useRouter();
-  const { isDark, t } = useTheme();
-
-  return (
-    <View style={ob.slideContainer}>
-      {item.type === "video"
-        ? <VideoSlide source={item.source} />
-        : <ImageSlide source={item.source} />
-      }
-
-      <LinearGradient
-        colors={["rgba(21,97,204,0.15)", "rgba(21,97,204,0.45)", "rgba(3,83,204,0.85)"]}
-        style={StyleSheet.absoluteFillObject}
-      />
-
-      <View style={[ob.bottomCard, {
-        /* En dark mode, la card est légèrement plus sombre et plus opaque */
-        backgroundColor: isDark ? "rgba(18,26,43,0.97)" : "rgba(255,255,255,0.96)",
-        shadowColor: isDark ? "#000" : t.gradientStart,
-      }]}>
-        <View style={[ob.pill, { backgroundColor: isDark ? t.border : t.border }]} />
-
-        <Text style={[ob.title, { color: t.text, fontFamily: FONTS.light }]}>
-          {item.title}
-        </Text>
-        <Text style={[ob.description, { color: t.textSecondary, fontFamily: FONTS.light }]}>
-          {item.description}
-        </Text>
-
-        <View style={{ height: 20 }} />
-
-        <GradientButton
-          title="Commencer"
-          onPress={async () => {
-            await AsyncStorage.setItem("onboardingDone", "true");
-            router.replace("/login");
-          }}
-          leftIcon={<ArrowIcon width={20} height={14} color={B.violet} />}
-          rightIcon={<ArrowRightIcon width={30} height={24} />}
-        />
-      </View>
-    </View>
-  );
-}
+const CHIPS = [
+  { icon: "finger-print-outline",      label: "Biométrie" },
+  { icon: "lock-closed-outline",       label: "Chiffrement" },
+  { icon: "shield-checkmark-outline",  label: "Protection 2FA" },
+  { icon: "checkmark-circle-outline",  label: "Garantie 100%" },
+];
 
 /* ─── ONBOARDING SLIDES ──────────────────────────────────────────────── */
 function OnboardingSlides() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const ob = useMemo(() => mkOb(C), [isDark]);
+
+  const router  = useRouter();
+  const flatRef = useRef<FlatList>(null);
   const [index, setIndex] = useState(0);
-  const { t }             = useTheme();
+
+  const floatY = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatY, { toValue: -20, duration: 3000, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const goNext = async () => {
+    if (index < slides.length - 1) {
+      flatRef.current?.scrollToIndex({ index: index + 1, animated: true });
+    } else {
+      await AsyncStorage.setItem("onboardingDone", "true");
+      router.replace("/login");
+    }
+  };
+
+  const skip = async () => {
+    await AsyncStorage.setItem("onboardingDone", "true");
+    router.replace("/login");
+  };
+
+  const isLast = index === slides.length - 1;
 
   return (
-    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
-      <StatusBar translucent barStyle="light-content" />
+    <View style={[ob.root, { backgroundColor: C.slideBg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.slideBg} />
 
       <FlatList
+        ref={flatRef}
         data={slides}
         horizontal
         pagingEnabled
+        scrollEnabled
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id.toString()}
         onMomentumScrollEnd={(e) => {
-          const i = Math.round(e.nativeEvent.contentOffset.x / width);
-          setIndex(i);
+          setIndex(Math.round(e.nativeEvent.contentOffset.x / width));
         }}
-        renderItem={({ item }) => <SlideItem item={item} />}
+        renderItem={({ item, index: i }) => (
+          <View style={ob.slide}>
+            <View style={ob.blob1} />
+            <View style={ob.blob2} />
+
+            <View style={ob.cardOuter}>
+              <View style={ob.cardShadow} />
+              <Animated.View style={[ob.card, { transform: [{ translateY: floatY }] }]}>
+                <Image source={item.source} style={ob.img} contentFit="contain" />
+              </Animated.View>
+            </View>
+
+            <View style={ob.textArea}>
+              {i === 0 ? (
+                <Text style={ob.slideTitle}>
+                  {"Bienvenue sur "}
+                  <Text style={{ color: C.primary }}>BIM NEXT</Text>
+                </Text>
+              ) : (
+                <Text style={ob.slideTitle}>{item.title}</Text>
+              )}
+              <Text style={ob.slideDesc}>{item.description}</Text>
+
+              {i === slides.length - 1 && (
+                <View style={ob.chipsGrid}>
+                  {CHIPS.map((c) => (
+                    <View key={c.label} style={ob.chip}>
+                      <Ionicons name={c.icon as any} size={16} color={C.primary} />
+                      <Text style={ob.chipText}>{c.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
       />
 
-      {/* Pagination */}
-      <View style={ob.pagination}>
-        {slides.map((_, i) => (
-          <View
-            key={i}
-            style={[ob.dot, {
-              width:           index === i ? 24 : 8,
-              backgroundColor: index === i ? "#fff" : "rgba(255,255,255,0.35)",
-            }]}
-          />
-        ))}
+      <View style={ob.bottomBar}>
+        <View style={ob.dotsRow}>
+          {slides.map((_, i) => (
+            <View key={i} style={[ob.dot, i === index ? ob.dotActive : ob.dotIdle]} />
+          ))}
+        </View>
+
+        <TouchableOpacity style={ob.btn} onPress={goNext} activeOpacity={0.85}>
+          <Text style={ob.btnText}>{isLast ? "Commencer" : "Suivant"}</Text>
+          <Ionicons name={isLast ? "checkmark" : "chevron-forward"} size={20} color="#fff" />
+        </TouchableOpacity>
+
+        {isLast ? (
+          <Text style={ob.termsText}>
+            En continuant, vous acceptez nos{" "}
+            <Text style={ob.termsLink} onPress={() => router.push("/terms" as any)} suppressHighlighting>
+              Conditions d'Utilisation
+            </Text>
+          </Text>
+        ) : (
+          <TouchableOpacity onPress={skip} style={ob.skipBtn}>
+            <Text style={ob.skipText}>Passer l'introduction</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
 
-/* ─── MAIN EXPORT ────────────────────────────────────────────────────── */
+/* ─── EXPORT PRINCIPAL ───────────────────────────────────────────────── */
 export default function Onboarding() {
   const [accepted, setAccepted] = useState(false);
-
   if (!accepted) return <PrivacyGate onAccept={() => setAccepted(true)} />;
   return <OnboardingSlides />;
 }
 
-/* ─── STYLES STATIQUES (formes, layout — pas les couleurs) ───────────── */
-const pg = StyleSheet.create({
+/* ─── STYLE FACTORIES ────────────────────────────────────────────────── */
+function mkPg(C: typeof LIGHT) { return StyleSheet.create({
   root: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    flex: 1, backgroundColor: C.bg,
+    alignItems: "center", justifyContent: "center", paddingHorizontal: 24,
   },
+  blob1: { position: "absolute", width: 280, height: 280, borderRadius: 140, backgroundColor: C.glow, top: -80, right: -80 },
+  blob2: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(0,71,255,0.04)", bottom: 110, left: -60 },
 
-  deco1: {
-    position: "absolute", width: 260, height: 260,
-    borderRadius: 130, backgroundColor: "rgba(255,255,255,0.06)",
-    top: -80, right: -60,
-  },
-  deco2: {
-    position: "absolute", width: 160, height: 160,
-    borderRadius: 80, backgroundColor: "rgba(255,255,255,0.04)",
-    bottom: 120, left: -50,
-  },
-  deco3: {
-    position: "absolute", width: 80, height: 80,
-    borderRadius: 40, backgroundColor: "rgba(255,255,255,0.06)",
-    top: 180, left: 30,
-  },
-
-  hero: { alignItems: "center", marginBottom: 32 },
+  hero: { alignItems: "center", marginBottom: 36 },
+  logoGlow: { position: "absolute", width: 112, height: 112, borderRadius: 56, backgroundColor: C.primaryLight, top: -8, left: -8, zIndex: 0 },
   logoWrap: {
-    width: 88, height: 88, borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.15)",
+    width: 96, height: 96, borderRadius: 28,
+    backgroundColor: C.inputBg,
+    borderWidth: 1, borderColor: C.border,
     alignItems: "center", justifyContent: "center",
-    marginBottom: 12,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.2)",
+    overflow: "hidden", zIndex: 1,
+    elevation: 4,
+    shadowColor: C.primary, shadowOpacity: 0.15, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
   },
-  appName: {
-    color: "#fff", fontSize: 36,
-    fontFamily: FONTS.light, letterSpacing: 6,
-  },
-  tagline: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 13, fontFamily: FONTS.light,
-    marginTop: 6, textAlign: "center",
-    paddingHorizontal: 40,
-  },
+  logo: { width: 76, height: 76 },
+  appName: { marginTop: 16, fontFamily: FONTS.bold, fontSize: 26, color: C.primary, letterSpacing: 1 },
+  tagline: { fontFamily: FONTS.light, fontSize: 13, color: C.textSub, textAlign: "center", marginTop: 6, lineHeight: 20, paddingHorizontal: 16 },
 
   card: {
-    width: width - 32,
-    borderRadius: 24,
-    padding: 24,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2, shadowRadius: 20,
+    width: "100%", backgroundColor: C.cardBg, borderRadius: 24, padding: 24,
+    borderWidth: 1.5, borderColor: C.cardBord,
+    elevation: C.cardElev,
+    shadowColor: C.primary, shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
   },
-  cardTitle: {
-    fontFamily: FONTS.light,
-    fontSize: 20,
-    textAlign: "center",
-    marginBottom: 8,
-    letterSpacing: 0.3,
-  },
-  cardSub: {
-    fontFamily: FONTS.light,
-    fontSize: 13,
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 20,
-  },
+  cardTitle: { fontFamily: FONTS.bold, fontSize: 18, color: C.text, textAlign: "center", marginBottom: 6 },
+  cardSub:   { fontFamily: FONTS.light, fontSize: 13, color: C.textSub, textAlign: "center", lineHeight: 20, marginBottom: 18 },
 
   policyBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    marginBottom: 16,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.inputBg, marginBottom: 16,
   },
-  policyBtnIcon: {
-    width: 30, height: 30, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
-  policyBtnText: {
-    flex: 1, fontFamily: FONTS.light,
-    fontSize: 13,
-  },
+  policyIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center" },
+  policyText: { flex: 1, fontFamily: FONTS.light, fontSize: 13, color: C.text },
 
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 4,
-  },
-  checkbox: {
-    width: 22, height: 22, borderRadius: 6,
-    borderWidth: 2,
-    alignItems: "center", justifyContent: "center",
-    flexShrink: 0, marginTop: 1,
-  },
-  checkLabel: {
-    flex: 1, fontFamily: FONTS.light,
-    fontSize: 12, lineHeight: 18,
-  },
-  checkLabelLink: {
-    textDecorationLine: "underline",
-  },
+  checkRow:   { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 4 },
+  checkbox:   { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: C.border, alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 },
+  checkboxOn: { backgroundColor: C.primary, borderColor: C.primary },
+  checkLabel: { flex: 1, fontFamily: FONTS.light, fontSize: 12, color: C.text, lineHeight: 18 },
+  checkLink:  { color: C.primary, textDecorationLine: "underline" },
+  hintText:   { fontFamily: FONTS.light, fontSize: 11, color: "#EF4444", textAlign: "center", marginTop: 6 },
 
-  hintText: {
-    fontFamily: FONTS.light,
-    fontSize: 11,
-    textAlign: "center",
-    marginTop: 6,
+  btn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.primary, borderRadius: 16, height: 58,
+    elevation: 5, shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 5 },
   },
+  btnText: { fontFamily: FONTS.bold, fontSize: 16, color: "#fff", letterSpacing: 0.3 },
+  version: { position: "absolute", bottom: 20, fontFamily: FONTS.light, fontSize: 11, color: C.textMuted },
+}); }
 
-  version: {
-    position: "absolute",
-    bottom: 24,
-    color: "rgba(255,255,255,0.35)",
-    fontFamily: FONTS.light,
-    fontSize: 11,
-  },
-});
+function mkPm(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet:   { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, height: height * 0.88 },
+  handle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 12, marginBottom: 4 },
 
-const pm = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(3,40,100,0.5)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    height: height * 0.88,
-    flexDirection: "column",
-  },
+  headerRow:  { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 },
+  headerIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center" },
+  headerTitle: { flex: 1, fontFamily: FONTS.bold, fontSize: 16, color: C.text },
+  closeBtn:   { width: 30, height: 30, borderRadius: 15, backgroundColor: C.border, alignItems: "center", justifyContent: "center" },
+  headerSub:  { fontFamily: FONTS.light, fontSize: 11, color: C.textMuted, paddingHorizontal: 20, marginBottom: 8 },
 
-  header: {
-    paddingTop: 24, paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  headerRow: {
-    flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6,
-  },
-  headerIcon: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: {
-    flex: 1, color: "#fff",
-    fontFamily: FONTS.light, fontSize: 16, letterSpacing: 0.3,
-  },
-  closeBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.65)",
-    fontFamily: FONTS.light, fontSize: 11,
-  },
-
-  scroll: { flex: 1, minHeight: 0 },
+  scroll:        { flex: 1 },
   scrollContent: { padding: 16 },
+  intro: { fontFamily: FONTS.light, fontSize: 13, color: C.textSub, lineHeight: 20, marginBottom: 14, textAlign: "center" },
 
-  intro: {
-    fontFamily: FONTS.light,
-    fontSize: 13, lineHeight: 20,
-    marginBottom: 16, textAlign: "center",
-  },
+  sectionCard:   { backgroundColor: C.inputBg, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
+  sectionIcon:   { width: 28, height: 28, borderRadius: 8, backgroundColor: C.primaryLight, alignItems: "center", justifyContent: "center" },
+  sectionTitle:  { fontFamily: FONTS.bold, fontSize: 13, color: C.text },
+  sectionBody:   { fontFamily: FONTS.light, fontSize: 12, color: C.textSub, lineHeight: 18 },
+  footer:        { fontFamily: FONTS.light, fontSize: 11, color: C.textMuted, textAlign: "center", marginTop: 8 },
 
-  sectionCard: {
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 6,
+  btnWrap:   { padding: 16, borderTopWidth: 1, borderTopColor: C.border },
+  acceptBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.primary, borderRadius: 16, height: 54,
+    elevation: 4, shadowColor: C.primary, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
   },
-  sectionHeader: {
-    flexDirection: "row", alignItems: "center",
-    gap: 10, marginBottom: 8,
-  },
-  sectionIcon: {
-    width: 30, height: 30, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
-  sectionTitle: {
-    fontFamily: FONTS.light,
-    fontSize: 14, letterSpacing: 0.2,
-  },
-  sectionBody: {
-    fontFamily: FONTS.light,
-    fontSize: 12, lineHeight: 18,
-  },
+  acceptText: { fontFamily: FONTS.bold, fontSize: 15, color: "#fff" },
+}); }
 
-  footer: {
-    fontFamily: FONTS.light,
-    fontSize: 11, textAlign: "center", marginTop: 8,
-  },
-
-  btnWrap: {
-    padding: 16,
-    borderTopWidth: 1,
-  },
-  closeFullBtn: {
-    flexDirection: "row",
-    alignItems: "center", justifyContent: "center",
-    gap: 8,
-    borderRadius: 16, paddingVertical: 14,
-  },
-  closeFullText: {
-    color: "#fff", fontFamily: FONTS.light,
-    fontSize: 14, letterSpacing: 0.3,
-  },
-});
-
-const ob = StyleSheet.create({
-  media: { width, height },
-  slideContainer: { width, height },
-
-  bottomCard: {
-    position: "absolute",
-    bottom: 48, left: 16, right: 16,
-    borderRadius: 24,
-    padding: 24,
+function mkOb(C: typeof LIGHT) { return StyleSheet.create({
+  root: { flex: 1 },
+  slide: {
+    width, flex: 1,
+    backgroundColor: C.slideBg,
     alignItems: "center",
-    shadowOpacity: 0.2, shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
+    paddingTop: Platform.OS === "ios" ? 56 : 40,
+    paddingBottom: 190,
   },
 
-  pill: {
-    width: 36, height: 4, borderRadius: 2,
-    marginBottom: 16,
-  },
+  blob1: { position: "absolute", width: 300, height: 300, borderRadius: 150, backgroundColor: C.glow, top: -60, right: -80 },
+  blob2: { position: "absolute", width: 240, height: 240, borderRadius: 120, backgroundColor: "rgba(219,226,250,0.15)", bottom: 180, left: -80 },
 
-  title: {
-    fontSize: 24,
-    textAlign: "center",
-    letterSpacing: 0.3,
+  cardOuter:  { width: width * 0.78, height: width * 0.9, alignItems: "center", justifyContent: "center", marginBottom: 32, position: "relative" },
+  cardShadow: {
+    position: "absolute", width: "90%", height: "90%", borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    transform: [{ rotate: "-3deg" }, { translateY: 12 }],
+    elevation: 0,
+    shadowColor: C.primary, shadowOpacity: 0.08, shadowRadius: 32, shadowOffset: { width: 0, height: 16 },
   },
-  description: {
-    textAlign: "center",
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 10,
+  card: {
+    width: "100%", height: "100%", borderRadius: 36, overflow: "hidden",
+    backgroundColor: C.chipBg,
+    elevation: 6, shadowColor: C.primary, shadowOpacity: 0.10, shadowRadius: 24, shadowOffset: { width: 0, height: 12 },
   },
+  img: { width: "100%", height: "100%" },
 
-  pagination: {
-    position: "absolute",
-    bottom: 24,
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  dot: {
-    height: 8, borderRadius: 4,
-    marginHorizontal: 4,
-  },
-});
+  textArea:   { paddingHorizontal: 32, alignItems: "center", width: "100%" },
+  slideTitle: { fontFamily: FONTS.bold, fontSize: 26, color: C.text, textAlign: "center", lineHeight: 34, marginBottom: 10 },
+  slideDesc:  { fontFamily: FONTS.light, fontSize: 15, color: C.textSub, textAlign: "center", lineHeight: 23, maxWidth: 300 },
 
+  chipsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16, justifyContent: "center" },
+  chip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.chipBg, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: C.border,
+    elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+  },
+  chipText: { fontFamily: FONTS.light, fontSize: 12, color: C.textSub },
 
+  bottomBar: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+    paddingTop: 16,
+    backgroundColor: C.slideBg,
+    borderTopWidth: 1, borderTopColor: C.border,
+  },
+  dotsRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, marginBottom: 16 },
+  dot:      { height: 4, borderRadius: 2 },
+  dotActive: { width: 32, backgroundColor: C.primary },
+  dotIdle:   { width: 8,  backgroundColor: C.dotIdle },
 
-const s = StyleSheet.create({
-  bg: {
-    flex: 1,
-    backgroundColor: C.deep,
+  btn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.primary, borderRadius: 16, height: 60, marginBottom: 12,
+    elevation: 5, shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 5 },
   },
+  btnText: { fontFamily: FONTS.bold, fontSize: 16, color: "#fff", letterSpacing: 0.3 },
 
-  /* Cercles décoratifs */
-  circle: {
-    position: "absolute",
-    borderRadius: 999,
-  },
-  circle1: {
-    width: 320, height: 320,
-    top: -140, right: -130,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  circle2: {
-    width: 160, height: 160,
-    top: 80, right: -40,
-    backgroundColor: "rgba(220,3,2,0.12)",
-  },
-  circle3: {
-    width: 200, height: 200,
-    bottom: 160, left: -90,
-    backgroundColor: "rgba(57,6,199,0.15)",
-  },
-  circle4: {
-    width: 70, height: 70,
-    top: height * 0.32, left: 24,
-    backgroundColor: "rgba(77,150,255,0.13)",
-  },
-
-  /* Logo */
-  logoArea: {
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 72 : 52,
-    marginBottom: 22,
-  },
-  logoWrap: {
-    width: 96, height: 96,
-    borderRadius: 26,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    elevation: 14,
-    shadowColor: C.black,
-    shadowOpacity: 0.3,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-  },
-  logo: {
-    width: 78, height: 78,
-  },
-  logoAccentBar: {
-    flexDirection: "row",
-    width: 56, height: 3,
-    borderRadius: 2,
-    marginTop: 14,
-    overflow: "hidden",
-    gap: 2,
-  },
-  logoAccentSeg: {
-    height: "100%",
-    borderRadius: 2,
-  },
-
-
-
-
-});
+  skipBtn:  { alignItems: "center", paddingVertical: 6 },
+  skipText: { fontFamily: FONTS.light, fontSize: 13, color: C.textMuted, letterSpacing: 0.5 },
+  termsText: { fontFamily: FONTS.light, fontSize: 12, color: C.textMuted, textAlign: "center", lineHeight: 18 },
+  termsLink: { color: C.primary, textDecorationLine: "underline" },
+}); }

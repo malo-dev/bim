@@ -36,12 +36,12 @@ export const notificationApi = createApi({
   endpoints: (builder) => ({
     
     getAllNotifications: builder.query({
-      query: ({ userId, search = "", page = 1, pageSize = 20, filters ,paginate='true'}) => ({
+      query: ({ userId, search = "", page = 1, pageSize = 20, filters, paginate = 'true', isRead, sortOrder = "desc" }) => ({
         url: "/notification_track",
         method: "GET",
-        params: { userId, search, page, pageSize, filters,paginate },
+        params: { userId, search, page, pageSize, filters, paginate, isRead, sortOrder },
       }),
-    providesTags: ["Notifications"],
+      providesTags: ["Notifications"],
     }),
   
 

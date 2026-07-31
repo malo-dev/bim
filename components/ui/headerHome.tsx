@@ -1,40 +1,29 @@
 import { checkAbonnementAndExpiry } from "@/utils/checkAbonnementAndExpiry.util";
 import { formatNumber } from "@/utils/formatNUmber.util";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import React, { useRef } from "react";
 import {
   Animated,
+  StyleSheet,
+  Text,
   TouchableOpacity,
   View,
-  StyleSheet,
-  Platform,
-  useColorScheme,
-  Text,
 } from "react-native";
-import { Colors } from "@/constants/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-/* ─── Hook thème (même pattern) ─────────────────────────────────────── */
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-/* ─── PALETTE BRAND (fixe — le gradient reste bleu en dark ET light) ── */
-const B = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
+const W = {
+  bg:      "#F8F9FF",
+  primary: "#0047FF",
+  text:    "#1A1C1C",
+  muted:   "#747688",
+  border:  "#E8EDF5",
   white:   "#FFFFFF",
-  muted:   "rgba(255,255,255,0.6)",
+  green:   "#22C55E",
 };
 
-/* ─── TYPES ──────────────────────────────────────────────────────────── */
 type HeaderOFpageProps = {
   username?:       string;
   avatar?:         string;
@@ -43,7 +32,6 @@ type HeaderOFpageProps = {
   tokenAbonement?: string;
 };
 
-/* ─── COMPONENT ──────────────────────────────────────────────────────── */
 const HeaderOFpage: React.FC<HeaderOFpageProps> = ({
   username       = "Utilisateur",
   avatar,
@@ -51,16 +39,12 @@ const HeaderOFpage: React.FC<HeaderOFpageProps> = ({
   soldNumber,
   tokenAbonement,
 }) => {
-  const router = useRouter();
-  const { isDark } = useTheme();
+  const router     = useRouter();
+  const unread     = useUnreadNotifications();
+  const scaleNotif = useRef(new Animated.Value(1)).current;
 
-  const scaleAvatar = useRef(new Animated.Value(1)).current;
-  const scaleNotif  = useRef(new Animated.Value(1)).current;
-
-  const press   = (anim: Animated.Value) =>
-    Animated.spring(anim, { toValue: 0.88, useNativeDriver: true }).start();
-  const release = (anim: Animated.Value) =>
-    Animated.spring(anim, { toValue: 1,    useNativeDriver: true }).start();
+  const press   = () => Animated.spring(scaleNotif, { toValue: 0.88, useNativeDriver: true }).start();
+  const release = () => Animated.spring(scaleNotif, { toValue: 1,    useNativeDriver: true }).start();
 
   const avatarUri =
     avatar && typeof avatar === "string" && avatar.startsWith("http")
@@ -71,350 +55,285 @@ const HeaderOFpage: React.FC<HeaderOFpageProps> = ({
   const balance = formatNumber(Number(soldNumber) ?? 0);
 
   const maskedAccount = accountNumber
-    ? `•••• •••• ${accountNumber.slice(-4)}`
-    : "•••• •••• 0000";
-
-  /* En dark mode le gradient est légèrement plus profond/foncé */
-  const gradientColors: [string, string] = isDark
-    ? ["#1A1F3A", "#0A1628"]
-    : [B.deep, B.primary];
+    ? `•••• •••• •••• ${accountNumber.slice(-4)}`
+    : "•••• •••• •••• 0000";
 
   return (
-    <LinearGradient
-      colors={gradientColors}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={s.wrapper}
-    >
-      {/* Déco circles — plus visibles en dark */}
-      <View style={[s.deco1, {
-        backgroundColor: isDark
-          ? "rgba(77,150,255,0.10)"
-          : "rgba(255,255,255,0.05)",
-        borderWidth: isDark ? 1 : 0,
-        borderColor: isDark ? "rgba(77,150,255,0.15)" : "transparent",
-      }]} />
-      <View style={[s.deco2, {
-        backgroundColor: isDark
-          ? "rgba(57,6,199,0.18)"
-          : "rgba(255,255,255,0.03)",
-      }]} />
+    <View style={s.wrapper}>
+      {/* Top Bar */}
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: W.white }}>
+        <View style={s.topBar}>
+          <TouchableOpacity
+            style={s.avatarArea}
+            onPress={() => router.push("/profile")}
+            activeOpacity={0.85}
+          >
+            <View style={s.avatarWrap}>
+              <Image
+                source={{ uri: avatarUri }}
+                style={s.avatar}
+                contentFit="cover"
+                transition={200}
+              />
+              <View style={s.onlineDot} />
+            </View>
+            <View style={s.greetWrap}>
+              <Text style={s.premiumLabel}>Premium Tier</Text>
+              <Text style={s.greetName} numberOfLines={1}>
+                Salut, {username.slice(0, 14)}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-      {/* ── TOP BAR ── */}
-      <View style={s.topBar}>
-
-        {/* Avatar */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPressIn={() => press(scaleAvatar)}
-          onPressOut={() => release(scaleAvatar)}
-          onPress={() => router.push("/profile")}
-        >
-          <Animated.View style={[
-            s.avatarWrap,
-            {
-              transform: [{ scale: scaleAvatar }],
-              borderColor: isDark ? B.accent : B.gold,
-            },
-          ]}>
-            <Image
-              source={{ uri: avatarUri }}
-              style={s.avatar}
-              contentFit="cover"
-              transition={200}
-            />
-            <View style={[s.onlineDot, {
-              borderColor: isDark ? "#1A1F3A" : B.deep,
-            }]} />
-          </Animated.View>
-        </TouchableOpacity>
-
-        {/* Greeting */}
-        <View style={s.greetWrap}>
-          <Text style={[s.greetSub, {
-            color: isDark ? "rgba(147,197,253,0.7)" : B.muted,
-          }]}>
-            Bonjour 👋
-          </Text>
-          <Text style={s.greetName} numberOfLines={1}>
-            {username.slice(0, 18)}
-          </Text>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPressIn={press}
+            onPressOut={release}
+            onPress={() => router.push("/notification")}
+          >
+            <Animated.View style={[s.notifBtn, { transform: [{ scale: scaleNotif }] }]}>
+              <Ionicons name="notifications-outline" size={20} color={W.text} />
+              {unread > 0 && (
+                <View style={s.notifBadge}>
+                  <Text style={s.notifBadgeTxt}>{unread > 99 ? "99+" : unread}</Text>
+                </View>
+              )}
+            </Animated.View>
+          </TouchableOpacity>
         </View>
+      </SafeAreaView>
 
-        {/* Notif */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPressIn={() => press(scaleNotif)}
-          onPressOut={() => release(scaleNotif)}
-          onPress={() => router.push("/notification")}
-        >
-          <Animated.View style={[
-            s.notifBtn,
-            {
-              transform: [{ scale: scaleNotif }],
-              backgroundColor: isDark
-                ? "rgba(77,150,255,0.20)"
-                : "rgba(255,255,255,0.15)",
-              borderWidth: isDark ? 1 : 0,
-              borderColor: "rgba(77,150,255,0.25)",
-            },
-          ]}>
-            <Ionicons name="notifications-outline" size={20} color={B.white} />
-            <View style={[s.notifBadge, {
-              borderColor: isDark ? "#1A1F3A" : B.deep,
-            }]} />
-          </Animated.View>
-        </TouchableOpacity>
-      </View>
+      {/* Balance Card */}
+      <View style={s.card}>
+        <View style={s.deco1} />
+        <View style={s.deco2} />
 
-      {/* ── BIM CARD ── */}
-      <View style={[s.card, {
-        // En dark : card plus sombre avec bordure subtile
-        borderWidth: isDark ? 1 : 0,
-        borderColor: isDark ? "rgba(77,150,255,0.20)" : "transparent",
-        shadowColor: isDark ? "#000" : "#000",
-        shadowOpacity: isDark ? 0.5 : 0.35,
-      }]}>
-        <LinearGradient
-          colors={isDark ? ["#2D1B8A", "#1A1560"] : ["#4C3AFF", B.deep]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Card déco */}
-        <View style={[s.cardDeco1, {
-          backgroundColor: isDark
-            ? "rgba(77,150,255,0.08)"
-            : "rgba(255,255,255,0.05)",
-        }]} />
-        <View style={[s.cardDeco2, {
-          backgroundColor: isDark
-            ? "rgba(255,215,0,0.05)"
-            : "rgba(255,255,255,0.04)",
-        }]} />
-
-        {/* Card top */}
-        <View style={s.cardTop}>
+        {/* Top: balance + brand */}
+        <View style={s.cardTopRow}>
           <View>
-            <Text style={s.cardBrand}>BIM</Text>
-            <Text style={[s.cardTier, { color: isDark ? "#93C5FD" : B.gold }]}>
-              STANDARD
-            </Text>
-          </View>
-
-          {/* Chip décoratif */}
-          <View style={[s.chipWrap, {
-            backgroundColor: isDark ? "rgba(147,197,253,0.15)" : B.gold + "30",
-            borderColor:     isDark ? "rgba(147,197,253,0.30)" : B.gold + "50",
-          }]}>
-            <View style={[s.chipInner, {
-              backgroundColor: isDark ? "rgba(147,197,253,0.10)" : B.gold + "20",
-              borderColor:     isDark ? "rgba(147,197,253,0.25)" : B.gold + "40",
-            }]} />
-          </View>
-
-          <Ionicons name="card" size={32} color="rgba(255,255,255,0.3)" />
-        </View>
-
-        {/* Account number */}
-        <Text style={s.cardNumber}>{maskedAccount}</Text>
-
-        {/* Card bottom */}
-        <View style={s.cardBottom}>
-
-          {/* Expiry */}
-          <View>
-            <Text style={s.cardLabel}>EXPIRE</Text>
-            <TouchableOpacity onPress={() => router.push("/recharge")}>
-              <Text style={s.cardValue}>{expiry}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.cardDivider} />
-
-          {/* Balance */}
-          <View style={s.balanceCol}>
-            <Text style={s.cardLabel}>SOLDE DISPONIBLE</Text>
+            <Text style={s.balanceLabel}>Solde Disponible</Text>
             <View style={s.balanceRow}>
-              <Text style={s.balanceValue}>{balance}</Text>
-              <View style={[s.ecoinsBadge, {
-                backgroundColor: isDark ? "rgba(147,197,253,0.15)" : B.gold + "25",
-                borderColor:     isDark ? "rgba(147,197,253,0.30)" : B.gold + "40",
-              }]}>
-                <Text style={[s.ecoinsText, {
-                  color: isDark ? "#93C5FD" : B.gold,
-                }]}>EC</Text>
+              <Text style={s.balanceNum}>{balance}</Text>
+              <Text style={s.balanceEC}>EC</Text>
+            </View>
+          </View>
+          <Text style={s.brandTag}>BIMNext</Text>
+        </View>
+
+        {/* Bottom: card number + expire + status */}
+        <View style={s.cardBottomRow}>
+          <View>
+            <Text style={s.cardNumber}>{maskedAccount}</Text>
+            <View style={s.cardMeta}>
+              <View>
+                <Text style={s.metaLabel}>Expire</Text>
+                <Text style={s.metaValue}>{expiry}</Text>
+              </View>
+              <View style={s.metaSep} />
+              <View>
+                <Text style={s.metaLabel}>Statut</Text>
+                <View style={s.statusRow}>
+                  <View style={s.statusDot} />
+                  <Text style={s.statusText}>Actif</Text>
+                </View>
               </View>
             </View>
           </View>
-        </View>
-
-        {/* Contactless */}
-        <View style={s.contactless}>
-          <Ionicons
-            name="wifi"
-            size={18}
-            color="rgba(255,255,255,0.25)"
-            style={{ transform: [{ rotate: "90deg" }] }}
-          />
+          <View style={s.circles}>
+            <View style={s.circle1} />
+            <View style={s.circle2} />
+          </View>
         </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 };
 
 export default HeaderOFpage;
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
   wrapper: {
-    paddingTop: Platform.OS === "ios" ? 26 : 32,
+    backgroundColor: W.white,
     paddingHorizontal: 20,
-    paddingBottom: 52,
-    overflow: "hidden",
-  },
-
-  deco1: {
-    position: "absolute", width: 220, height: 220,
-    borderRadius: 110,
-    top: -70, right: -60,
-  },
-  deco2: {
-    position: "absolute", width: 140, height: 140,
-    borderRadius: 70,
-    bottom: 20, left: -40,
+    paddingBottom: 20,
   },
 
   topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", marginBottom: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 8,
+    paddingBottom: 18,
   },
 
+  avatarArea: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
   avatarWrap: {
-    width: 48, height: 48, borderRadius: 24,
-    borderWidth: 2.5,
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: "#0047FF08",
+    borderWidth: 1, borderColor: "#00000008",
     overflow: "hidden",
   },
   avatar: { width: "100%", height: "100%" },
-
   onlineDot: {
-    position: "absolute", bottom: 2, right: 2,
+    position: "absolute", bottom: 1, right: 1,
     width: 10, height: 10, borderRadius: 5,
-    backgroundColor: "#22C55E",
-    borderWidth: 2,
+    backgroundColor: W.green,
+    borderWidth: 1.5, borderColor: W.white,
   },
 
-  greetWrap: { flex: 1, paddingHorizontal: 14 },
-  greetSub: {
-    fontSize: 11,
-    fontFamily: "NexaLight",
+  greetWrap: { flex: 1 },
+  premiumLabel: {
+    fontFamily: "NexaRegular",
+    fontSize: 9,
+    color: "#0047FF55",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 1,
   },
   greetName: {
-    color: B.white,
+    fontFamily: "NexaBold",
     fontSize: 16,
-    fontFamily: "NexaLight",
-    letterSpacing: 0.2,
+    color: W.text,
   },
 
   notifBtn: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: W.white,
     alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: W.border,
+    elevation: 2, shadowColor: "#000", shadowOpacity: 0.06,
+    shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },
   notifBadge: {
-    position: "absolute", top: 9, right: 9,
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: B.gold,
-    borderWidth: 1.5,
+    position: "absolute", top: -3, right: -3,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: "#FF3B30",
+    alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 2, borderColor: W.white,
+  },
+  notifBadgeTxt: {
+    fontFamily: "NexaBold",
+    fontSize: 9,
+    color: W.white,
   },
 
-  /* BIM Card */
   card: {
-    borderRadius: 22, padding: 20,
-    overflow: "hidden",
-    elevation: 10,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-    minHeight: 170,
-  },
-
-  cardDeco1: {
-    position: "absolute", width: 160, height: 160,
-    borderRadius: 80,
-    top: -40, right: -30,
-  },
-  cardDeco2: {
-    position: "absolute", width: 100, height: 100,
-    borderRadius: 50,
-    bottom: -20, left: 20,
-  },
-
-  cardTop: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", marginBottom: 18,
-  },
-
-  cardBrand: {
-    color: B.white, fontSize: 20,
-    fontFamily: "NexaLight", letterSpacing: 3,
-  },
-  cardTier: {
-    fontSize: 10, fontFamily: "NexaLight",
-    letterSpacing: 2, marginTop: 2,
-  },
-
-  chipWrap: {
-    width: 36, height: 28, borderRadius: 6,
-    borderWidth: 1,
-    justifyContent: "center", alignItems: "center",
-  },
-  chipInner: {
-    width: 20, height: 16, borderRadius: 3,
-    borderWidth: 1,
-  },
-
-  cardNumber: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 16, fontFamily: "NexaLight",
-    letterSpacing: 3, marginBottom: 18,
-  },
-
-  cardBottom: {
-    flexDirection: "row", alignItems: "center",
+    borderRadius: 28,
+    backgroundColor: W.white,
+    borderWidth: 1.5,
+    borderColor: W.border,
+    padding: 24,
+    minHeight: 168,
     justifyContent: "space-between",
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: W.primary,
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  deco1: {
+    position: "absolute",
+    width: 240, height: 240, borderRadius: 120,
+    backgroundColor: "#0047FF05",
+    top: -90, right: -70,
+  },
+  deco2: {
+    position: "absolute",
+    width: 180, height: 180, borderRadius: 90,
+    backgroundColor: "#93C5FD07",
+    bottom: -70, left: -50,
   },
 
-  cardLabel: {
-    color: B.muted, fontSize: 9,
-    fontFamily: "NexaLight", letterSpacing: 1,
-    marginBottom: 4,
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  cardValue: {
-    color: B.white, fontSize: 14,
-    fontFamily: "NexaLight",
+  balanceLabel: {
+    fontFamily: "NexaRegular",
+    fontSize: 10,
+    color: W.muted,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  balanceRow: { flexDirection: "row", alignItems: "baseline", gap: 7 },
+  balanceNum: {
+    fontFamily: "NexaBold",
+    fontSize: 44,
+    color: W.text,
+    lineHeight: 50,
+  },
+  balanceEC: {
+    fontFamily: "NexaBold",
+    fontSize: 24,
+    color: W.primary,
+  },
+  brandTag: {
+    fontFamily: "NexaBold",
+    fontSize: 18,
+    color: "#0047FF28",
+    fontStyle: "italic",
   },
 
-  cardDivider: {
-    width: 1, height: 32,
-    backgroundColor: "rgba(255,255,255,0.15)",
+  cardBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: 16,
+  },
+  cardNumber: {
+    fontFamily: "NexaRegular",
+    fontSize: 13,
+    color: W.muted,
+    letterSpacing: 3,
+    marginBottom: 10,
+  },
+  cardMeta: { flexDirection: "row", gap: 18, alignItems: "center" },
+  metaLabel: {
+    fontFamily: "NexaRegular",
+    fontSize: 9,
+    color: "#AAB4C8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 3,
+  },
+  metaValue: {
+    fontFamily: "NexaBold",
+    fontSize: 13,
+    color: W.text,
+  },
+  metaSep: { width: 1, height: 26, backgroundColor: W.border },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  statusDot: {
+    width: 7, height: 7, borderRadius: 3.5,
+    backgroundColor: W.green,
+  },
+  statusText: {
+    fontFamily: "NexaBold",
+    fontSize: 12,
+    color: W.green,
   },
 
-  balanceCol: { alignItems: "flex-end" },
-  balanceRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  balanceValue: {
-    color: B.white, fontSize: 18,
-    fontFamily: "NexaLight",
+  circles: { flexDirection: "row", alignItems: "center" },
+  circle1: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: "#0047FF10",
+    borderWidth: 1, borderColor: W.white,
+    elevation: 1,
   },
-
-  ecoinsBadge: {
-    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
-    borderWidth: 1,
-  },
-  ecoinsText: {
-    fontSize: 10, fontFamily: "NexaLight",
-  },
-
-  contactless: {
-    position: "absolute", top: 20, right: 56,
+  circle2: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: "#93C5FD15",
+    borderWidth: 1, borderColor: W.white,
+    marginLeft: -20,
+    elevation: 1,
   },
 });

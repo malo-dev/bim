@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+/* eslint-disable */
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -10,136 +11,186 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVerifyPassMutation } from "@/services/authService";
 import { useCreatePaiementMutation } from "@/services/tsxService";
 import { useCreateOrderMutation } from "@/services/orderService";
+import { useGetAllProductsQuery } from "@/services/productServices";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
+import { API_URL_BASE } from "@/constants/api";
 import type { CartItem } from "./[id]";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC", violet: "#3906C7", deep: "#302E99",
-  accent: "#4D96FF", gold: "#FFD700", green: "#22C55E",
-  red: "#EF4444", white: "#FFFFFF", text: "#0D1B3E", muted: "#7B8DB0", f4: "#F4F6FB",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary: "#0035C5", blue: "#0047FF", deep: "#001257",
+  white:   "#FFFFFF", bg: "#F9F9F9", surface: "#F3F3F4",
+  surfLow: "#EEEEEE", text: "#1A1C1C", textSec: "#434657",
+  textMut: "#747688", border: "rgba(196,197,218,0.30)",
+  green:   "#10B981", amber: "#F59E0B", red: "#EF4444",
+  card:    "#FFFFFF", navBg: "rgba(255,255,255,0.96)",
 };
-const TH = {
-  light: {
-    bg: "#F0F4FF", card: "#FFFFFF", text: "#0D1B3E", sub: "#7B8DB0",
-    border: "rgba(3,83,204,0.10)", input: "#F4F6FB",
-    headerGrad: [C.deep, C.primary] as [string, string],
-  },
-  dark: {
-    bg: "#0A0F1E", card: "#111827", text: "#E2E8F0", sub: "#64748B",
-    border: "rgba(255,255,255,0.08)", input: "#1E2A3A",
-    headerGrad: ["#060B18", "#0D1B3E"] as [string, string],
-  },
+const DARK: typeof LIGHT = {
+  primary: "#0035C5", blue: "#4D8DFF", deep: "#001257",
+  white:   "#FFFFFF", bg: "#0B1220", surface: "#1A2540",
+  surfLow: "#0F1A2E", text: "#EAF0FF", textSec: "#A3B4D0",
+  textMut: "#6B7A99", border: "rgba(31,42,68,0.80)",
+  green:   "#059669", amber: "#D97706", red: "#DC2626",
+  card:    "#1A2540", navBg: "rgba(11,18,32,0.94)",
 };
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? TH.dark : TH.light };
+
+const CART_KEY        = "bim_supermarche_cart";
+const FRAIS_LIVRAISON = 1.00;
+
+const FALLBACK_IMG =
+  "https://lh3.googleusercontent.com/aida-public/AB6AXuDQ8nSucgb7yIGmUn1cusxX94lbpaxYyprHKjsWtHr1-PmNuB2pITmGLL7hKeWazbuBIcmzH5Uqvlr2app0EUk_8yThBZZPyU7UQ6r9uy3Hhg_ouIB_BZjJ4XOAoS8cfQI1i1gnHGjIk2z3ZXHMLbCVLqXm6WV5AgVKArXFXFX7sFgRxpHpvn2IrbjZWpdrJCltiV9vkcaZUa7LfZxfk-ALEdScpBwXQmkODBs_aC-kwthBlFbRJgRmVJWtfq-Iw37VhfhSCFYZ_1w";
+
+function getImgUri(imageUrl: string | null | undefined): string {
+  if (!imageUrl) return FALLBACK_IMG;
+  return imageUrl.startsWith("http") ? imageUrl : `${API_URL_BASE}${imageUrl}`;
 }
-
-const CART_KEY = "bim_supermarche_cart";
 
 /* ─── PIN NUMPAD ─────────────────────────────────────────────────────── */
 function PinPad({
   value, onChange, onDelete,
 }: { value: string; onChange: (k: string) => void; onDelete: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const pp = useMemo(() => mkPp(C), [isDark]);
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return (
     <View style={pp.grid}>
-      {keys.map((k, i) => (
+      {keys.map((k, i) =>
         k === "" ? <View key={i} style={pp.key} /> :
         k === "⌫" ? (
           <TouchableOpacity key={i} style={pp.key} onPress={onDelete}>
-            <Ionicons name="backspace-outline" size={22} color={C.muted} />
+            <Ionicons name="backspace-outline" size={22} color={C.textMut} />
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity
-            key={i} style={pp.key}
-            onPress={() => onChange(k)}
-            disabled={value.length >= 6}
-          >
+          <TouchableOpacity key={i} style={pp.key} onPress={() => onChange(k)} disabled={value.length >= 6}>
             <Text style={pp.keyText}>{k}</Text>
           </TouchableOpacity>
         )
-      ))}
+      )}
     </View>
   );
 }
 
-/* ─── CART ITEM ROW ──────────────────────────────────────────────────── */
-function CartRow({
-  item, t, isDark, onInc, onDec, onRemove,
+/* ─── CART ITEM CARD ─────────────────────────────────────────────────── */
+function CartCard({
+  item, onInc, onDec, onRemove,
 }: {
-  item: CartItem; t: typeof TH.light; isDark: boolean;
-  onInc: () => void; onDec: () => void; onRemove: () => void;
+  item: CartItem; onInc: () => void; onDec: () => void; onRemove: () => void;
 }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const cc = useMemo(() => mkCc(C), [isDark]);
+  const uri   = getImgUri(item.imageUrl);
+  const total = (item.unitPrice * item.qty).toFixed(2);
+
   return (
-    <View style={[cr.row, { backgroundColor: t.card, borderColor: t.border }]}>
-      <View style={cr.info}>
-        <Text style={[cr.name, { color: t.text }]} numberOfLines={2}>{item.name}</Text>
-        <Text style={cr.price}>{item.unitPrice.toFixed(2)} EC / unité</Text>
+    <View style={cc.card}>
+      <View style={cc.imgWrap}>
+        <Image source={{ uri }} style={cc.img} contentFit="contain" transition={200} />
       </View>
-
-      <View style={cr.controls}>
-        <TouchableOpacity
-          style={[cr.btn, item.qty <= 1 && cr.btnDisabled]}
-          onPress={item.qty <= 1 ? onRemove : onDec}
-        >
-          <Ionicons
-            name={item.qty <= 1 ? "trash-outline" : "remove"}
-            size={16}
-            color={item.qty <= 1 ? C.red : C.primary}
-          />
-        </TouchableOpacity>
-        <Text style={[cr.qty, { color: t.text }]}>{item.qty}</Text>
-        <TouchableOpacity style={cr.btn} onPress={onInc}>
-          <Ionicons name="add" size={16} color={C.primary} />
-        </TouchableOpacity>
+      <View style={cc.info}>
+        <View style={cc.topRow}>
+          <Text style={cc.name} numberOfLines={2}>{item.name}</Text>
+          <TouchableOpacity style={cc.trashBtn} onPress={onRemove} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+            <Ionicons name="trash-outline" size={16} color={C.textMut} />
+          </TouchableOpacity>
+        </View>
+        <Text style={cc.unitPrice}>{item.unitPrice.toFixed(2)} EC / unité</Text>
+        <View style={cc.bottomRow}>
+          <View style={cc.stepper}>
+            <TouchableOpacity
+              style={[cc.stepBtn, item.qty <= 1 && cc.stepBtnDim]}
+              onPress={item.qty <= 1 ? onRemove : onDec}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={item.qty <= 1 ? "trash-outline" : "remove"} size={14} color={item.qty <= 1 ? C.red : C.primary} />
+            </TouchableOpacity>
+            <Text style={cc.qty}>{item.qty}</Text>
+            <TouchableOpacity style={cc.stepBtn} onPress={onInc} activeOpacity={0.85}>
+              <Ionicons name="add" size={14} color={C.primary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={cc.total}>{total} EC</Text>
+        </View>
       </View>
+    </View>
+  );
+}
 
-      <Text style={cr.subtotal}>{(item.unitPrice * item.qty).toFixed(2)} EC</Text>
+/* ─── SUGGESTION CARD ────────────────────────────────────────────────── */
+function SuggestionCard({ item, onAdd }: { item: any; onAdd: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const sc = useMemo(() => mkSc(C), [isDark]);
+  const price = parseFloat(item.price ?? 0);
+  const pct   = parseFloat(item.reduction ?? 0);
+  const effectivePrice = (pct > 0 && pct <= 100) ? +(price * (1 - pct / 100)).toFixed(2) : price;
+  const discount = pct > 0 && pct <= 100;
+
+  return (
+    <View style={sc.card}>
+      {discount && (
+        <View style={sc.discBadge}>
+          <Text style={sc.discBadgeText}>-{Math.round(pct)}%</Text>
+        </View>
+      )}
+      <View style={sc.imgWrap}>
+        <Image source={{ uri: getImgUri(item.imageUrl) }} style={sc.img} contentFit="contain" transition={200} />
+      </View>
+      <Text style={sc.name} numberOfLines={2}>{item.name}</Text>
+      {discount && (
+        <Text style={sc.origPrice}>{price.toFixed(2)} EC</Text>
+      )}
+      <Text style={sc.price}>{effectivePrice.toFixed(2)} EC</Text>
+      <TouchableOpacity style={sc.addBtn} activeOpacity={0.85} onPress={onAdd}>
+        <Ionicons name="add" size={14} color={C.white} />
+        <Text style={sc.addText}>AJOUTER</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function CartScreen() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
   const { companyId, companyName } = useLocalSearchParams<{ companyId: string; companyName: string }>();
-  const router   = useRouter();
-  const { isDark, t } = useTheme();
-  const insets   = useSafeAreaInsets();
+  const router  = useRouter();
+  const insets  = useSafeAreaInsets();
 
-  const [cart,    setCart]    = useState<CartItem[]>([]);
-  const [userId,  setUserId]  = useState<string | null>(null);
-  const [mode,    setMode]    = useState<"idle" | "cash" | "order">("idle");
+  const [cart,   setCart]   = useState<CartItem[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [mode,   setMode]   = useState<"idle" | "cash" | "order">("idle");
 
-  /* Cash PIN state */
-  const [pin,         setPin]         = useState("");
-  const [pinError,    setPinError]    = useState("");
+  const [pin,      setPin]      = useState("");
+  const [pinError, setPinError] = useState("");
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  /* Order form state */
-  const [address,     setAddress]     = useState("");
-  const [phone,       setPhone]       = useState("");
-  const [notes,       setNotes]       = useState("");
+  const [address, setAddress] = useState("");
+  const [phone,   setPhone]   = useState("");
+  const [notes,   setNotes]   = useState("");
 
-  /* Result */
   const [result, setResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [verifyPass,    { isLoading: verifying }]  = useVerifyPassMutation();
+  const [verifyPass,     { isLoading: verifying }] = useVerifyPassMutation();
   const [createPaiement, { isLoading: paying }]    = useCreatePaiementMutation();
   const [createOrder,    { isLoading: ordering }]  = useCreateOrderMutation();
+
+  const { data: upsellData } = useGetAllProductsQuery({ isUpselling: "true", paginate: "false" });
+  const upselling: any[] = upsellData?.data || upsellData || [];
 
   useEffect(() => {
     AsyncStorage.getItem(CART_KEY).then(raw => { if (raw) setCart(JSON.parse(raw)); });
@@ -151,25 +202,15 @@ export default function CartScreen() {
     await AsyncStorage.setItem(CART_KEY, JSON.stringify(items));
   }, []);
 
-  const inc = (productId: number) => {
-    const next = cart.map(c => c.productId === productId ? { ...c, qty: c.qty + 1 } : c);
-    saveCart(next);
-  };
-  const dec = (productId: number) => {
-    const next = cart.map(c => c.productId === productId ? { ...c, qty: Math.max(1, c.qty - 1) } : c);
-    saveCart(next);
-  };
-  const remove = (productId: number) => {
-    saveCart(cart.filter(c => c.productId !== productId));
-  };
-  const clearCart = async () => {
-    await AsyncStorage.removeItem(CART_KEY);
-    setCart([]);
-  };
+  const inc    = (id: number) => saveCart(cart.map(c => c.productId === id ? { ...c, qty: c.qty + 1 } : c));
+  const dec    = (id: number) => saveCart(cart.map(c => c.productId === id ? { ...c, qty: Math.max(1, c.qty - 1) } : c));
+  const remove = (id: number) => saveCart(cart.filter(c => c.productId !== id));
+  const clearCart = async () => { await AsyncStorage.removeItem(CART_KEY); setCart([]); };
 
-  const total = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+  const subtotal      = cart.reduce((s, i) => s + i.unitPrice * i.qty, 0);
+  const totalCommande = subtotal + FRAIS_LIVRAISON;
+  const totalCaisse   = subtotal;
 
-  /* ── Shake PIN ── */
   const shakePin = () => {
     Animated.sequence([
       Animated.timing(pinShake, { toValue: 10,  duration: 60, useNativeDriver: true }),
@@ -180,7 +221,6 @@ export default function CartScreen() {
     ]).start();
   };
 
-  /* ── Payer en caisse ── */
   const handleCashPay = async () => {
     if (pin.length < 6) { setPinError("Entrez votre code à 6 chiffres"); return; }
     if (!userId) return;
@@ -189,13 +229,11 @@ export default function CartScreen() {
     } catch {
       shakePin(); setPinError("Code incorrect"); setPin(""); return;
     }
-
-    const firstProduct = cart[0];
     try {
       await createPaiement({
-        amount:          Number(normalizeDecimal(String(total.toFixed(2)))),
+        amount:          Number(normalizeDecimal(String(totalCaisse.toFixed(2)))),
         companyId:       Number(companyId),
-        productId:       firstProduct?.productId ?? null,
+        productId:       cart[0]?.productId ?? null,
         paymentMethod:   "BIM NEXT APP",
         notes:           `Panier supermarché — ${cart.length} article(s)`,
         shippingAddress: "Paiement en caisse",
@@ -209,24 +247,18 @@ export default function CartScreen() {
     }
   };
 
-  /* ── Commander (livraison) ── */
   const handleOrder = async () => {
     if (!address.trim()) { Alert.alert("Adresse requise", "Veuillez saisir une adresse de livraison."); return; }
-    if (!phone.trim()) { Alert.alert("Téléphone requis", "Veuillez saisir votre numéro de téléphone."); return; }
+    if (!phone.trim())   { Alert.alert("Téléphone requis", "Veuillez saisir votre numéro de téléphone."); return; }
     try {
       const res = await createOrder({
-        items: cart.map(c => ({
-          productId: c.productId,
-          qty: c.qty,
-          unitPrice: c.unitPrice,
-        })),
-        companyId: Number(companyId),
+        items:           cart.map(c => ({ productId: c.productId, qty: c.qty, unitPrice: c.unitPrice })),
+        companyId:       Number(companyId),
         shippingAddress: address.trim(),
-        notes: notes.trim() || undefined,
-        paymentMethod: "delivery",
-        clientPhone: phone.trim(),
+        notes:           notes.trim() || undefined,
+        paymentMethod:   "delivery",
+        clientPhone:     phone.trim(),
       }).unwrap();
-
       await clearCart();
       setMode("idle");
       router.replace({
@@ -241,25 +273,20 @@ export default function CartScreen() {
   /* ── Result screen ── */
   if (result) {
     return (
-      <SafeAreaView style={[s.flex, { backgroundColor: t.bg }]}>
+      <SafeAreaView style={[s.flex, { backgroundColor: C.bg }]}>
         <View style={s.resultWrap}>
-          <View style={[s.resultIcon, { backgroundColor: result.type === "success" ? C.green + "18" : C.red + "18" }]}>
+          <View style={[s.resultIcon, { backgroundColor: result.type === "success" ? C.green + "22" : C.red + "22" }]}>
             <Ionicons
               name={result.type === "success" ? "checkmark-circle" : "close-circle"}
               size={56}
               color={result.type === "success" ? C.green : C.red}
             />
           </View>
-          <Text style={[s.resultTitle, { color: t.text }]}>
-            {result.type === "success" ? "Succès" : "Erreur"}
-          </Text>
-          <Text style={[s.resultText, { color: t.sub }]}>{result.text}</Text>
-          <TouchableOpacity
-            style={s.resultBtn}
-            onPress={() => { setResult(null); router.replace("/(tabs)"); }}
-          >
-            <LinearGradient colors={[C.deep, C.primary]} style={s.resultGrad}>
-              <Text style={s.resultBtnText}>Retour à l'accueil</Text>
+          <Text style={s.resultTitle}>{result.type === "success" ? "Succès !" : "Erreur"}</Text>
+          <Text style={s.resultText}>{result.text}</Text>
+          <TouchableOpacity style={s.confirmBtn} onPress={() => { setResult(null); router.replace("/(tabs)"); }}>
+            <LinearGradient colors={[C.blue, C.deep]} style={s.gradBtn}>
+              <Text style={s.gradBtnText}>Retour à l'accueil</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -267,372 +294,378 @@ export default function CartScreen() {
     );
   }
 
-  return (
-    <View style={[s.root, { backgroundColor: t.bg }]}>
-      <StatusBar barStyle="light-content" />
-
-      {/* ── HEADER ── */}
-      <View style={[s.header, { shadowColor: isDark ? "#000" : C.primary }]}>
-        <LinearGradient
-          colors={t.headerGrad}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={s.deco1} />
-        <View style={s.deco2} />
-
-        <SafeAreaView edges={["top"]}>
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => mode === "idle" ? router.back() : setMode("idle")}>
-              <Ionicons name="arrow-back" size={20} color={C.white} />
+  /* ── CASH MODE ── */
+  if (mode === "cash") {
+    return (
+      <View style={[s.flex, { backgroundColor: C.bg }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <SafeAreaView style={s.subHeader} edges={["top"]}>
+          <View style={s.subTopBar}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setMode("idle")}>
+              <Ionicons name="arrow-back" size={22} color={C.text} />
             </TouchableOpacity>
-
-            <View style={s.titleWrap}>
-              <View style={s.titleBadge}>
-                <Ionicons name="cart-outline" size={12} color={C.gold} />
-              </View>
-              <Text style={s.headerTitle}>
-                {mode === "cash" ? "PAIEMENT EN CAISSE" : mode === "order" ? "LIVRAISON" : "MON PANIER"}
-              </Text>
-            </View>
-
-            {mode === "idle" && cart.length > 0 ? (
-              <TouchableOpacity style={s.iconBtn} onPress={() => Alert.alert("Vider le panier", "Supprimer tous les articles ?", [
-                { text: "Annuler", style: "cancel" },
-                { text: "Vider", style: "destructive", onPress: clearCart },
-              ])}>
-                <Ionicons name="trash-outline" size={18} color="rgba(255,255,255,0.8)" />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 40 }} />
-            )}
+            <Text style={s.subTitle}>Paiement en caisse</Text>
+            <View style={{ width: 40 }} />
           </View>
-
-          <Text style={s.headerSub}>
-            {mode === "idle"
-              ? `${companyName || "Supermarché"} · ${cart.length} article${cart.length !== 1 ? "s" : ""}`
-              : mode === "cash" ? "Vérification du code PIN"
-              : "Détails de livraison"}
-          </Text>
         </SafeAreaView>
-      </View>
-
-      {/* ── Empty cart ── */}
-      {cart.length === 0 && mode === "idle" && (
-        <View style={s.emptyWrap}>
-          <FontAwesome6 name="cart-shopping" size={56} color={C.muted} />
-          <Text style={[s.emptyTitle, { color: t.text }]}>Panier vide</Text>
-          <Text style={[s.emptySub, { color: t.sub }]}>Ajoutez des produits depuis le catalogue</Text>
-          <TouchableOpacity style={s.emptyBtn} onPress={() => router.back()}>
-            <LinearGradient colors={[C.deep, C.primary]} style={s.emptyGrad}>
-              <Text style={s.emptyBtnText}>Voir les produits</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── CART LIST ── */}
-      {mode === "idle" && cart.length > 0 && (
-        <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 200 }}>
-            {/* Company chip */}
-            <View style={[s.companyChip, { backgroundColor: t.card, borderColor: t.border }]}>
-              <FontAwesome6 name="store" size={14} color={C.primary} />
-              <Text style={[s.companyName, { color: t.text }]} numberOfLines={1}>{companyName}</Text>
-            </View>
-
-            {/* Items */}
-            {cart.map(item => (
-              <CartRow
-                key={item.productId}
-                item={item}
-                t={t}
-                isDark={isDark}
-                onInc={() => inc(item.productId)}
-                onDec={() => dec(item.productId)}
-                onRemove={() => remove(item.productId)}
-              />
-            ))}
-
-            {/* Total */}
-            <View style={[s.totalCard, { backgroundColor: t.card, borderColor: t.border }]}>
-              <View style={s.totalRow}>
-                <Text style={[s.totalLabel, { color: t.sub }]}>Sous-total</Text>
-                <Text style={[s.totalVal, { color: t.text }]}>{total.toFixed(2)} EC</Text>
-              </View>
-              <View style={[s.sep, { backgroundColor: t.border }]} />
-              <View style={s.totalRow}>
-                <Text style={[s.totalLabel, { color: t.text, fontWeight: "700" }]}>Total</Text>
-                <Text style={s.grandTotal}>{total.toFixed(2)} EC</Text>
-              </View>
-            </View>
-          </ScrollView>
-
-          {/* ── CTA buttons ── */}
-          <View style={[s.ctaBar, { backgroundColor: t.card, borderTopColor: t.border, paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <TouchableOpacity style={s.cashBtn} onPress={() => { setPin(""); setPinError(""); setMode("cash"); }} activeOpacity={0.85}>
-              <LinearGradient colors={[C.green, "#16A34A"]} style={s.ctaGrad}>
-                <Ionicons name="wallet-outline" size={18} color={C.white} />
-                <Text style={s.ctaBtnText}>Payer en caisse</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.orderBtn} onPress={() => { setAddress(""); setNotes(""); setMode("order"); }} activeOpacity={0.85}>
-              <LinearGradient colors={[C.deep, C.primary]} style={s.ctaGrad}>
-                <Ionicons name="bicycle-outline" size={18} color={C.white} />
-                <Text style={s.ctaBtnText}>Commander</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      )}
-
-      {/* ── CASH PAYMENT ── */}
-      {mode === "cash" && (
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          {/* Recap */}
-          <View style={[s.recapCard, { backgroundColor: t.card, borderColor: t.border }]}>
-            <Text style={[s.recapTitle, { color: t.sub }]}>Montant total à payer</Text>
-            <Text style={s.recapAmount}>{total.toFixed(2)} EC</Text>
-            <Text style={[s.recapSub, { color: t.sub }]}>
-              {cart.length} article{cart.length > 1 ? "s" : ""} — {companyName}
-            </Text>
+          <View style={s.recapCard}>
+            <Text style={s.recapLabel}>Montant à payer en caisse</Text>
+            <Text style={s.recapAmount}>{totalCaisse.toFixed(2)} EC</Text>
+            <Text style={s.recapSub}>{cart.length} article{cart.length > 1 ? "s" : ""} — {companyName}</Text>
           </View>
-
-          {/* PIN dots */}
-          <Text style={[s.pinLabel, { color: t.text }]}>Entrez votre code PIN (6 chiffres)</Text>
+          <Text style={s.pinLabel}>Entrez votre code PIN (6 chiffres)</Text>
           <Animated.View style={[s.pinDots, { transform: [{ translateX: pinShake }] }]}>
             {[0,1,2,3,4,5].map(i => (
-              <View
-                key={i}
-                style={[
-                  s.dot,
-                  { borderColor: pinError ? C.red : C.primary },
-                  i < pin.length && { backgroundColor: C.primary },
-                ]}
-              />
+              <View key={i} style={[s.dot, { borderColor: pinError ? C.red : C.primary }, i < pin.length && { backgroundColor: C.primary }]} />
             ))}
           </Animated.View>
           {pinError ? <Text style={s.pinError}>{pinError}</Text> : null}
-
-          {/* Numpad */}
           <PinPad
             value={pin}
             onChange={k => { setPinError(""); setPin(p => p.length < 6 ? p + k : p); }}
             onDelete={() => setPin(p => p.slice(0, -1))}
           />
-
           <TouchableOpacity
             style={[s.confirmBtn, (verifying || paying || pin.length < 6) && { opacity: 0.6 }]}
             onPress={handleCashPay}
             disabled={verifying || paying || pin.length < 6}
           >
-            <LinearGradient colors={[C.green, "#16A34A"]} style={s.ctaGrad}>
+            <LinearGradient colors={[C.blue, C.deep]} style={s.gradBtn}>
               {(verifying || paying)
-                ? <Text style={s.ctaBtnText}>Traitement…</Text>
-                : <>
-                    <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                    <Text style={s.ctaBtnText}>Confirmer le paiement</Text>
-                  </>
+                ? <Text style={s.gradBtnText}>Traitement…</Text>
+                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.gradBtnText}>Confirmer le paiement</Text></>
               }
             </LinearGradient>
           </TouchableOpacity>
         </ScrollView>
-      )}
+      </View>
+    );
+  }
 
-      {/* ── ORDER FORM ── */}
-      {mode === "order" && (
+  /* ── ORDER MODE ── */
+  if (mode === "order") {
+    return (
+      <View style={[s.flex, { backgroundColor: C.bg }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <SafeAreaView style={s.subHeader} edges={["top"]}>
+          <View style={s.subTopBar}>
+            <TouchableOpacity style={s.backBtn} onPress={() => setMode("idle")}>
+              <Ionicons name="arrow-back" size={22} color={C.text} />
+            </TouchableOpacity>
+            <Text style={s.subTitle}>Livraison</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
         <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-            {/* Recap */}
-            <View style={[s.recapCard, { backgroundColor: t.card, borderColor: t.border }]}>
-              <Text style={[s.recapTitle, { color: t.sub }]}>Total commande</Text>
-              <Text style={s.recapAmount}>{total.toFixed(2)} EC</Text>
-              <Text style={[s.recapSub, { color: t.sub }]}>
-                {cart.length} article{cart.length > 1 ? "s" : ""} — {companyName}
-              </Text>
+            <View style={s.recapCard}>
+              <Text style={s.recapLabel}>Total commande (avec livraison)</Text>
+              <Text style={s.recapAmount}>{totalCommande.toFixed(2)} EC</Text>
+              <Text style={s.recapSub}>{cart.length} article{cart.length > 1 ? "s" : ""} + {FRAIS_LIVRAISON.toFixed(2)} EC livraison</Text>
             </View>
-
-            {/* Téléphone */}
-            <Text style={[s.fieldLabel, { color: t.text }]}>Votre numéro de téléphone *</Text>
-            <View style={[s.inputWrap, { backgroundColor: t.input, borderColor: t.border }]}>
-              <Ionicons name="call-outline" size={16} color={C.muted} style={{ marginLeft: 12 }} />
-              <TextInput
-                style={[s.input, { color: t.text }]}
-                placeholder="+243 8xx xxx xxx"
-                placeholderTextColor={C.muted}
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-              />
+            <Text style={s.fieldLabel}>Votre numéro de téléphone *</Text>
+            <View style={s.inputWrap}>
+              <Ionicons name="call-outline" size={16} color={C.textMut} style={{ marginLeft: 12 }} />
+              <TextInput style={s.input} placeholder="+243 8xx xxx xxx" placeholderTextColor={C.textMut} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
             </View>
-            <Text style={[s.fieldHint, { color: t.sub }]}>On vous appellera sur ce numéro en cas de problème avec la livraison.</Text>
-
-            {/* Address */}
-            <Text style={[s.fieldLabel, { color: t.text }]}>Adresse de livraison *</Text>
-            <View style={[s.inputWrap, { backgroundColor: t.input, borderColor: t.border }]}>
-              <Ionicons name="location-outline" size={16} color={C.muted} style={{ marginLeft: 12 }} />
-              <TextInput
-                style={[s.input, { color: t.text }]}
-                placeholder="Quartier, avenue, numéro…"
-                placeholderTextColor={C.muted}
-                value={address}
-                onChangeText={setAddress}
-                multiline
-                numberOfLines={2}
-              />
+            <Text style={s.fieldLabel}>Adresse de livraison *</Text>
+            <View style={s.inputWrap}>
+              <Ionicons name="location-outline" size={16} color={C.textMut} style={{ marginLeft: 12 }} />
+              <TextInput style={s.input} placeholder="Quartier, avenue, numéro…" placeholderTextColor={C.textMut} value={address} onChangeText={setAddress} multiline numberOfLines={2} />
             </View>
-
-            {/* Notes */}
-            <Text style={[s.fieldLabel, { color: t.text }]}>Note (optionnel)</Text>
-            <View style={[s.inputWrap, { backgroundColor: t.input, borderColor: t.border }]}>
-              <Ionicons name="chatbubble-outline" size={16} color={C.muted} style={{ marginLeft: 12, marginTop: 4 }} />
-              <TextInput
-                style={[s.input, { color: t.text }]}
-                placeholder="Instructions particulières…"
-                placeholderTextColor={C.muted}
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={3}
-              />
+            <Text style={s.fieldLabel}>Note (optionnel)</Text>
+            <View style={s.inputWrap}>
+              <Ionicons name="chatbubble-outline" size={16} color={C.textMut} style={{ marginLeft: 12, marginTop: 4 }} />
+              <TextInput style={s.input} placeholder="Instructions particulières…" placeholderTextColor={C.textMut} value={notes} onChangeText={setNotes} multiline numberOfLines={3} />
             </View>
-
             <TouchableOpacity
               style={[s.confirmBtn, (ordering || !address.trim() || !phone.trim()) && { opacity: 0.6 }]}
               onPress={handleOrder}
               disabled={ordering || !address.trim() || !phone.trim()}
             >
-              <LinearGradient colors={[C.deep, C.primary]} style={s.ctaGrad}>
+              <LinearGradient colors={[C.blue, C.deep]} style={s.gradBtn}>
                 {ordering
-                  ? <Text style={s.ctaBtnText}>Envoi…</Text>
-                  : <>
-                      <Ionicons name="send-outline" size={18} color={C.white} />
-                      <Text style={s.ctaBtnText}>Passer la commande</Text>
-                    </>
+                  ? <Text style={s.gradBtnText}>Envoi…</Text>
+                  : <><Ionicons name="send-outline" size={18} color={C.white} /><Text style={s.gradBtnText}>Passer la commande</Text></>
                 }
               </LinearGradient>
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  /* ── IDLE MODE ── */
+  return (
+    <View style={[s.flex, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* ── HEADER ── */}
+      <SafeAreaView style={s.header} edges={["top"]}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <View style={s.titleBlock}>
+            <Text style={s.headerTitle}>Mon Panier</Text>
+            <Text style={s.headerSub}>
+              {companyName || "Supermarché"} · {cart.length} article{cart.length !== 1 ? "s" : ""}
+            </Text>
+          </View>
+          <View style={s.avatar}>
+            <Text style={s.avatarText}>BN</Text>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      {/* ── EMPTY ── */}
+      {cart.length === 0 && (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Ionicons name="cart-outline" size={48} color={C.primary} />
+          </View>
+          <Text style={s.emptyTitle}>Panier vide</Text>
+          <Text style={s.emptySub}>Ajoutez des produits depuis le catalogue</Text>
+          <TouchableOpacity style={s.confirmBtn} onPress={() => router.back()}>
+            <LinearGradient colors={[C.blue, C.deep]} style={s.gradBtn}>
+              <Text style={s.gradBtnText}>Voir les produits</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       )}
+
+      {/* ── CART CONTENT ── */}
+      {cart.length > 0 && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
+          {/* Items */}
+          <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 12 }}>
+            {cart.map(item => (
+              <CartCard
+                key={item.productId}
+                item={item}
+                onInc={() => inc(item.productId)}
+                onDec={() => dec(item.productId)}
+                onRemove={() => remove(item.productId)}
+              />
+            ))}
+          </View>
+
+          {/* Complétez votre panier */}
+          {upselling.length > 0 && (
+            <View style={s.suggestSection}>
+              <Text style={s.suggestTitle}>Complétez votre panier</Text>
+              <Text style={s.suggestSub}>Ventes croisées · {upselling.length} produit{upselling.length > 1 ? "s" : ""}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.suggestScroll}>
+                {upselling.map((item: any) => (
+                  <SuggestionCard
+                    key={item.productId}
+                    item={item}
+                    onAdd={() => {
+                      const pct       = parseFloat(item.reduction ?? 0);
+                      const base      = parseFloat(item.price ?? 0);
+                      const unitPrice = (pct > 0 && pct <= 100) ? +(base * (1 - pct / 100)).toFixed(2) : base;
+                      const idx       = cart.findIndex(c => c.productId === item.productId);
+                      if (idx >= 0) {
+                        saveCart(cart.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c));
+                      } else {
+                        saveCart([...cart, { productId: item.productId, name: item.name, unitPrice, qty: 1, imageUrl: item.imageUrl ?? null }]);
+                      }
+                    }}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Récapitulatif */}
+          <View style={s.summaryCard}>
+            <View style={s.sumRow}>
+              <Text style={s.sumLabel}>Sous-total</Text>
+              <Text style={s.sumVal}>{subtotal.toFixed(2)} EC</Text>
+            </View>
+            <View style={s.sumRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.sumLabel}>Frais de livraison</Text>
+                <Text style={s.sumNote}>Applicable si vous commandez</Text>
+              </View>
+              <Text style={s.sumVal}>{FRAIS_LIVRAISON.toFixed(2)} EC</Text>
+            </View>
+            <View style={s.sumDivider} />
+            <View style={s.sumRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.sumTotalLabel}>Total livraison</Text>
+                <Text style={s.sumNote}>Paiement caisse : {subtotal.toFixed(2)} EC</Text>
+              </View>
+              <Text style={s.sumTotal}>{totalCommande.toFixed(2)} EC</Text>
+            </View>
+          </View>
+
+          {/* Boutons action */}
+          <View style={s.actionsWrap}>
+            <TouchableOpacity
+              style={s.commanderBtn}
+              onPress={() => { setAddress(""); setNotes(""); setMode("order"); }}
+              activeOpacity={0.9}
+            >
+              <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.commanderGrad}>
+                <Ionicons name="bicycle-outline" size={20} color={C.white} />
+                <Text style={s.commanderText}>Commander</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.caisseBtn}
+              onPress={() => { setPin(""); setPinError(""); setMode("cash"); }}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="qr-code-outline" size={20} color={C.primary} />
+              <Text style={s.caisseText}>Payer en caisse</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ── BOTTOM NAV ── */}
+      <View style={[s.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <TouchableOpacity style={s.navItem} onPress={() => router.replace("/(tabs)" as any)} activeOpacity={0.7}>
+          <Ionicons name="home-outline" size={22} color={C.textMut} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
+          <Ionicons name="globe-outline" size={22} color={C.textMut} />
+        </TouchableOpacity>
+        <View style={s.navCenter}>
+          <TouchableOpacity style={s.navCenterBtn} activeOpacity={0.85}>
+            <Ionicons name="qr-code-outline" size={24} color={C.white} />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
+          <Ionicons name="stats-chart-outline" size={22} color={C.textMut} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={() => router.push("/profile" as any)} activeOpacity={0.7}>
+          <Ionicons name="person-outline" size={22} color={C.textMut} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root: { flex: 1 },
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
   flex: { flex: 1 },
 
-  header: {
-    overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    paddingBottom: 16,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3, shadowRadius: 16,
+  header:      { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  topBar:      { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+  backBtn:     { width: 40, height: 40, borderRadius: 20, backgroundColor: C.surfLow, alignItems: "center", justifyContent: "center" },
+  titleBlock:  { flex: 1, alignItems: "center" },
+  headerTitle: { fontFamily: "NexaBold", fontSize: 20, color: C.text },
+  headerSub:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 2 },
+  avatar:      { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
+  avatarText:  { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+
+  emptyWrap:   { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
+  emptyIcon:   { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(0,53,197,0.07)", alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  emptyTitle:  { fontFamily: "NexaBold", fontSize: 20, color: C.text },
+  emptySub:    { fontFamily: "NexaLight", fontSize: 13, color: C.textMut, textAlign: "center" },
+
+  suggestSection: { paddingTop: 24, paddingBottom: 8 },
+  suggestTitle:   { fontFamily: "NexaBold", fontSize: 17, color: C.text, paddingHorizontal: 16, marginBottom: 2 },
+  suggestSub:     { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, paddingHorizontal: 16, marginBottom: 12 },
+  suggestScroll:  { paddingHorizontal: 16, gap: 12, paddingBottom: 4 },
+
+  summaryCard: {
+    marginHorizontal: 16, marginTop: 20, backgroundColor: C.card,
+    borderRadius: 24, padding: 20, gap: 10,
+    elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 3 },
   },
-  deco1: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.05)", top: -70, right: -60 },
-  deco2: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -30 },
+  sumRow:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  sumLabel:      { fontFamily: "NexaLight", fontSize: 14, color: C.textSec },
+  sumVal:        { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  sumDivider:    { height: 1, backgroundColor: C.border, marginVertical: 4 },
+  sumTotalLabel: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
+  sumTotal:      { fontFamily: "NexaBold", fontSize: 20, color: C.primary },
+  sumNote:       { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginTop: 1 },
 
-  topBar:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8 },
-  iconBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  titleWrap:  { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, justifyContent: "center" },
-  titleBadge: { width: 28, height: 28, borderRadius: 9, backgroundColor: "rgba(255,215,0,0.2)", alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: C.white, fontSize: 14, fontFamily: "NexaLight", letterSpacing: 1.5 },
-  headerSub:   { color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight", fontSize: 12, paddingHorizontal: 20, marginTop: 6 },
+  actionsWrap:   { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
+  commanderBtn:  { borderRadius: 56, overflow: "hidden", elevation: 4, shadowColor: C.blue, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  commanderGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 18 },
+  commanderText: { fontFamily: "NexaBold", fontSize: 16, color: C.white },
+  caisseBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 56, borderWidth: 2, borderColor: C.primary, paddingVertical: 16 },
+  caisseText:    { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
 
-  emptyWrap:    { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, padding: 32 },
-  emptyTitle:   { fontFamily: "NexaLight", fontSize: 20, fontWeight: "700", marginTop: 8 },
-  emptySub:     { fontFamily: "NexaLight", fontSize: 13, textAlign: "center" },
-  emptyBtn:     { borderRadius: 18, overflow: "hidden", marginTop: 8, width: "100%" },
-  emptyGrad:    { paddingVertical: 16, alignItems: "center" },
-  emptyBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
+  bottomNav:     { position: "absolute", bottom: 0, left: 0, right: 0, height: 72, backgroundColor: C.navBg, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center", justifyContent: "space-around", elevation: 12, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: -3 } },
+  navItem:       { flex: 1, alignItems: "center", justifyContent: "center", height: 48 },
+  navCenter:     { flex: 1, alignItems: "center", justifyContent: "center" },
+  navCenterBtn:  { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primary, alignItems: "center", justifyContent: "center", elevation: 8, shadowColor: C.primary, shadowOpacity: 0.38, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, marginBottom: 16 },
 
-  companyChip: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 12,
-  },
-  companyName: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "600", flex: 1 },
+  subHeader:   { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  subTopBar:   { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+  subTitle:    { fontFamily: "NexaBold", fontSize: 18, color: C.text, flex: 1, textAlign: "center" },
 
-  totalCard: {
-    borderRadius: 18, borderWidth: 1, padding: 16, marginTop: 8,
-  },
-  totalRow:  { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
-  totalLabel: { fontFamily: "NexaLight", fontSize: 13 },
-  totalVal:   { fontFamily: "NexaLight", fontSize: 14 },
-  sep:        { height: 1, marginVertical: 6 },
-  grandTotal: { fontFamily: "NexaLight", fontSize: 20, fontWeight: "700", color: C.primary },
+  recapCard:   { backgroundColor: C.card, borderRadius: 24, padding: 24, alignItems: "center", marginBottom: 24, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 3 } },
+  recapLabel:  { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textTransform: "uppercase", letterSpacing: 1 },
+  recapAmount: { fontFamily: "NexaBold", fontSize: 32, color: C.primary, marginVertical: 6 },
+  recapSub:    { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
 
-  ctaBar: {
-    flexDirection: "row", gap: 10, padding: 14,
-    borderTopWidth: 1,
-  },
-  // paddingBottom appliqué dynamiquement via insets
-  cashBtn:  { flex: 1, borderRadius: 16, overflow: "hidden" },
-  orderBtn: { flex: 1, borderRadius: 16, overflow: "hidden" },
-  ctaGrad:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 14 },
-  ctaBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 13, fontWeight: "700" },
+  pinLabel:    { fontFamily: "NexaLight", fontSize: 13, color: C.text, textAlign: "center", marginBottom: 16 },
+  pinDots:     { flexDirection: "row", justifyContent: "center", gap: 14, marginBottom: 8 },
+  dot:         { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
+  pinError:    { fontFamily: "NexaLight", fontSize: 12, color: C.red, textAlign: "center", marginBottom: 12 },
 
-  recapCard: {
-    borderRadius: 18, borderWidth: 1, padding: 20,
-    alignItems: "center", marginBottom: 24,
-  },
-  recapTitle:  { fontFamily: "NexaLight", fontSize: 11, textTransform: "uppercase", letterSpacing: 1 },
-  recapAmount: { fontFamily: "NexaLight", fontSize: 32, fontWeight: "700", color: C.primary, marginVertical: 6 },
-  recapSub:    { fontFamily: "NexaLight", fontSize: 12 },
+  confirmBtn:  { borderRadius: 56, overflow: "hidden", marginTop: 24 },
 
-  pinLabel: { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", marginBottom: 16 },
-  pinDots:  { flexDirection: "row", justifyContent: "center", gap: 14, marginBottom: 8 },
-  dot: {
-    width: 16, height: 16, borderRadius: 8, borderWidth: 2,
-  },
-  pinError: { color: C.red, fontFamily: "NexaLight", fontSize: 12, textAlign: "center", marginBottom: 12 },
+  fieldLabel:  { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
+  inputWrap:   { flexDirection: "row", alignItems: "flex-start", borderRadius: 16, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, minHeight: 50, paddingVertical: 10 },
+  input:       { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text, paddingHorizontal: 10, paddingTop: 2 },
 
-  confirmBtn: { borderRadius: 18, overflow: "hidden", marginTop: 24 },
+  gradBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 16 },
+  gradBtnText: { fontFamily: "NexaBold", fontSize: 15, color: C.white },
 
-  fieldLabel: { fontFamily: "NexaLight", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
-  fieldHint:  { fontFamily: "NexaLight", fontSize: 11, lineHeight: 16, marginBottom: 4, marginTop: 4, paddingHorizontal: 4 },
-  inputWrap: {
-    flexDirection: "row", alignItems: "flex-start",
-    borderRadius: 16, borderWidth: 1, minHeight: 50, paddingVertical: 10,
-  },
-  input: { flex: 1, fontFamily: "NexaLight", fontSize: 13, paddingHorizontal: 10, paddingTop: 2 },
+  resultWrap:  { flex: 1, justifyContent: "center", alignItems: "center", padding: 32, gap: 14 },
+  resultIcon:  { width: 96, height: 96, borderRadius: 48, justifyContent: "center", alignItems: "center" },
+  resultTitle: { fontFamily: "NexaBold", fontSize: 22, color: C.text },
+  resultText:  { fontFamily: "NexaLight", fontSize: 14, color: C.textSec, textAlign: "center", lineHeight: 20 },
+}); }
 
-  resultWrap: { flex: 1, justifyContent: "center", alignItems: "center", padding: 32, gap: 14 },
-  resultIcon: { width: 96, height: 96, borderRadius: 48, justifyContent: "center", alignItems: "center" },
-  resultTitle: { fontFamily: "NexaLight", fontSize: 22, fontWeight: "700" },
-  resultText: { fontFamily: "NexaLight", fontSize: 14, textAlign: "center", lineHeight: 20 },
-  resultBtn: { borderRadius: 18, overflow: "hidden", width: "100%", marginTop: 8 },
-  resultGrad: { paddingVertical: 16, alignItems: "center" },
-  resultBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
-});
+/* ─── CART CARD STYLES ───────────────────────────────────────────────── */
+function mkCc(C: typeof LIGHT) { return StyleSheet.create({
+  card:      { backgroundColor: C.card, borderRadius: 24, padding: 14, flexDirection: "row", gap: 14, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 } },
+  imgWrap:   { width: 80, height: 80, borderRadius: 18, backgroundColor: C.surfLow, alignItems: "center", justifyContent: "center", padding: 8, flexShrink: 0 },
+  img:       { width: "100%", height: "100%" },
+  info:      { flex: 1, justifyContent: "space-between", gap: 4 },
+  topRow:    { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  name:      { flex: 1, fontFamily: "NexaBold", fontSize: 14, color: C.text, lineHeight: 20 },
+  trashBtn:  { padding: 4 },
+  unitPrice: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
+  bottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  stepper:   { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.surfLow, borderRadius: 99, paddingHorizontal: 6, paddingVertical: 4 },
+  stepBtn:   { width: 30, height: 30, borderRadius: 15, backgroundColor: C.card, alignItems: "center", justifyContent: "center", elevation: 1, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
+  stepBtnDim:{ opacity: 0.6 },
+  qty:       { fontFamily: "NexaBold", fontSize: 15, color: C.text, minWidth: 22, textAlign: "center" },
+  total:     { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
+}); }
 
-const cr = StyleSheet.create({
-  row: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 16, borderWidth: 1, padding: 12, marginBottom: 10, gap: 10,
-  },
-  info: { flex: 1 },
-  name: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "600", marginBottom: 3 },
-  price: { fontFamily: "NexaLight", fontSize: 11, color: C.muted },
-  controls: { flexDirection: "row", alignItems: "center", gap: 8 },
-  btn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: C.primary + "12",
-    justifyContent: "center", alignItems: "center",
-  },
-  btnDisabled: { backgroundColor: C.red + "12" },
-  qty: { fontFamily: "NexaLight", fontSize: 15, fontWeight: "700", minWidth: 22, textAlign: "center" },
-  subtotal: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "700", color: C.primary, minWidth: 72, textAlign: "right" },
-});
+/* ─── SUGGESTION CARD STYLES ─────────────────────────────────────────── */
+function mkSc(C: typeof LIGHT) { return StyleSheet.create({
+  card:         { width: 140, backgroundColor: C.card, borderRadius: 22, padding: 12, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 } },
+  imgWrap:      { width: "100%", height: 96, borderRadius: 16, backgroundColor: C.surfLow, alignItems: "center", justifyContent: "center", padding: 8, marginBottom: 10 },
+  img:          { width: "100%", height: "100%" },
+  name:         { fontFamily: "NexaBold", fontSize: 12, color: C.text, marginBottom: 4, lineHeight: 17 },
+  origPrice:    { fontFamily: "NexaLight", fontSize: 10, color: C.textMut, textDecorationLine: "line-through", marginBottom: 1 },
+  price:        { fontFamily: "NexaBold", fontSize: 13, color: C.primary, marginBottom: 8 },
+  addBtn:       { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, backgroundColor: C.primary, borderRadius: 99, paddingVertical: 7, paddingHorizontal: 12 },
+  addText:      { fontFamily: "NexaBold", fontSize: 11, color: C.white, letterSpacing: 0.6 },
+  discBadge:    { position: "absolute", top: 8, right: 8, backgroundColor: C.green, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, zIndex: 1 },
+  discBadgeText:{ fontFamily: "NexaBold", fontSize: 9, color: C.white },
+}); }
 
-const pp = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginVertical: 8 },
-  key: {
-    width: "30%", aspectRatio: 1.8,
-    justifyContent: "center", alignItems: "center",
-    margin: "1.5%",
-  },
+/* ─── PIN PAD STYLES ─────────────────────────────────────────────────── */
+function mkPp(C: typeof LIGHT) { return StyleSheet.create({
+  grid:    { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", marginVertical: 8 },
+  key:     { width: "30%", aspectRatio: 1.8, justifyContent: "center", alignItems: "center", margin: "1.5%" },
   keyText: { fontFamily: "NexaLight", fontSize: 22, fontWeight: "700", color: C.text },
-});
+}); }

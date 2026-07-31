@@ -1,19 +1,20 @@
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_URL_BASE } from "@/constants/api";
+import { useAppTheme } from "@/app/_layout";
 import {
   Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -21,180 +22,174 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/* ═══════════════════════════════════════════════════════════════════════
-   THEME — même pattern que Home / Transfer / Recharge
-═══════════════════════════════════════════════════════════════════════ */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  white:   "#FFFFFF",
-  red:     "#EF4444",
-  green:   "#22C55E",
+/* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:    "#0035C5",
+  bg:         "#F9F9F9",
+  surface:    "#FFFFFF",
+  onSurface:  "#1A1C1C",
+  onSurfVar:  "#434657",
+  secondary:  "#5C5E63",
+  outline:    "#747688",
+  outlineVar: "#C4C5DA",
+  green:      "#22C55E",
+  red:        "#EF4444",
+  navBord:    "rgba(196,197,218,0.18)",
+  cardBg:     "rgba(255,255,255,0.85)",
+  cardBord:   "rgba(196,197,218,0.25)",
+  iconBg:     "rgba(0,53,197,0.05)",
+  iconBgSel:  "rgba(0,53,197,0.10)",
+  selBg:      "rgba(0,53,197,0.04)",
+  uploadBg:   "rgba(0,53,197,0.06)",
+  iconColor:  "rgba(0,53,197,0.45)",
+  footer:     "rgba(67,70,87,0.5)",
+};
+const DARK: typeof LIGHT = {
+  primary:    "#4D8DFF",
+  bg:         "#0B1220",
+  surface:    "#1A2540",
+  onSurface:  "#EAF0FF",
+  onSurfVar:  "#9FB0D0",
+  secondary:  "#9FB0D0",
+  outline:    "#6B7A99",
+  outlineVar: "rgba(31,42,68,0.80)",
+  green:      "#22C55E",
+  red:        "#EF4444",
+  navBord:    "rgba(31,42,68,0.80)",
+  cardBg:     "rgba(26,37,64,0.85)",
+  cardBord:   "rgba(31,42,68,0.80)",
+  iconBg:     "rgba(77,141,255,0.08)",
+  iconBgSel:  "rgba(77,141,255,0.14)",
+  selBg:      "rgba(77,141,255,0.08)",
+  uploadBg:   "rgba(77,141,255,0.08)",
+  iconColor:  "rgba(77,141,255,0.55)",
+  footer:     "rgba(163,180,208,0.5)",
 };
 
-const TH = {
-  light: {
-    bg:           C.primary,
-    card:         "#FFFFFF",
-    text:         "#0D1B3E",
-    muted:        "#7B8DB0",
-    border:       "rgba(3,83,204,0.10)",
-    inputBg:      "rgba(3,83,204,0.06)",
-    rowSel:       "rgba(3,83,204,0.07)",
-    iconSelBg:    C.primary,
-    labelColor:   "rgba(255,255,255,0.70)",
-    headerGrad:   [C.deep, C.primary] as [string, string],
-    shadow:       C.primary,
-    cardBorder:   "transparent",
-    versionColor: "rgba(255,255,255,0.35)",
-  },
-  dark: {
-    bg:           "#07091A",
-    card:         "#0F1228",
-    text:         "#E2E8F0",
-    muted:        "#556080",
-    border:       "rgba(77,150,255,0.12)",
-    inputBg:      "rgba(77,150,255,0.07)",
-    rowSel:       "rgba(77,150,255,0.10)",
-    iconSelBg:    C.accent,
-    labelColor:   "#556080",
-    headerGrad:   ["#05081A", "#0D1535"] as [string, string],
-    shadow:       "#000",
-    cardBorder:   "rgba(77,150,255,0.12)",
-    versionColor: "rgba(255,255,255,0.20)",
-  },
-};
+/* ─── SUJETS ─────────────────────────────────────────────────────────── */
+const TOPICS = [
+  { id: "1", label: "Problème de connexion",  icon: "lock-closed-outline"     },
+  { id: "2", label: "Recharger mon compte",   icon: "wallet-outline"          },
+  { id: "3", label: "Transfert Ecoins",        icon: "swap-horizontal-outline" },
+  { id: "4", label: "Autres questions",        icon: "chatbubble-outline"      },
+] as const;
 
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? TH.dark : TH.light };
+/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
+function SLabel({ icon, title }: { icon: string; title: string }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const sl = useMemo(() => mkSl(C), [isDark]);
+  return (
+    <View style={sl.row}>
+      <Ionicons name={icon as any} size={18} color={C.primary} />
+      <Text style={sl.text}>{title}</Text>
+    </View>
+  );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   DATA — built inside component so it can use tr()
-═══════════════════════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════════════════════
-   TOPIC ITEM
-═══════════════════════════════════════════════════════════════════════ */
-function TopicItem({
-  item, selected, onPress, t,
-}: {
-  item: typeof SUPPORT_TOPICS[number];
-  selected: boolean;
-  onPress: () => void;
-  t: typeof TH.light;
-}) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
+/* ─── SUBJECT CARD ────────────────────────────────────────────────────── */
+function SubjectCard({
+  item, selected, onPress,
+}: { item: typeof TOPICS[number]; selected: boolean; onPress: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const sc = useMemo(() => mkSc(C), [isDark]);
+  const scale = useRef(new Animated.Value(1)).current;
 
   return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start()}
+      onPress={onPress}
+    >
       <Animated.View style={[
-        ts.row,
-        {
-          borderBottomColor: t.border,
-          backgroundColor:   selected ? t.rowSel : "transparent",
-          transform: [{ scale }],
-        },
+        sc.card,
+        selected && sc.cardSel,
+        { transform: [{ scale }] },
       ]}>
-        <View style={[ts.iconWrap, { backgroundColor: selected ? t.iconSelBg : t.inputBg }]}>
-          <Ionicons name={item.icon as any} size={16} color={selected ? C.white : C.primary} />
+        <View style={[sc.iconBox, selected && sc.iconBoxSel]}>
+          <Ionicons name={item.icon as any} size={22} color={C.primary} />
         </View>
-        <Text style={[ts.title, { color: selected ? C.primary : t.text }]}>{item.title}</Text>
-        {selected && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
+        <Text style={[sc.label, selected && { color: C.primary }]}>{item.label}</Text>
+        <Ionicons
+          name="chevron-forward"
+          size={18}
+          color={selected ? C.primary : C.outlineVar}
+          style={{ opacity: selected ? 1 : 0.4 }}
+        />
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   SECTION LABEL
-   Light : fond bleu → label blanc semi-transparent
-   Dark  : fond sombre → label muted
-═══════════════════════════════════════════════════════════════════════ */
-function SectionLabel({ title, icon, t }: { title: string; icon: string; t: typeof TH.light }) {
-  return (
-    <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color={t.labelColor} />
-      <Text style={[sl.text, { color: t.labelColor }]}>{title}</Text>
-    </View>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   CARD WRAPPER
-═══════════════════════════════════════════════════════════════════════ */
-function Card({ children, t }: { children: React.ReactNode; t: typeof TH.light }) {
-  return (
-    <View style={[
-      s.card,
-      {
-        backgroundColor: t.card,
-        borderColor:     t.cardBorder,
-        borderWidth:     t.cardBorder === "transparent" ? 0 : 1,
-        shadowColor:     t.shadow,
-      },
-    ]}>
-      {children}
-    </View>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   MAIN SCREEN
-═══════════════════════════════════════════════════════════════════════ */
+/* ─── MAIN ────────────────────────────────────────────────────────────── */
 export default function SupportScreen() {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+  const fb = useMemo(() => mkFb(C), [isDark]);
   const router = useRouter();
-  const { isDark, t } = useTheme();
-  const { t: tr } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const { t }  = useTranslation();
 
-  const SUPPORT_TOPICS = [
-    { id: "1", title: tr("support.subjectOpts.login"),    icon: "lock-closed-outline"     },
-    { id: "2", title: tr("support.subjectOpts.recharge"), icon: "wallet-outline"          },
-    { id: "3", title: tr("support.subjectOpts.transfer"), icon: "swap-horizontal-outline" },
-    { id: "4", title: tr("support.subjectOpts.other"),    icon: "chatbubble-outline"      },
-  ];
+  const [userId,         setUserId]         = useState<string | null>(null);
+  const [token,          setToken]          = useState<string | null>(null);
+  const [selectedTopic,  setSelectedTopic]  = useState<string | null>(null);
+  const [email,          setEmail]          = useState("");
+  const [message,        setMessage]        = useState("");
+  const [image,          setImage]          = useState<string | null>(null);
+  const [loading,        setLoading]        = useState(false);
+  const [feedback,       setFeedback]       = useState<"success" | "error" | null>(null);
+  const [feedbackMsg,    setFeedbackMsg]    = useState("");
+  const feedbackScale = useRef(new Animated.Value(0.85)).current;
+  const feedbackOpac  = useRef(new Animated.Value(0)).current;
 
-  const [userId,        setUserId]        = useState<string | null>(null);
-  const [token,         setToken]         = useState<string | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [message,       setMessage]       = useState("");
-  const [email,         setEmail]         = useState("");
-  const [image,         setImage]         = useState<string | null>(null);
-  const [loading,       setLoading]       = useState(false);
-
-  const cardAnim = useRef(new Animated.Value(40)).current;
-  const cardOpac = useRef(new Animated.Value(0)).current;
+  const fadeY = useRef(new Animated.Value(30)).current;
+  const fadeO = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem("userId").then(setUserId);
     AsyncStorage.getItem("token").then(setToken);
     Animated.parallel([
-      Animated.timing(cardAnim, { toValue: 0, duration: 420, delay: 120, useNativeDriver: true }),
-      Animated.timing(cardOpac, { toValue: 1, duration: 420, delay: 120, useNativeDriver: true }),
+      Animated.timing(fadeY, { toValue: 0, duration: 420, delay: 100, useNativeDriver: true }),
+      Animated.timing(fadeO, { toValue: 1, duration: 420, delay: 100, useNativeDriver: true }),
     ]).start();
   }, []);
 
   const pickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) { Alert.alert(tr("common.permDenied"), tr("support.permDenied")); return; }
+    if (!granted) { Alert.alert(t("common.permDenied"), t("support.permDenied")); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7,
     });
     if (!result.canceled) setImage(result.assets[0].uri);
   };
 
+  const showFeedback = (type: "success" | "error", msg: string) => {
+    setFeedbackMsg(msg);
+    setFeedback(type);
+    feedbackScale.setValue(0.85);
+    feedbackOpac.setValue(0);
+    Animated.parallel([
+      Animated.spring(feedbackScale, { toValue: 1, friction: 7, useNativeDriver: true }),
+      Animated.timing(feedbackOpac, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeFeedback = () => {
+    Animated.parallel([
+      Animated.spring(feedbackScale, { toValue: 0.85, useNativeDriver: true }),
+      Animated.timing(feedbackOpac, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setFeedback(null));
+  };
+
   const handleSend = async () => {
     if (!selectedTopic || !message || !email) {
-      Alert.alert("Champs manquants", "Veuillez remplir tous les champs.");
+      showFeedback("error", "Veuillez remplir tous les champs obligatoires.");
       return;
     }
     setLoading(true);
@@ -205,10 +200,9 @@ export default function SupportScreen() {
       formData.append("id",          String(userId));
       formData.append("sujet",       selectedTopic);
       if (image) {
-        const filename = image.split("/").pop();
-        const match    = /\.(\w+)$/.exec(filename || "");
-        const type     = match ? `image/${match[1]}` : "image";
-        formData.append("image", { uri: image, name: filename, type } as any);
+        const filename = image.split("/").pop() ?? `photo_${Date.now()}.jpg`;
+        const ext      = /\.(\w+)$/.exec(filename)?.[1];
+        formData.append("image", { uri: image, name: filename, type: `image/${ext ?? "jpeg"}` } as any);
       }
       const response = await fetch(`${API_URL_BASE}/api/v1/support_track/create`, {
         method: "POST",
@@ -217,237 +211,367 @@ export default function SupportScreen() {
       });
       const data = await response.json();
       if (response.ok) {
-        Alert.alert("✅ Succès", "Votre ticket a bien été envoyé !");
+        showFeedback("success", "Votre ticket a bien été envoyé. Notre équipe vous répondra par email.");
         setSelectedTopic(null); setMessage(""); setEmail(""); setImage(null);
       } else {
-        Alert.alert("Erreur", data.message || "Erreur lors de l'envoi");
+        showFeedback("error", data.message || "Erreur lors de l'envoi du ticket.");
       }
     } catch {
-      Alert.alert("Erreur réseau", "Vérifiez votre connexion et réessayez.");
+      showFeedback("error", "Erreur réseau. Vérifiez votre connexion et réessayez.");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ════════════════════════════════════════════════════════════════════
-     RENDER
-  ════════════════════════════════════════════════════════════════════ */
+  const TOP_H = (Platform.OS === "ios" ? insets.top : StatusBar.currentHeight ?? 0) + 56;
+
   return (
     <KeyboardAvoidingView
-      style={[{ flex: 1 }, { backgroundColor: t.bg }]}
+      style={{ flex: 1, backgroundColor: C.bg }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.surface} />
 
+      {/* ── FIXED TOP BAR ── */}
+      <View style={[s.topBar, {
+        paddingTop: Platform.OS === "ios" ? insets.top : (StatusBar.currentHeight ?? 0) + 8,
+      }]}>
+        <TouchableOpacity onPress={() => router.back()} style={s.topBtn}>
+          <Ionicons name="arrow-back" size={22} color={C.onSurface} />
+        </TouchableOpacity>
+        <Text style={s.topTitle}>Support</Text>
+        <TouchableOpacity onPress={() => router.push("/notification")} style={s.topBtn}>
+          <Ionicons name="notifications-outline" size={22} color={C.onSurface} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── FEEDBACK MODAL ── */}
+      <Modal visible={!!feedback} transparent animationType="none" onRequestClose={closeFeedback}>
+        <Pressable style={fb.overlay} onPress={closeFeedback}>
+          <Animated.View style={[fb.sheet, { opacity: feedbackOpac, transform: [{ scale: feedbackScale }] }]}>
+            {/* Icône */}
+            <View style={[fb.iconWrap, feedback === "success" ? fb.iconSuccess : fb.iconError]}>
+              <Ionicons
+                name={feedback === "success" ? "checkmark" : "close"}
+                size={32}
+                color="#FFFFFF"
+              />
+            </View>
+            {/* Titre */}
+            <Text style={fb.title}>
+              {feedback === "success" ? "Ticket envoyé !" : "Oups !"}
+            </Text>
+            {/* Message */}
+            <Text style={fb.msg}>{feedbackMsg}</Text>
+            {/* Bouton */}
+            <TouchableOpacity
+              style={[fb.btn, feedback === "success" ? fb.btnSuccess : fb.btnError]}
+              onPress={closeFeedback}
+            >
+              <Text style={fb.btnTxt}>
+                {feedback === "success" ? "Parfait" : "Réessayer"}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Pressable>
+      </Modal>
+
+      {/* ── SCROLL ── */}
       <ScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[s.scroll, { backgroundColor: t.bg }]}
+        contentContainerStyle={[s.scroll, { paddingTop: TOP_H + 16 }]}
       >
-        {/* ══ HEADER ══ */}
-        <View style={[s.header, { shadowColor: t.shadow }]}>
-          <LinearGradient
-            colors={t.headerGrad}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={s.deco1} />
-          <View style={s.deco2} />
-
-          <SafeAreaView edges={["top"]} style={{ width: "100%" }}>
-            <View style={s.topBar}>
-              <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={22} color={C.white} />
-              </TouchableOpacity>
-              <Text style={s.headerTitle}>Support</Text>
-              <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-                <Ionicons name="notifications-outline" size={20} color={C.white} />
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-
-          <View style={s.headerHero}>
-            <View style={s.heroIconWrap}>
-              <Ionicons name="help-circle-outline" size={36} color={C.white} />
-            </View>
-            <Text style={s.headerSub}>Nous sommes là pour vous aider</Text>
-          </View>
+        {/* ── HERO ── */}
+        <View style={s.hero}>
+          <Text style={s.heroSub}>Nous sommes là pour vous aider</Text>
         </View>
 
-        {/* ══ FORM (slide-up) ══ */}
-        <Animated.View style={{ opacity: cardOpac, transform: [{ translateY: cardAnim }] }}>
+        <Animated.View style={{ opacity: fadeO, transform: [{ translateY: fadeY }] }}>
 
           {/* ── SUJET ── */}
           <View style={s.section}>
-            <SectionLabel title="Sujet" icon="list-outline" t={t} />
-            <Card t={t}>
-              {SUPPORT_TOPICS.map((item) => (
-                <TopicItem
+            <SLabel icon="list-outline" title="SUJET" />
+            <View style={s.topicList}>
+              {TOPICS.map(item => (
+                <SubjectCard
                   key={item.id}
                   item={item}
-                  selected={selectedTopic === item.title}
-                  onPress={() => setSelectedTopic(item.title)}
-                  t={t}
+                  selected={selectedTopic === item.label}
+                  onPress={() => setSelectedTopic(item.label)}
                 />
               ))}
-            </Card>
+            </View>
           </View>
 
           {/* ── COORDONNÉES ── */}
           <View style={s.section}>
-            <SectionLabel title="Coordonnées" icon="person-outline" t={t} />
-            <Card t={t}>
-              <View style={[s.inputRow, { borderBottomColor: t.border }]}>
-                <View style={[s.inputIcon, { backgroundColor: t.inputBg }]}>
-                  <Ionicons name="mail-outline" size={16} color={C.primary} />
-                </View>
-                <TextInput
-                  style={[s.input, { color: t.text }]}
-                  placeholder="Votre adresse email"
-                  placeholderTextColor={t.muted}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-            </Card>
+            <SLabel icon="person-outline" title="COORDONNÉES" />
+            <View style={s.glassCard}>
+              <Ionicons name="mail-outline" size={20} color={C.iconColor} />
+              <TextInput
+                style={s.glassInput}
+                placeholder="Votre adresse email"
+                placeholderTextColor={C.outline}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
           </View>
 
           {/* ── MESSAGE ── */}
           <View style={s.section}>
-            <SectionLabel title="Message" icon="chatbubbles-outline" t={t} />
-            <Card t={t}>
-              <View style={s.messageWrap}>
-                <View style={[s.inputIcon, { backgroundColor: t.inputBg, alignSelf: "flex-start", marginTop: 2 }]}>
-                  <Ionicons name="create-outline" size={16} color={C.primary} />
-                </View>
-                <TextInput
-                  style={[s.messageInput, { color: t.text }]}
-                  placeholder="Décrivez votre problème en détail…"
-                  placeholderTextColor={t.muted}
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                />
-              </View>
-            </Card>
+            <SLabel icon="create-outline" title="MESSAGE" />
+            <View style={[s.glassCard, s.glassArea]}>
+              <Ionicons name="pencil-outline" size={20} color={C.iconColor} style={{ marginTop: 2 }} />
+              <TextInput
+                style={[s.glassInput, s.areaInput]}
+                placeholder="Décrivez votre problème en détail…"
+                placeholderTextColor={C.outline}
+                value={message}
+                onChangeText={setMessage}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+              />
+            </View>
           </View>
 
           {/* ── PIÈCE JOINTE ── */}
           <View style={s.section}>
-            <SectionLabel title="Pièce jointe" icon="image-outline" t={t} />
-            <Card t={t}>
-              <TouchableOpacity
-                style={[s.uploadRow, { borderBottomColor: image ? t.border : "transparent" }]}
-                onPress={pickImage}
-                activeOpacity={0.75}
+            <SLabel icon="image-outline" title="PIÈCE JOINTE" />
+            <TouchableOpacity style={s.glassCard} onPress={pickImage} activeOpacity={0.8}>
+              <View style={s.uploadIconBox}>
+                <Ionicons
+                  name={image ? "checkmark-circle" : "cloud-upload-outline"}
+                  size={20}
+                  color={image ? C.green : C.primary}
+                />
+              </View>
+              <Text style={[s.uploadTxt, image && { color: C.green }]}>
+                {image ? "Image sélectionnée — modifier" : "Ajouter une image (optionnel)"}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={C.outlineVar} />
+            </TouchableOpacity>
+
+            {image && (
+              <View style={s.previewWrap}>
+                <Image source={{ uri: image }} style={s.preview} />
+                <TouchableOpacity style={s.removeBtn} onPress={() => setImage(null)}>
+                  <View style={s.removeBadge}>
+                    <Ionicons name="close" size={12} color="#fff" />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* ── BOUTON ENVOYER ── */}
+          <View style={s.section}>
+            <TouchableOpacity
+              style={[s.submitWrap, loading && { opacity: 0.7 }]}
+              onPress={handleSend}
+              disabled={loading}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={["#0047FF", "#7000FF"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={s.submitGrad}
               >
-                <View style={[s.inputIcon, { backgroundColor: image ? C.green + "18" : t.inputBg }]}>
+                {/* Cercle gauche */}
+                <View style={s.submitCircle}>
                   <Ionicons
-                    name={image ? "checkmark-circle" : "cloud-upload-outline"}
-                    size={16}
-                    color={image ? C.green : C.primary}
+                    name={loading ? "hourglass-outline" : "arrow-forward"}
+                    size={20}
+                    color={C.primary}
                   />
                 </View>
-                <Text style={[s.uploadText, { color: image ? C.green : t.text }]}>
-                  {image ? "Image sélectionnée — modifier" : "Ajouter une image (optionnel)"}
+                {/* Texte centré */}
+                <Text style={s.submitTxt}>
+                  {loading ? "Envoi en cours…" : "Envoyer le ticket"}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={t.muted} />
-              </TouchableOpacity>
-
-              {image && (
-                <View style={s.previewWrap}>
-                  <Image source={{ uri: image }} style={s.imagePreview} />
-                  <TouchableOpacity style={s.removeBtn} onPress={() => setImage(null)}>
-                    <View style={s.removeBtnCircle}>
-                      <Ionicons name="close" size={13} color={C.white} />
-                    </View>
-                  </TouchableOpacity>
+                {/* Double chevrons décoratifs */}
+                <View style={s.submitChevrons}>
+                  <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+                  <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" style={{ marginLeft: -10 }} />
                 </View>
-              )}
-            </Card>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
 
-          {/* ── CTA ── */}
-          <View style={s.btnWrap}>
-            <GradientButton
-              isLoad={loading}
-              title={loading ? "Envoi en cours…" : "Envoyer le ticket"}
-              onPress={handleSend}
-              leftIcon={<ArrowIcon width={18} height={12} color={C.violet} />}
-              rightIcon={<ArrowRightIcon width={26} height={20} />}
-            />
-          </View>
-
-          <Text style={[s.version, { color: t.versionColor }]}>BIM NEXT · Support</Text>
+          <Text style={s.footer}>BIM NEXT · Support</Text>
+          <View style={{ height: insets.bottom + 80 }} />
         </Animated.View>
-
-        <View style={{ height: 80 }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   STYLES
-═══════════════════════════════════════════════════════════════════════ */
-const s = StyleSheet.create({
-  scroll: { paddingBottom: 20 },
-
-  header: {
-    height: 210, overflow: "hidden",
-    borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16,
-    marginBottom: 20,
+/* ─── STYLES ─────────────────────────────────────────────────────────── */
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  /* top bar */
+  topBar: {
+    position: "absolute", top: 0, left: 0, right: 0, zIndex: 50,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1, borderBottomColor: C.navBord,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 12,
+    elevation: 2,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4,
   },
-  deco1: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "rgba(255,255,255,0.06)", top: -50, right: -40 },
-  deco2: { position: "absolute", width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(255,255,255,0.04)", bottom: -20, left: -20 },
+  topBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  topTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.onSurface },
 
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 8 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
-  headerTitle: { color: C.white, fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
+  scroll: { paddingHorizontal: 20 },
 
-  headerHero: { alignItems: "center", marginTop: 14 },
-  heroIconWrap: { width: 66, height: 66, borderRadius: 33, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", marginBottom: 10, borderWidth: 2, borderColor: "rgba(255,255,255,0.22)" },
-  headerSub: { color: "rgba(255,255,255,0.78)", fontSize: 13, fontFamily: "NexaLight" },
+  /* hero */
+  hero: { alignItems: "center", marginBottom: 32, marginTop: 8 },
+  heroTitle: { fontFamily: "NexaBold", fontSize: 36, color: C.primary, letterSpacing: -0.5 },
+  heroSub:   { fontFamily: "NexaLight", fontSize: 16, color: C.onSurfVar, marginTop: 4, opacity: 0.8 },
 
-  section: { paddingHorizontal: 16, marginBottom: 16 },
+  section: { marginBottom: 24 },
 
-  card: {
-    borderRadius: 20, overflow: "hidden",
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 8,
+  topicList: { gap: 10 },
+
+  /* glass card (input wrapper) */
+  glassCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.cardBg,
+    borderRadius: 20, paddingHorizontal: 20, paddingVertical: 16,
+    borderWidth: 1, borderColor: C.cardBord,
+    elevation: 2,
+    shadowColor: "rgba(0,71,255,0.06)",
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12,
+  },
+  glassArea: { alignItems: "flex-start" },
+  glassInput: {
+    flex: 1, fontFamily: "NexaLight", fontSize: 15, color: C.onSurface,
+  },
+  areaInput: { minHeight: 110, textAlignVertical: "top" },
+
+  /* upload */
+  uploadIconBox: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.uploadBg,
+    alignItems: "center", justifyContent: "center",
+  },
+  uploadTxt: {
+    flex: 1, fontFamily: "NexaLight", fontSize: 14, color: C.onSurface,
   },
 
-  inputRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: 1 },
-  inputIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  input:     { flex: 1, fontFamily: "NexaLight", fontSize: 14 },
-
-  messageWrap:  { flexDirection: "row", padding: 16, gap: 12 },
-  messageInput: { flex: 1, fontFamily: "NexaLight", fontSize: 14, minHeight: 100, textAlignVertical: "top" },
-
-  uploadRow:   { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: 1 },
-  uploadText:  { flex: 1, fontFamily: "NexaLight", fontSize: 14 },
-  previewWrap: { margin: 14, marginTop: 4, borderRadius: 14, overflow: "hidden", position: "relative" },
-  imagePreview:{ width: "100%", height: 180, borderRadius: 14 },
+  /* preview */
+  previewWrap: { marginTop: 12, borderRadius: 16, overflow: "hidden", position: "relative" },
+  preview:     { width: "100%", height: 180 },
   removeBtn:   { position: "absolute", top: 8, right: 8 },
-  removeBtnCircle: { width: 26, height: 26, borderRadius: 13, backgroundColor: C.red, alignItems: "center", justifyContent: "center" },
+  removeBadge: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: C.red, alignItems: "center", justifyContent: "center",
+  },
 
-  btnWrap: { paddingHorizontal: 16, marginBottom: 16 },
-  version: { textAlign: "center", fontFamily: "NexaLight", fontSize: 11, marginTop: 4 },
-});
+  /* submit pill button */
+  submitWrap: { borderRadius: 999, overflow: "hidden" },
+  submitGrad: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 6, paddingLeft: 6, paddingRight: 20,
+    elevation: 6,
+    shadowColor: "#0047FF", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35, shadowRadius: 16,
+  },
+  submitCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center", justifyContent: "center",
+    elevation: 2,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4,
+  },
+  submitTxt: {
+    flex: 1, textAlign: "center",
+    fontFamily: "NexaBold", fontSize: 16, color: "#FFFFFF",
+  },
+  submitChevrons: { flexDirection: "row" },
 
-const ts = StyleSheet.create({
-  row:      { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: 1 },
-  iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  title:    { flex: 1, fontFamily: "NexaLight", fontSize: 14 },
-});
+  footer: {
+    textAlign: "center", fontFamily: "NexaLight",
+    fontSize: 10, color: C.footer,
+    textTransform: "uppercase", letterSpacing: 1.5,
+    marginBottom: 8, marginTop: 4,
+  },
+}); }
 
-const sl = StyleSheet.create({
-  row:  { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 4 },
-  text: { fontFamily: "NexaLight", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 },
-});
+/* ─── SUBJECT CARD STYLES ─────────────────────────────────────────────── */
+function mkSc(C: typeof LIGHT) { return StyleSheet.create({
+  card: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: C.cardBg,
+    borderRadius: 20, padding: 16,
+    borderWidth: 1.5, borderColor: C.cardBord,
+    elevation: 2,
+    shadowColor: "rgba(0,71,255,0.06)",
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12,
+  },
+  cardSel: {
+    borderColor: C.primary,
+    backgroundColor: C.selBg,
+  },
+  iconBox: {
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: C.iconBg,
+    alignItems: "center", justifyContent: "center",
+  },
+  iconBoxSel: { backgroundColor: C.iconBgSel },
+  label: { flex: 1, fontFamily: "NexaLight", fontSize: 15, color: C.onSurface },
+}); }
+
+/* ─── SECTION LABEL STYLES ────────────────────────────────────────────── */
+function mkSl(C: typeof LIGHT) { return StyleSheet.create({
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    marginBottom: 12,
+  },
+  text: {
+    fontFamily: "NexaLight", fontSize: 11, color: C.onSurfVar,
+    textTransform: "uppercase", letterSpacing: 1.5,
+  },
+}); }
+
+/* ─── FEEDBACK MODAL STYLES ───────────────────────────────────────────── */
+function mkFb(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center", justifyContent: "center",
+  },
+  sheet: {
+    width: "80%", backgroundColor: C.surface,
+    borderRadius: 28, padding: 28,
+    alignItems: "center",
+    elevation: 20,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 24,
+  },
+  iconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: "center", justifyContent: "center", marginBottom: 18,
+  },
+  iconSuccess: { backgroundColor: "#22C55E" },
+  iconError:   { backgroundColor: C.red },
+  title: {
+    fontFamily: "NexaBold", fontSize: 20, color: C.onSurface,
+    marginBottom: 10, textAlign: "center",
+  },
+  msg: {
+    fontFamily: "NexaLight", fontSize: 14, color: C.secondary,
+    textAlign: "center", lineHeight: 21, marginBottom: 24,
+  },
+  btn: {
+    width: "100%", paddingVertical: 14,
+    borderRadius: 16, alignItems: "center",
+  },
+  btnSuccess: { backgroundColor: "#22C55E" },
+  btnError:   { backgroundColor: C.red },
+  btnTxt: { fontFamily: "NexaBold", fontSize: 15, color: "#FFFFFF" },
+}); }

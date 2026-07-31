@@ -1,607 +1,618 @@
-import NoData from "@/components/ui/noData";
+/* eslint-disable */
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState, useCallback, memo } from "react";
-import { Image } from "expo-image";
+import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useGetsectorByIdQuery } from "@/services/sectorsServices";
-import { useGetNotesByCompanyQuery, useCreateNoteMutation } from "@/services/notesService";
+import Svg, { Defs, Polygon, ClipPath, Rect } from "react-native-svg";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Svg, {
-  Defs,
-  LinearGradient as SvgGradient,
-  Stop,
-  Polygon,
-  ClipPath,
-  Rect,
-} from "react-native-svg";
+import { useGetsectorByIdQuery, useGetAllSectorsQuery } from "@/services/sectorsServices";
+import {
+  useGetNotesByCompanyQuery,
+  useCreateNoteMutation,
+  useUpdateNoteMutation,
+  useDeleteNoteMutation,
+} from "@/services/notesService";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary:   "#0353CC",
-  violet:    "#3906C7",
-  deep:      "#302E99",
-  accent:    "#4D96FF",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:   "#0035C5",
+  blue:      "#0047FF",
+  deep:      "#001257",
   gold:      "#F59E0B",
-  goldLight: "#FDE68A",
   white:     "#FFFFFF",
-  text:      "#0D1B3E",
-  muted:     "#7B8DB0",
-  border:    "rgba(3,83,204,0.10)",
-  inputBg:   "rgba(3,83,204,0.06)",
-  red:       "#EF4444",
+  error:     "#EF4444",
   green:     "#22C55E",
+  bg:        "#F9F9F9",
+  card:      "#FFFFFF",
+  text:      "#1A1C1C",
+  textSec:   "#434657",
+  textMut:   "#747688",
+  border:    "rgba(196,197,218,0.30)",
+  safeBarBg: "rgba(255,255,255,0.96)",
+  noteBg:    "#FAFAFA",
+  searchBg:  "#FFFFFF",
+  heroCard:  "rgba(255,255,255,0.88)",
+  heroBorder:"rgba(255,255,255,0.80)",
+};
+const DARK: typeof LIGHT = {
+  primary:   "#4D8DFF",
+  blue:      "#4D8DFF",
+  deep:      "#001257",
+  gold:      "#F59E0B",
+  white:     "#FFFFFF",
+  error:     "#DC2626",
+  green:     "#22C55E",
+  bg:        "#0B1220",
+  card:      "#1A2540",
+  text:      "#EAF0FF",
+  textSec:   "#A3B4D0",
+  textMut:   "#6B7A99",
+  border:    "rgba(31,42,68,0.80)",
+  safeBarBg: "rgba(11,18,32,0.94)",
+  noteBg:    "rgba(31,42,68,0.50)",
+  searchBg:  "#1A2540",
+  heroCard:  "rgba(26,37,64,0.92)",
+  heroBorder:"rgba(31,42,68,0.80)",
 };
 
-const Colors = {
-  light: {
-    background:    "#F0F4FF",
-    card:          "#FFFFFF",
-    cardAlt:       "#FAFBFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.10)",
-    inputBg:       "#FFFFFF",
-    ratingBg:      "#FAFBFF",
-    commentBg:     "#FFFFFF",
-    modalBg:       "#F4F6FB",
-    headerGrad:    [C.deep, C.primary] as [string, string],
-    shadow:        "#000",
-    countText:     "rgba(255,255,255,0.85)",
-  },
-  dark: {
-    background:    "#0A0F1E",
-    card:          "#111827",
-    cardAlt:       "#1A2235",
-    text:          "#E2E8F0",
-    textSecondary: "#64748B",
-    border:        "rgba(255,255,255,0.08)",
-    inputBg:       "#111827",
-    ratingBg:      "#1E2A3A",
-    commentBg:     "#1E2A3A",
-    modalBg:       "#0F172A",
-    headerGrad:    ["#060B18", "#0D1B3E"] as [string, string],
-    shadow:        "#000",
-    countText:     "rgba(255,255,255,0.55)",
-  },
+/* ─── SECTOR HERO IMAGES ─────────────────────────────────────────────── */
+const HERO: Record<string, string> = {
+  "bim santé":       "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&q=80",
+  "bim sante":       "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&q=80",
+  "bim transport":   "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=800&q=80",
+  "bim carburant":   "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
+  "bim énergies":    "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=800&q=80",
+  "bim energies":    "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=800&q=80",
+  "bim hôtellerie":  "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+  "bim hotellerie":  "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=800&q=80",
+  "bim gaz":         "https://images.unsplash.com/photo-1548337138-e87d889cc369?w=800&q=80",
+  "bim supermarche": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
+  "bim supermarché": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
+  "bim supermarket": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
 };
-
-function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-  return { isDark, t: isDark ? Colors.dark : Colors.light };
-}
-
-/* ─── TYPES ──────────────────────────────────────────────────────────── */
-interface RatingData {
-  average: number;
-  count: number;
-  userRating: number | null;
+function heroImage(name: string) {
+  const lower = (name ?? "").toLowerCase();
+  return HERO[lower] ?? "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80";
 }
 
 /* ─── STAR SVG ───────────────────────────────────────────────────────── */
-function StarSvg({ size = 20, filled = 1, color = C.gold }: { size?: number; filled?: number; color?: string }) {
-  const id = `clip_${size}_${Math.round(filled * 100)}`;
+function StarSvg({ size = 16, filled = 1, uid = "x" }: { size?: number; filled?: number; uid?: string }) {
+  const clipId = `clip_${uid}`;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Defs>
-        <ClipPath id={id}>
-          <Rect x={0} y={0} width={24 * filled} height={24} />
+        <ClipPath id={clipId}>
+          <Rect x={0} y={0} width={filled >= 1 ? 24 : filled <= 0 ? 0 : 24 * filled} height={24} />
         </ClipPath>
       </Defs>
       <Polygon
         points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
-        fill="none" stroke={color} strokeWidth={1.5} opacity={0.3}
+        fill="none" stroke={LIGHT.gold} strokeWidth={1.8} opacity={0.35}
       />
-      <Polygon
-        points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
-        fill={color} clipPath={`url(#${id})`}
-      />
+      {filled > 0 && (
+        <Polygon
+          points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
+          fill={LIGHT.gold} clipPath={`url(#${clipId})`}
+        />
+      )}
     </Svg>
   );
 }
 
-/* ─── STARS DISPLAY ──────────────────────────────────────────────────── */
-function StarsDisplay({ value, size = 14, showValue = true, count, textColor }: {
-  value: number; size?: number; showValue?: boolean; count?: number; textColor?: string;
-}) {
+function StarsRow({ value, count, size = 14, ns = "row" }: { value: number; count?: number; size?: number; ns?: string }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
   return (
-    <View style={sd.row}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <StarSvg key={i} size={size} filled={Math.min(1, Math.max(0, value - (i - 1)))} />
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+      {[1,2,3,4,5].map(i => (
+        <StarSvg key={i} size={size} filled={Math.min(1, Math.max(0, value - (i - 1)))} uid={`${ns}_${i}`} />
       ))}
-      {showValue && (
-        <Text style={[sd.value, { fontSize: size - 2, color: textColor || C.text }]}>
-          {value > 0 ? value.toFixed(1) : "—"}
-          {count !== undefined && count > 0 && <Text style={[sd.count, { color: C.muted }]}> ({count})</Text>}
-        </Text>
+      <Text style={{ fontFamily: "NexaBold", fontSize: size - 2, color: C.text, marginLeft: 3 }}>
+        {value > 0 ? value.toFixed(1) : "—"}
+      </Text>
+      {count !== undefined && count > 0 && (
+        <Text style={{ fontFamily: "NexaLight", fontSize: size - 3, color: C.textMut }}>({count})</Text>
       )}
     </View>
   );
 }
 
-/* ─── RATING MODAL ───────────────────────────────────────────────────── */
-type RatingModalProps = {
-  visible: boolean; companyName: string; current: RatingData;
-  onSubmit: (stars: number, comment: string) => void; onClose: () => void;
-  isDark: boolean; isSubmitting?: boolean;
+/* ─── INTERACTIVE STARS ──────────────────────────────────────────────── */
+function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <View style={{ flexDirection: "row", justifyContent: "center", gap: 6 }}>
+      {[1, 2, 3, 4, 5].map(s => (
+        <TouchableOpacity key={s} onPress={() => onChange(s)} activeOpacity={0.5}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+          <Text style={{ fontSize: 46, color: s <= value ? LIGHT.gold : "#D1D5DB", lineHeight: 54 }}>★</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+function fmtDate(iso: string) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+/* ─── REVIEWS MODAL ──────────────────────────────────────────────────── */
+type ReviewsModalProps = {
+  visible: boolean; onClose: () => void;
+  companyId: string; companyName: string; userId: string | null;
 };
 
-function RatingModal({ visible, companyName, current, onSubmit, onClose, isDark, isSubmitting }: RatingModalProps) {
-  const t          = isDark ? Colors.dark : Colors.light;
-  const [hovered,  setHovered]  = useState(0);
-  const [selected, setSelected] = useState(current.userRating ?? 0);
-  const [comment,  setComment]  = useState("");
-  const scaleAnims = useRef([1, 2, 3, 4, 5].map(() => new Animated.Value(1))).current;
+function ReviewsModal({ visible, onClose, companyId, companyName, userId }: ReviewsModalProps) {
+  const { isDark } = useAppTheme();
+  const C  = isDark ? DARK : LIGHT;
+  const rv = useMemo(() => mkRv(C), [isDark]);
 
-  const presseStar = (star: number) => {
-    setSelected(star);
-    Animated.sequence([
-      Animated.spring(scaleAnims[star - 1], { toValue: 1.4, useNativeDriver: true }),
-      Animated.spring(scaleAnims[star - 1], { toValue: 1,   useNativeDriver: true }),
-    ]).start();
+  const { data: notesData, refetch } = useGetNotesByCompanyQuery(companyId, { skip: !companyId });
+  const [createNote, { isLoading: creating }] = useCreateNoteMutation();
+  const [updateNote, { isLoading: updating }] = useUpdateNoteMutation();
+  const [deleteNote, { isLoading: deleting }] = useDeleteNoteMutation();
+
+  const notesList: any[]  = notesData?.data ?? [];
+  const averageStars       = notesData?.averageStars ?? 0;
+  const userNote           = userId ? notesList.find((n: any) => String(n.userId ?? n.user?.id) === String(userId)) : null;
+
+  const [editMode,   setEditMode]   = useState<"none" | "add" | "edit">("none");
+  const [starValue,  setStarValue]  = useState(0);
+  const [commentVal, setCommentVal] = useState("");
+
+  useEffect(() => {
+    if (visible) { setEditMode("none"); setStarValue(0); setCommentVal(""); }
+  }, [visible]);
+
+  const startEdit = () => {
+    setStarValue(userNote?.totalStars ?? 0);
+    setCommentVal(userNote?.notes ?? "");
+    setEditMode("edit");
   };
 
-  const LABELS = ["", "Mauvais 😕", "Passable 😐", "Bien 🙂", "Très bien 😊", "Excellent 🤩"];
+  const handleSubmit = async () => {
+    if (starValue === 0) return;
+    try {
+      if (!userNote) {
+        await createNote({ companyId: Number(companyId), totalStars: starValue, notes: commentVal }).unwrap();
+      } else {
+        await updateNote({ noteId: userNote.noteId, companyId, totalStars: starValue, notes: commentVal }).unwrap();
+      }
+      setEditMode("none"); refetch();
+    } catch (e) { console.error("handleSubmit error:", e); }
+  };
+
+  const handleDelete = () => {
+    Alert.alert("Supprimer l'avis", "Voulez-vous vraiment supprimer votre avis ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer", style: "destructive",
+        onPress: async () => {
+          try { await deleteNote({ noteId: userNote.noteId, companyId }).unwrap(); setEditMode("none"); refetch(); } catch (_) {}
+        },
+      },
+    ]);
+  };
+
+  const LABELS = ["","Mauvais 😕","Passable 😐","Bien 🙂","Très bien 😊","Excellent 🤩"];
+  const otherNotes = notesList.filter((n: any) => String(n.userId ?? n.user?.id) !== String(userId));
 
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={rm.overlay}>
-        <View style={[rm.sheet, { backgroundColor: t.modalBg }]}>
-          <View style={[rm.handle, { backgroundColor: t.border }]} />
-
-          {/* Header */}
-          <LinearGradient
-            colors={t.headerGrad}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={rm.header}
-          >
-            <View style={rm.headerRow}>
-              <View style={rm.headerIcon}>
-                <Ionicons name="star" size={18} color={C.gold} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={rv.overlay}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={onClose} activeOpacity={1} />
+          <View style={rv.sheet}>
+            <View style={rv.handle} />
+            <View style={rv.topBar}>
+              <View style={{ flex: 1 }}>
+                <Text style={rv.headerCompany} numberOfLines={1}>{companyName}</Text>
+                <Text style={rv.headerSub}>Avis et évaluations</Text>
               </View>
-              <Text style={rm.headerTitle}>Noter cette entreprise</Text>
-              <TouchableOpacity style={rm.closeBtn} onPress={onClose}>
-                <Ionicons name="close" size={16} color={C.white} />
+              <TouchableOpacity style={rv.closeBtn} onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={20} color={C.textSec} />
               </TouchableOpacity>
             </View>
-            <Text style={rm.companyName} numberOfLines={1}>{companyName}</Text>
-          </LinearGradient>
 
-          {/* Note actuelle */}
-          {current.count > 0 && (
-            <View style={[rm.currentRating, { borderBottomColor: t.border }]}>
-              <StarsDisplay value={current.average} size={14} count={current.count} textColor={t.text} />
-              <Text style={[rm.currentLabel, { color: t.textSecondary }]}>Note actuelle</Text>
+            <View style={rv.avgCard}>
+              <Text style={rv.avgNumber}>{averageStars > 0 ? Number(averageStars).toFixed(1) : "—"}</Text>
+              <View style={{ gap: 5 }}>
+                <StarsRow value={averageStars} size={20} ns="modal_avg" />
+                <Text style={rv.avgCount}>{notesList.length} avis au total</Text>
+              </View>
             </View>
-          )}
 
-          {/* Étoiles interactives */}
-          <View style={rm.starsSection}>
-            <Text style={[rm.starsHint, { color: t.textSecondary }]}>
-              {selected > 0 ? LABELS[selected] : "Touchez une étoile pour noter"}
-            </Text>
-            <View style={rm.starsRow}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity
-                  key={star}
-                  onPress={() => presseStar(star)}
-                  onPressIn={() => setHovered(star)}
-                  onPressOut={() => setHovered(0)}
-                  activeOpacity={0.85}
-                >
-                  <Animated.View style={{ transform: [{ scale: scaleAnims[star - 1] }] }}>
-                    <StarSvg size={42} filled={star <= (hovered || selected) ? 1 : 0} color={C.gold} />
-                  </Animated.View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40, gap: 14 }}
+              keyboardShouldPersistTaps="handled">
 
-          {/* Commentaire */}
-          <View style={[rm.commentWrap, { backgroundColor: t.commentBg, borderColor: t.border }]}>
-            <View style={[rm.commentIcon, { backgroundColor: isDark ? "rgba(3,83,204,0.2)" : C.inputBg }]}>
-              <Ionicons name="chatbubble-outline" size={14} color={C.primary} />
-            </View>
-            <TextInput
-              style={[rm.commentInput, { color: t.text }]}
-              placeholder="Laissez un commentaire (optionnel)…"
-              placeholderTextColor={t.textSecondary}
-              multiline
-              value={comment}
-              onChangeText={setComment}
-              blurOnSubmit={false}
-              autoCorrect={false}
-            />
-          </View>
+              <Text style={rv.sectionTitle}>Mon avis</Text>
 
-          {/* Boutons */}
-          <View style={rm.btnRow}>
-            <TouchableOpacity style={[rm.cancelBtn, { backgroundColor: t.card, borderColor: t.border }]} onPress={onClose}>
-              <Text style={[rm.cancelText, { color: t.textSecondary }]}>Annuler</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[rm.submitBtn, (selected === 0 || isSubmitting) && rm.submitBtnDisabled]}
-              onPress={() => { if (selected === 0 || isSubmitting) return; onSubmit(selected, comment); setComment(""); }}
-              disabled={selected === 0 || isSubmitting}
-            >
-              <LinearGradient
-                colors={selected > 0 ? [C.deep, C.violet] : ["#aaa", "#888"]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={rm.submitGrad}
-              >
-                {isSubmitting
-                  ? <ActivityIndicator size="small" color={C.white} />
-                  : <Ionicons name="checkmark" size={16} color={C.white} />
-                }
-                <Text style={rm.submitText}>{isSubmitting ? "Envoi…" : "Valider"}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+              {userNote && editMode !== "edit" ? (
+                <View style={rv.myNoteCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <StarsRow value={userNote.totalStars ?? 0} size={16} ns="my_note" />
+                    <Text style={rv.noteDate}>{fmtDate(userNote.createdAt)}</Text>
+                  </View>
+                  {userNote.notes ? <Text style={rv.noteComment}>{userNote.notes}</Text> : null}
+                  <View style={rv.myNoteActions}>
+                    <TouchableOpacity style={rv.actionBtnOutline} onPress={startEdit} activeOpacity={0.8}>
+                      <Ionicons name="pencil-outline" size={13} color={C.primary} />
+                      <Text style={rv.actionBtnOutlineText}>Modifier</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={rv.actionBtnDanger} onPress={handleDelete} disabled={deleting} activeOpacity={0.8}>
+                      {deleting
+                        ? <ActivityIndicator size="small" color={C.error} />
+                        : <><Ionicons name="trash-outline" size={13} color={C.error} />
+                            <Text style={rv.actionBtnDangerText}>Supprimer</Text></>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={rv.formCard}>
+                  <Text style={rv.formHint}>
+                    {starValue > 0 ? LABELS[starValue] : "Touchez une étoile pour noter"}
+                  </Text>
+                  <StarPicker value={starValue} onChange={setStarValue} />
+                  <View style={rv.commentWrap}>
+                    <TextInput
+                      style={rv.commentInput}
+                      placeholder="Commentaire (optionnel)…"
+                      placeholderTextColor={C.textMut}
+                      value={commentVal}
+                      onChangeText={setCommentVal}
+                      multiline keyboardType="default"
+                      autoCapitalize="sentences" autoCorrect blurOnSubmit={false} scrollEnabled={false}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[rv.submitBtn, (starValue === 0 || creating || updating) && { opacity: 0.40 }]}
+                    onPress={handleSubmit} disabled={starValue === 0 || creating || updating} activeOpacity={0.85}>
+                    <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={rv.submitGrad}>
+                      {(creating || updating)
+                        ? <ActivityIndicator size="small" color={C.white} />
+                        : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
+                            <Text style={rv.submitText}>{editMode === "edit" ? "Modifier mon avis" : "Envoyer mon avis"}</Text></>}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                  {editMode === "edit" && (
+                    <TouchableOpacity onPress={() => setEditMode("none")} style={{ alignItems: "center", marginTop: -4 }}>
+                      <Text style={{ fontFamily: "NexaBold", fontSize: 12, color: C.textMut }}>Annuler</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {otherNotes.length > 0 && (
+                <>
+                  <Text style={[rv.sectionTitle, { marginTop: 4 }]}>Avis des membres ({otherNotes.length})</Text>
+                  {otherNotes.map((n: any) => {
+                    const uname = n.user?.username ?? n.username ?? "Membre";
+                    return (
+                      <View key={n.noteId} style={rv.reviewCard}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                          <View style={rv.avatar}>
+                            <Text style={rv.avatarText}>{uname.charAt(0).toUpperCase()}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={rv.reviewUser}>{uname}</Text>
+                            <StarsRow value={n.totalStars ?? 0} size={12} ns={`rev_${n.noteId}`} />
+                          </View>
+                          <Text style={rv.noteDate}>{fmtDate(n.createdAt)}</Text>
+                        </View>
+                        {n.notes ? <Text style={rv.noteComment}>{n.notes}</Text> : null}
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+
+              {otherNotes.length === 0 && !userNote && (
+                <View style={{ alignItems: "center", paddingVertical: 16, gap: 8 }}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={32} color={C.textMut} />
+                  <Text style={{ fontFamily: "NexaLight", fontSize: 13, color: C.textMut, textAlign: "center" }}>
+                    Soyez le premier à donner votre avis !
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 /* ─── COMPANY CARD ───────────────────────────────────────────────────── */
-type CompanyCardProps = { item: any; sectorName: string; onPress: () => void; index: number; isDark: boolean; userId: string | null };
+function CompanyCardBase({ item, sectorName, onPress, index, userId, onRatingLoaded }: {
+  item: any; sectorName: string; onPress: () => void;
+  index: number; userId: string | null;
+  onRatingLoaded: (companyId: string, avg: number) => void;
+}) {
+  const { isDark } = useAppTheme();
+  const C  = isDark ? DARK : LIGHT;
+  const cc = useMemo(() => mkCc(C), [isDark]);
 
-function CompanyCardBase({ item, sectorName, onPress, index, isDark, userId }: CompanyCardProps) {
-  const t   = isDark ? Colors.dark : Colors.light;
-  const cid = String(item?.companyId);
-
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const cid       = String(item?.companyId);
+  const slideAnim = useRef(new Animated.Value(24)).current;
   const opacAnim  = useRef(new Animated.Value(0)).current;
-  const scaleBtn  = useRef(new Animated.Value(1)).current;
+  const [reviewsOpen, setReviewsOpen] = useState(false);
 
-  const [modalOpen,   setModalOpen]   = useState(false);
-  const [ratingFlash, setRatingFlash] = useState(false);
+  const { data: notesData } = useGetNotesByCompanyQuery(cid);
+  const averageStars = notesData?.averageStars ?? 0;
+  const noteCount    = notesData?.data?.length ?? 0;
+  const userNote     = userId ? (notesData?.data ?? []).find((n: any) => String(n.userId ?? n.user?.id) === String(userId)) : null;
 
-  /* ── API notes ── */
-  const { data: notesData, refetch: refetchNotes } = useGetNotesByCompanyQuery(cid);
-  const [createNote, { isLoading: isSubmitting }]  = useCreateNoteMutation();
-
-  /* Extraire average, count, userRating depuis la réponse API */
-  const notesList: any[]     = notesData?.data?.notes ?? notesData?.notes ?? [];
-  const averageStars: number = notesData?.data?.averageStars ?? notesData?.averageStars ?? 0;
-  const userNote             = userId ? notesList.find((n: any) => String(n.userId) === String(userId)) : null;
-
-  const rating: RatingData = {
-    average:    averageStars,
-    count:      notesList.length,
-    userRating: userNote ? userNote.totalStars : null,
-  };
+  useEffect(() => { if (notesData) onRatingLoaded(cid, averageStars); }, [averageStars]);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideAnim, { toValue: 0, duration: 320, delay: Math.min(index * 70, 400), useNativeDriver: true }),
-      Animated.timing(opacAnim,  { toValue: 1, duration: 320, delay: Math.min(index * 70, 400), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 300, delay: Math.min(index * 60, 360), useNativeDriver: true }),
+      Animated.timing(opacAnim,  { toValue: 1, duration: 300, delay: Math.min(index * 60, 360), useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const btnIn  = () => Animated.spring(scaleBtn, { toValue: 0.94, useNativeDriver: true }).start();
-  const btnOut = () => Animated.spring(scaleBtn, { toValue: 1,    useNativeDriver: true }).start();
-
-  const handleSubmitRating = useCallback(async (stars: number, comment: string) => {
-    try {
-      await createNote({ companyId: Number(cid), totalStars: stars, notes: comment }).unwrap();
-      setModalOpen(false);
-      setRatingFlash(true);
-      setTimeout(() => setRatingFlash(false), 1500);
-      refetchNotes();
-    } catch (_e) {
-      // silently ignore — modal reste ouvert
-    }
-  }, [cid, createNote, refetchNotes]);
+  const tags: string[] = item.specialties ?? item.tags ?? item.services ?? [];
 
   return (
     <>
-      <Animated.View style={[
-        s.card,
-        {
-          backgroundColor: t.card,
-          borderColor: t.border,
-          shadowColor: t.shadow,
-          opacity: opacAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}>
-        {/* ── COVER ── */}
-        <LinearGradient
-          colors={isDark ? ["#1A1060", "#0D1B3E"] : [C.deep, C.accent]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-          style={s.cardCover}
-        >
-          <View style={s.coverDeco1} />
-          <View style={s.coverDeco2} />
-          {/* Nom du secteur sur le cover */}
-          <View style={s.coverSectorChip}>
-            <Ionicons name="layers-outline" size={10} color="rgba(255,255,255,0.7)" />
-            <Text style={s.coverSectorText}>{sectorName}</Text>
+      <Animated.View style={[cc.card, { opacity: opacAnim, transform: [{ translateY: slideAnim }] }]}>
+        <View style={cc.topRow}>
+          <View style={cc.logoWrap}>
+            <Image source={item.logo ? { uri: item.logo } : require("@/assets/images/logo.jpeg")}
+              style={cc.logo} contentFit="contain" transition={200} />
           </View>
-        </LinearGradient>
-
-        {/* ── AVATAR ── */}
-        <View style={[s.avatarWrap, { borderColor: t.card, backgroundColor: t.cardAlt }]}>
-          <Image
-            source={item.logo ? { uri: item.logo } : require("@/assets/images/logo.jpeg")}
-            style={s.avatar}
-            contentFit="cover"
-            transition={200}
-          />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={cc.name} numberOfLines={2}>{item.name}</Text>
+            <StarsRow value={averageStars} count={noteCount} size={13} ns={`card_${cid}`} />
+            {userNote && (
+              <View style={cc.myRatingBadge}>
+                <Ionicons name="star" size={10} color={C.gold} />
+                <Text style={cc.myRatingText}>Ma note : {userNote.totalStars}/5</Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* ── BODY ── */}
-        <View style={s.cardBody}>
-          {/* Nom */}
-          <Text style={[s.companyName, { color: t.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
+        {item.description ? <Text style={cc.desc} numberOfLines={3}>{item.description}</Text> : null}
 
-          {/* Description */}
-          <Text style={[s.companyDesc, { color: t.textSecondary }]} numberOfLines={2}>
-            {item.description}
-          </Text>
-
-          {/* ── RATING ROW ── */}
-          <View style={[
-            s.ratingRow,
-            {
-              backgroundColor: ratingFlash
-                ? (isDark ? "#2A1F00" : "#FEF9EE")
-                : t.ratingBg,
-              borderColor: t.border,
-            },
-          ]}>
-            {rating.count > 0 ? (
-              <StarsDisplay value={rating.average} size={13} count={rating.count} textColor={t.text} />
-            ) : (
-              <Text style={[s.noRatingText, { color: t.textSecondary }]}>Pas encore noté</Text>
-            )}
-
-            <TouchableOpacity
-              style={[
-                s.rateBtn,
-                {
-                  backgroundColor: rating.userRating !== null
-                    ? (isDark ? "rgba(245,158,11,0.15)" : "#FEF3C7")
-                    : (isDark ? "rgba(3,83,204,0.15)" : C.inputBg),
-                  borderColor: rating.userRating !== null
-                    ? (isDark ? "rgba(245,158,11,0.3)" : "#FDE68A")
-                    : t.border,
-                },
-              ]}
-              onPress={() => setModalOpen(true)}
-            >
-              <Ionicons
-                name={rating.userRating !== null ? "star" : "star-outline"}
-                size={13}
-                color={rating.userRating !== null ? C.gold : C.primary}
-              />
-              <Text style={[
-                s.rateBtnText,
-                { color: rating.userRating !== null ? (isDark ? C.gold : "#92400E") : C.primary },
-              ]}>
-                {rating.userRating !== null ? `${rating.userRating}/5` : "Noter"}
-              </Text>
-            </TouchableOpacity>
+        {tags.length > 0 && (
+          <View style={cc.tagsRow}>
+            {tags.slice(0, 4).map((t: string, i: number) => (
+              <View key={i} style={cc.tag}><Text style={cc.tagText}>{t}</Text></View>
+            ))}
           </View>
+        )}
 
-          {/* Info chips */}
-          <View style={s.infoRow}>
-            {item.location && (
-              <View style={[s.infoChip, { backgroundColor: isDark ? "rgba(3,83,204,0.2)" : C.primary + "10" }]}>
-                <Ionicons name="location-outline" size={12} color={C.primary} />
-                <Text style={[s.infoText, { color: C.primary }]}>{item.location}</Text>
-              </View>
-            )}
-            {item.phone && (
-              <View style={[s.infoChip, { backgroundColor: isDark ? "rgba(34,197,94,0.15)" : C.green + "12" }]}>
-                <Ionicons name="call-outline" size={12} color={C.green} />
-                <Text style={[s.infoText, { color: C.green }]}>{item.phone}</Text>
-              </View>
-            )}
-          </View>
+        <View style={cc.infoRow}>
+          {item.location ? (
+            <View style={cc.infoChip}>
+              <Ionicons name="location-outline" size={13} color={C.textMut} />
+              <Text style={cc.infoText}>{item.location}</Text>
+            </View>
+          ) : null}
+          {item.phone ? (
+            <View style={cc.infoChip}>
+              <Ionicons name="call-outline" size={13} color={C.textMut} />
+              <Text style={cc.infoText}>{item.phone}</Text>
+            </View>
+          ) : null}
+        </View>
 
-          {/* CTA */}
-          <TouchableOpacity activeOpacity={1} onPressIn={btnIn} onPressOut={btnOut} onPress={onPress}>
-            <Animated.View style={[s.cta, { transform: [{ scale: scaleBtn }] }]}>
-              <LinearGradient
-                colors={isDark ? ["#1A1060", "#0D1B3E"] : [C.deep, C.primary]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={s.ctaGrad}
-              >
-                <Text style={s.ctaText}>Accéder au service</Text>
-                <View style={s.ctaArrow}>
-                  <Ionicons name="arrow-forward" size={14} color={C.deep} />
-                </View>
-              </LinearGradient>
-            </Animated.View>
+        <View style={cc.btnRow}>
+          <TouchableOpacity style={cc.btnOutline} onPress={() => setReviewsOpen(true)} activeOpacity={0.8}>
+            <Ionicons name={userNote ? "star" : "star-outline"} size={14} color={C.primary} />
+            <Text style={cc.btnOutlineText}>{noteCount > 0 ? `Avis (${noteCount})` : "Donner un avis"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={cc.btnSolid} onPress={onPress} activeOpacity={0.85}>
+            <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={cc.btnGrad}>
+              <Text style={cc.btnSolidText}>Accéder</Text>
+              <Ionicons name="arrow-forward" size={14} color={C.white} />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </Animated.View>
 
-      <RatingModal
-        visible={modalOpen}
-        companyName={item.name}
-        current={rating}
-        onSubmit={handleSubmitRating}
-        onClose={() => setModalOpen(false)}
-        isDark={isDark}
-        isSubmitting={isSubmitting}
-      />
+      <ReviewsModal visible={reviewsOpen} onClose={() => setReviewsOpen(false)}
+        companyId={cid} companyName={item.name} userId={userId} />
     </>
   );
 }
 const CompanyCard = memo(CompanyCardBase);
-CompanyCard.displayName = "CompanyCard";
 
 /* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
 export default function ServiceDetails() {
-  const { id }       = useLocalSearchParams<{ id: string }>();
-  const router       = useRouter();
-  const scrollY      = useRef(new Animated.Value(0)).current;
-  const { isDark, t } = useTheme();
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(C), [isDark]);
+
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router  = useRouter();
+  const { unread } = useUnreadNotifications();
 
   const [searchText, setSearchText] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId]         = useState<string | null>(null);
+  const [sortBy, setSortBy]         = useState<"name" | "rating">("rating");
+  const ratingsRef = useRef<Record<string, number>>({});
+  const [, forceSort] = useState(0);
 
-  useEffect(() => {
-    AsyncStorage.getItem("userId").then(setUserId);
-  }, []);
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
   const { data: sectorData, isLoading } = useGetsectorByIdQuery(id, { skip: !id });
+  const { data: allSectorsData }        = useGetAllSectorsQuery({ page: 1, pageSize: 10, search: "", paginate: false });
 
-  const sectorCat = sectorData?.data ?? sectorData;
-  const company: any[] = sectorCat?.companies || [];
-  const dataReady = !isLoading;
+  const sectorCat  = sectorData?.data ?? sectorData;
+  const sectorName = sectorCat?.name ?? "";
+  const companies: any[]  = sectorCat?.companies ?? [];
+  const otherSectors      = (allSectorsData?.data ?? []).filter((s: any) => s.businessId !== id).slice(0, 8);
 
-  const gotToSelectedMenu = useCallback((value: string, id: string) => {
+  const onRatingLoaded = useCallback((cid: string, avg: number) => {
+    ratingsRef.current[cid] = avg;
+  }, []);
+
+  const filteredCompanies = useMemo(() => {
+    let list = companies.filter((c: any) =>
+      c.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+      c.location?.toLowerCase().includes(searchText.toLowerCase())
+    );
+    if (sortBy === "rating") {
+      list = [...list].sort((a, b) => (ratingsRef.current[String(b.companyId)] ?? 0) - (ratingsRef.current[String(a.companyId)] ?? 0));
+    } else {
+      list = [...list].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    }
+    return list;
+  }, [companies, searchText, sortBy]);
+
+  const gotToSelectedMenu = useCallback((value: string, cid: string) => {
     const routes: Record<string, string> = {
-      "BIM Santé":        `/sante/${id}`,
-      "BIM Transport":    `/transport/${id}`,
-      "BIM Énergies":     `/bim-energie/${id}`,
-      "BIM Carburant":    `/bim-carburant/${id}`,
-      "BIM Hôtellerie":   `/hotellerie/${id}`,
-      "BIM Gaz":          `/bim-gaz/${id}`,
-      "BIM SUPERMARCHE":  `/bim-supermarche/${id}`,
+      "BIM Santé":       `/sante/${cid}`,
+      "BIM Transport":   `/transport/${cid}`,
+      "BIM Énergies":    `/bim-energie/${cid}`,
+      "BIM Carburant":   `/bim-carburant/${cid}`,
+      "BIM Hôtellerie":  `/hotellerie/${cid}`,
+      "BIM Gaz":         `/bim-gaz/${cid}`,
+      "BIM SUPERMARCHE": `/bim-supermarche/${cid}`,
     };
     const route = routes[value];
-    if (route) router.push(route);
-    else console.warn(`Aucune route pour: ${value}`);
+    if (route) router.push(route as any);
   }, [router]);
 
-  const handleSearchClear = useCallback(() => setSearchText(""), []);
-
-  const headerH = scrollY.interpolate({ inputRange: [0, 80], outputRange: [Platform.OS === "ios" ? 240 : 220, Platform.OS === "ios" ? 130 : 118], extrapolate: "clamp" });
-  const subOp   = scrollY.interpolate({ inputRange: [0, 50], outputRange: [1, 0], extrapolate: "clamp" });
-  const iconSc  = scrollY.interpolate({ inputRange: [0, 80], outputRange: [1, 0.6], extrapolate: "clamp" });
-
-  const filteredCompanies = company.filter((item: any) =>
-    item.location?.toLowerCase().includes(searchText.toLowerCase()) ||
-    item.name?.toLowerCase().includes(searchText.toLowerCase())
-  );
-
-  const ListHeader = (
-    <View style={{ paddingTop: Platform.OS === "ios" ? 248 : 228 }}>
-      {/* Search flottant */}
-      <View style={[s.searchBox, {
-        backgroundColor: t.inputBg,
-        borderColor: t.border,
-        shadowColor: t.shadow,
-      }]}>
-        <View style={[s.searchIconWrap, { backgroundColor: isDark ? "rgba(3,83,204,0.25)" : C.inputBg }]}>
-          <Ionicons name="search-outline" size={15} color={C.primary} />
+  const ListHeader = () => (
+    <View>
+      <View style={s.hero}>
+        <Image source={{ uri: heroImage(sectorName) }} style={s.heroImg} contentFit="cover" transition={400} />
+        <LinearGradient colors={["transparent", "rgba(0,18,87,0.60)"]}
+          start={{ x: 0, y: 0.2 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+        <View style={s.heroCard}>
+          <Text style={s.heroTitle}>{sectorName || "Services BIM"}</Text>
+          {sectorCat?.description ? (
+            <Text style={s.heroDesc} numberOfLines={2}>{sectorCat.description}</Text>
+          ) : null}
         </View>
-        <TextInput
-          placeholder="Rechercher par ville ou nom…"
-          placeholderTextColor={t.textSecondary}
-          style={[s.searchInput, { color: t.text }]}
-          value={searchText}
-          onChangeText={setSearchText}
-          blurOnSubmit={false}
-          autoCorrect={false}
-        />
-        {searchText.length > 0 && (
-          <TouchableOpacity onPress={handleSearchClear}>
-            <Ionicons name="close-circle" size={17} color={t.textSecondary} />
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Count */}
-      <View style={s.countRow}>
-        <View style={[s.countDot, { backgroundColor: C.accent }]} />
-        <Text style={[s.countText, { color: t.countText }]}>
-          {filteredCompanies.length} entreprise{filteredCompanies.length !== 1 ? "s" : ""}
-        </Text>
+      <View style={s.searchWrap}>
+        <View style={s.searchBox}>
+          <Ionicons name="search-outline" size={16} color={C.textMut} />
+          <TextInput placeholder="Rechercher par ville ou nom..." placeholderTextColor={C.textMut}
+            style={s.searchInput} value={searchText} onChangeText={setSearchText}
+            returnKeyType="search" autoCorrect={false} />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText("")}>
+              <Ionicons name="close-circle" size={16} color={C.textMut} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <View style={s.sectionRow}>
+        <View style={s.sectionLabelRow}>
+          <Text style={s.sectionLabel}>Établissements</Text>
+          <View style={s.countBadge}><Text style={s.countBadgeText}>{filteredCompanies.length}</Text></View>
+        </View>
+        <View style={s.sortRow}>
+          <TouchableOpacity style={[s.sortChip, sortBy === "rating" && s.sortChipActive]}
+            onPress={() => { setSortBy("rating"); forceSort(n => n+1); }}>
+            <Ionicons name="star-outline" size={12} color={sortBy === "rating" ? C.white : C.primary} />
+            <Text style={[s.sortChipText, sortBy === "rating" && { color: C.white }]}>Note</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.sortChip, sortBy === "name" && s.sortChipActive]}
+            onPress={() => setSortBy("name")}>
+            <Ionicons name="text-outline" size={12} color={sortBy === "name" ? C.white : C.primary} />
+            <Text style={[s.sortChipText, sortBy === "name" && { color: C.white }]}>A-Z</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 
-  return (
-    <View style={[s.root, { backgroundColor: t.background }]}>
-      <StatusBar barStyle="light-content" />
-
-      {/* ── HEADER FIXE PLEINE LARGEUR ── */}
-      <Animated.View style={[s.header, { height: headerH, shadowColor: isDark ? "#000" : C.primary }]}>
-        <LinearGradient
-          colors={t.headerGrad}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={s.deco1} />
-        <View style={s.deco2} />
-
-        <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={22} color={C.white} />
-            </TouchableOpacity>
-            <Text style={s.headerTitle}>{sectorCat?.name || "Services"}</Text>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-              <Ionicons name="notifications-outline" size={22} color={C.white} />
-            </TouchableOpacity>
-          </View>
-
-          <Animated.View style={{ alignItems: "center", opacity: subOp }}>
-            <Animated.View style={{ transform: [{ scale: iconSc }] }}>
-              <View style={s.logoWrap}>
-                <Image source={{ uri: sectorCat?.logo }} style={s.headerLogo} contentFit="cover" transition={200} />
-              </View>
-            </Animated.View>
-            <Text style={s.headerSub} numberOfLines={2}>{sectorCat?.description}</Text>
-          </Animated.View>
-        </SafeAreaView>
-      </Animated.View>
-
-      {/* ── FLAT LIST ── */}
-      {!dataReady ? (
-        <View style={[s.center, { paddingTop: Platform.OS === "ios" ? 260 : 240 }]}>
-          <ActivityIndicator size="large" color={C.accent} />
+  const ListFooter = () => (
+    <View>
+      {otherSectors.length > 0 && (
+        <View style={s.otherSection}>
+          <Text style={s.sectionLabel}>Explorer d'autres secteurs</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.otherScroll}>
+            {otherSectors.map((sec: any) => (
+              <TouchableOpacity key={sec.businessId} style={s.otherCard}
+                onPress={() => router.push(`/service/${sec.businessId}` as any)} activeOpacity={0.88}>
+                <Image source={{ uri: heroImage(sec.name ?? "") }} style={StyleSheet.absoluteFill} contentFit="cover" transition={300} />
+                <LinearGradient colors={["rgba(0,18,87,0.08)", "rgba(0,18,87,0.72)"]}
+                  start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
+                <View style={s.otherContent}>
+                  <Text style={s.otherName} numberOfLines={2}>{sec.name}</Text>
+                  <View style={s.otherLinkRow}>
+                    <Text style={s.otherLink}>Voir plus</Text>
+                    <Ionicons name="arrow-forward" size={11} color="rgba(255,255,255,0.85)" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      ) : company.length === 0 ? (
-        <>
-          {ListHeader}
-          <View style={s.center}><NoData /></View>
-        </>
+      )}
+      <View style={{ height: 100 }} />
+    </View>
+  );
+
+  return (
+    <View style={[{ flex: 1 }, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
+      <SafeAreaView edges={["top"]} style={s.safeBar}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <Text style={s.topBrand} numberOfLines={1}>{sectorName || "BIMNext"}</Text>
+          <TouchableOpacity style={s.iconBtnRel} onPress={() => router.push("/notification" as any)}>
+            <Ionicons name="notifications-outline" size={22} color={C.textSec} />
+            {unread > 0 && <View style={s.badge}><Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text></View>}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {isLoading ? (
+        <View style={s.center}><ActivityIndicator size="large" color={C.primary} /></View>
       ) : (
-        <Animated.FlatList
+        <FlatList
           data={filteredCompanies}
-          keyExtractor={(item: any) => item?.companyId?.toString()}
-          contentContainerStyle={[s.list, { backgroundColor: t.background }]}
+          keyExtractor={(item: any) => String(item?.companyId)}
+          ListHeaderComponent={<ListHeader />}
+          ListFooterComponent={<ListFooter />}
+          ListEmptyComponent={
+            <View style={s.center}>
+              <Ionicons name="business-outline" size={40} color={C.textMut} />
+              <Text style={s.emptyText}>Aucun établissement trouvé</Text>
+            </View>
+          }
+          contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={ListHeader}
-          ListEmptyComponent={<View style={s.center}><NoData /></View>}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false }
-          )}
-          scrollEventThrottle={16}
-          renderItem={({ item, index }: { item: any; index: number }) => (
-            <CompanyCard
-              item={item}
-              index={index}
-              isDark={isDark}
-              sectorName={sectorCat?.name || ""}
-              userId={userId}
-              onPress={() => gotToSelectedMenu(sectorCat?.name, item?.companyId)}
-            />
+          keyboardShouldPersistTaps="handled"
+          ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+          renderItem={({ item, index }) => (
+            <CompanyCard item={item} index={index} sectorName={sectorName} userId={userId}
+              onRatingLoaded={onRatingLoaded}
+              onPress={() => gotToSelectedMenu(sectorName, item?.companyId)} />
           )}
         />
       )}
@@ -609,204 +620,101 @@ export default function ServiceDetails() {
   );
 }
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root:   { flex: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 40 },
+/* ─── STYLE FACTORIES ────────────────────────────────────────────────── */
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  safeBar:    { backgroundColor: C.safeBarBg, borderBottomWidth: 1, borderBottomColor: C.border },
+  topBar:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  iconBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: C.border, alignItems: "center", justifyContent: "center" },
+  iconBtnRel: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  topBrand:   { fontFamily: "NexaBold", fontSize: 18, color: C.primary, letterSpacing: -0.3 },
+  badge:      { position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: C.error, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 },
+  badgeText:  { fontFamily: "NexaBold", fontSize: 9, color: C.white },
+  list:       { paddingBottom: 20 },
+  center:     { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 12 },
+  emptyText:  { fontFamily: "NexaLight", fontSize: 14, color: C.textMut },
 
-  /* Header — position absolute pleine largeur */
-  header: {
-    position: "absolute", top: 0, left: 0, right: 0,
-    zIndex: 10, overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3, shadowRadius: 16,
-  },
-  deco1: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.05)", top: -60, right: -50 },
-  deco2: { position: "absolute", width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -30 },
+  hero:      { marginHorizontal: 16, marginTop: 16, height: 220, borderRadius: 36, overflow: "hidden", elevation: 8, shadowColor: C.deep, shadowOpacity: 0.18, shadowRadius: 20, shadowOffset: { width: 0, height: 8 } },
+  heroImg:   { width: "100%", height: "100%" },
+  heroCard:  { position: "absolute", bottom: 16, left: 16, right: 16, backgroundColor: C.heroCard, borderRadius: 24, paddingHorizontal: 18, paddingVertical: 14, borderWidth: 1, borderColor: C.heroBorder },
+  heroTitle: { fontFamily: "NexaBold", fontSize: 20, color: C.primary, marginBottom: 2 },
+  heroDesc:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 17 },
 
-  topBar: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: { color: C.white, fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  logoWrap: {
-    width: 62, height: 62, borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    overflow: "hidden", marginTop: 10,
-    borderWidth: 2, borderColor: "rgba(255,255,255,0.3)",
-  },
-  headerLogo: { width: "100%", height: "100%" },
-  headerSub: {
-    color: "rgba(255,255,255,0.7)", fontSize: 12,
-    fontFamily: "NexaLight", textAlign: "center",
-    marginTop: 6, paddingHorizontal: 30,
-  },
+  searchWrap:  { paddingHorizontal: 16, marginTop: 16 },
+  searchBox:   { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.searchBg, borderRadius: 16, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 48, elevation: 2, shadowColor: "#0047FF", shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 } },
+  searchInput: { flex: 1, fontSize: 13, fontFamily: "NexaLight", color: C.text },
 
-  /* Search */
-  searchBox: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 16, paddingHorizontal: 10, paddingVertical: 9,
-    gap: 10, marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    borderWidth: 1,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
-  },
-  searchIconWrap: {
-    width: 30, height: 30, borderRadius: 10,
-    alignItems: "center", justifyContent: "center",
-  },
-  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
+  sectionRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
+  sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionLabel:    { fontFamily: "NexaBold", fontSize: 10, color: C.textMut, textTransform: "uppercase", letterSpacing: 1.5 },
+  countBadge:      { backgroundColor: C.primary, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  countBadgeText:  { fontFamily: "NexaBold", fontSize: 10, color: C.white },
 
-  countRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6,
-  },
-  countDot: { width: 4, height: 16, borderRadius: 2 },
-  countText: { fontFamily: "NexaLight", fontSize: 12 },
+  sortRow:        { flexDirection: "row", gap: 6 },
+  sortChip:       { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: C.primary + "40", backgroundColor: C.searchBg },
+  sortChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  sortChipText:   { fontFamily: "NexaBold", fontSize: 10, color: C.primary },
 
-  list: { paddingHorizontal: 16, paddingBottom: 60 },
+  otherSection: { paddingHorizontal: 16, marginTop: 28 },
+  otherScroll:  { paddingTop: 12, paddingBottom: 8, gap: 12 },
+  otherCard:    { width: 155, height: 110, borderRadius: 22, overflow: "hidden", elevation: 4, shadowColor: C.deep, shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, justifyContent: "flex-end" },
+  otherContent: { padding: 12, gap: 4 },
+  otherName:    { fontFamily: "NexaBold", fontSize: 13, color: C.white, lineHeight: 17 },
+  otherLinkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  otherLink:    { fontFamily: "NexaBold", fontSize: 10, color: "rgba(255,255,255,0.85)", letterSpacing: 0.3 },
+}); }
 
-  /* Card */
-  card: {
-    borderRadius: 22, marginBottom: 16,
-    overflow: "hidden", borderWidth: 1,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.09, shadowRadius: 10,
-  },
-  cardCover: { height: 76, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: 12, paddingBottom: 8 },
-  coverDeco1: { position: "absolute", width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.07)", top: -30, right: -20 },
-  coverDeco2: { position: "absolute", width: 70,  height: 70,  borderRadius: 35, backgroundColor: "rgba(255,255,255,0.05)", bottom: -20, left: 30 },
-  coverSectorChip: {
-    flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
-  },
-  coverSectorText: { color: "rgba(255,255,255,0.75)", fontFamily: "NexaLight", fontSize: 10 },
+function mkCc(C: typeof LIGHT) { return StyleSheet.create({
+  card:          { marginHorizontal: 16, backgroundColor: C.card, borderRadius: 28, padding: 20, borderWidth: 1, borderColor: C.border, elevation: 3, shadowColor: "#0047FF", shadowOpacity: 0.05, shadowRadius: 24, shadowOffset: { width: 0, height: 6 }, gap: 12 },
+  topRow:        { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  logoWrap:      { width: 62, height: 62, borderRadius: 18, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center", overflow: "hidden", padding: 6, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  logo:          { width: "100%", height: "100%" },
+  name:          { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  myRatingBadge: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2, backgroundColor: "rgba(245,158,11,0.10)", borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3, alignSelf: "flex-start" },
+  myRatingText:  { fontFamily: "NexaBold", fontSize: 9, color: "#92400E" },
+  desc:          { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, lineHeight: 19 },
+  tagsRow:       { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tag:           { paddingHorizontal: 12, paddingVertical: 5, backgroundColor: C.primary + "14", borderRadius: 20, borderWidth: 1, borderColor: C.primary + "22" },
+  tagText:       { fontFamily: "NexaBold", fontSize: 10, color: C.primary, letterSpacing: 0.3 },
+  infoRow:       { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  infoChip:      { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
+  infoText:      { fontFamily: "NexaLight", fontSize: 11, color: C.textSec },
+  btnRow:        { flexDirection: "row", gap: 10, marginTop: 4 },
+  btnOutline:    { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 16, borderWidth: 1.5, borderColor: C.primary + "40", paddingVertical: 12, backgroundColor: C.card },
+  btnOutlineText:{ fontFamily: "NexaBold", fontSize: 12, color: C.primary },
+  btnSolid:      { flex: 1.6, borderRadius: 16, overflow: "hidden" },
+  btnGrad:       { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13 },
+  btnSolidText:  { fontFamily: "NexaBold", fontSize: 12, color: C.white },
+}); }
 
-  avatarWrap: {
-    position: "absolute", top: 42, left: 16,
-    width: 60, height: 60, borderRadius: 16,
-    borderWidth: 3, overflow: "hidden",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 6,
-  },
-  avatar: { width: "100%", height: "100%" },
-
-  cardBody: { marginTop: 34, paddingHorizontal: 16, paddingBottom: 16 },
-
-  companyName: { fontSize: 15, fontFamily: "NexaLight", marginBottom: 4 },
-  companyDesc: { fontSize: 12, fontFamily: "NexaLight", lineHeight: 17, marginBottom: 10 },
-
-  /* Rating row */
-  ratingRow: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 12, paddingVertical: 8,
-    marginBottom: 10,
-  },
-  noRatingText: { fontFamily: "NexaLight", fontSize: 11, fontStyle: "italic" },
-  rateBtn: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5,
-    borderWidth: 1,
-  },
-  rateBtnText: { fontFamily: "NexaLight", fontSize: 11 },
-
-  /* Info chips */
-  infoRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginBottom: 12 },
-  infoChip: {
-    flexDirection: "row", alignItems: "center",
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, gap: 4,
-  },
-  infoText: { fontSize: 11, fontFamily: "NexaLight" },
-
-  /* CTA */
-  cta:     { borderRadius: 14, overflow: "hidden" },
-  ctaGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 12 },
-  ctaText: { color: C.white, fontFamily: "NexaLight", fontSize: 13, letterSpacing: 0.3 },
-  ctaArrow: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: C.gold,
-    alignItems: "center", justifyContent: "center",
-  },
-});
-
-/* ─── Stars display styles ───────────────────────────────────────────── */
-const sd = StyleSheet.create({
-  row:   { flexDirection: "row", alignItems: "center", gap: 3 },
-  value: { fontFamily: "NexaLight", marginLeft: 4 },
-  count: { color: C.muted },
-});
-
-/* ─── Rating modal styles ────────────────────────────────────────────── */
-const rm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(3,40,100,0.5)", justifyContent: "flex-end" },
-  sheet:   { borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: "hidden" },
-  handle:  { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginTop: 12, marginBottom: -4 },
-
-  header:    { padding: 18, paddingTop: 20 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 4 },
-  headerIcon: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: { flex: 1, color: C.white, fontFamily: "NexaLight", fontSize: 15, letterSpacing: 0.3 },
-  closeBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  companyName: { color: "rgba(255,255,255,0.65)", fontFamily: "NexaLight", fontSize: 12, paddingLeft: 42 },
-
-  currentRating: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12,
-    borderBottomWidth: 1,
-  },
-  currentLabel: { fontFamily: "NexaLight", fontSize: 11 },
-
-  starsSection: { alignItems: "center", paddingVertical: 20 },
-  starsHint:    { fontFamily: "NexaLight", fontSize: 13, marginBottom: 16, height: 20 },
-  starsRow:     { flexDirection: "row", gap: 10 },
-
-  commentWrap: {
-    flexDirection: "row", alignItems: "flex-start",
-    marginHorizontal: 16, marginBottom: 16,
-    borderRadius: 16, borderWidth: 1,
-    padding: 12, gap: 10,
-  },
-  commentIcon: {
-    width: 28, height: 28, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-    flexShrink: 0, marginTop: 2,
-  },
-  commentInput: {
-    flex: 1, fontFamily: "NexaLight",
-    fontSize: 13, minHeight: 60, textAlignVertical: "top",
-  },
-
-  btnRow:            { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingBottom: 36, paddingTop: 4 },
-  cancelBtn:         { flex: 1, paddingVertical: 13, borderRadius: 14, alignItems: "center", borderWidth: 1 },
-  cancelText:        { fontFamily: "NexaLight", fontSize: 14 },
-  submitBtn:         { flex: 2, borderRadius: 14, overflow: "hidden" },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitGrad: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 8, paddingVertical: 13,
-  },
-  submitText: { color: C.white, fontFamily: "NexaLight", fontSize: 14, letterSpacing: 0.3 },
-});
+function mkRv(C: typeof LIGHT) { return StyleSheet.create({
+  overlay:       { flex: 1, backgroundColor: "rgba(20,20,40,0.45)", justifyContent: "flex-end" },
+  sheet:         { backgroundColor: C.card, borderTopLeftRadius: 32, borderTopRightRadius: 32, height: "80%", flexShrink: 1 },
+  handle:        { width: 44, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginTop: 12 },
+  topBar:        { flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: C.border },
+  headerCompany: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  headerSub:     { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 2 },
+  closeBtn:      { width: 34, height: 34, borderRadius: 17, backgroundColor: C.border, alignItems: "center", justifyContent: "center" },
+  avgCard:       { flexDirection: "row", alignItems: "center", gap: 16, marginHorizontal: 20, marginTop: 14, marginBottom: 4, backgroundColor: "rgba(245,158,11,0.07)", borderRadius: 20, paddingHorizontal: 18, paddingVertical: 14, borderWidth: 1, borderColor: "rgba(245,158,11,0.15)" },
+  avgNumber:     { fontFamily: "NexaBold", fontSize: 44, color: C.text, lineHeight: 50 },
+  avgCount:      { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
+  sectionTitle:  { fontFamily: "NexaBold", fontSize: 10, color: C.textMut, textTransform: "uppercase", letterSpacing: 1.4 },
+  myNoteCard:    { backgroundColor: C.noteBg, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(245,158,11,0.22)", gap: 8 },
+  noteDate:      { fontFamily: "NexaLight", fontSize: 10, color: C.textMut, textTransform: "uppercase", letterSpacing: 0.5 },
+  noteComment:   { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, lineHeight: 19 },
+  myNoteActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  actionBtnOutline:     { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary + "40", paddingVertical: 11, backgroundColor: C.card },
+  actionBtnOutlineText: { fontFamily: "NexaBold", fontSize: 12, color: C.primary },
+  actionBtnDanger:      { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 12, borderWidth: 1.5, borderColor: C.error + "40", paddingVertical: 11, backgroundColor: C.card },
+  actionBtnDangerText:  { fontFamily: "NexaBold", fontSize: 12, color: C.error },
+  formCard:      { backgroundColor: C.noteBg, borderRadius: 22, padding: 20, gap: 16, borderWidth: 1, borderColor: C.border },
+  formHint:      { fontFamily: "NexaBold", fontSize: 15, color: C.text, textAlign: "center" },
+  commentWrap:   { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 10 },
+  commentInput:  { fontFamily: "NexaLight", fontSize: 13, color: C.text, minHeight: 70, textAlignVertical: "top", backgroundColor: "transparent" },
+  submitBtn:     { borderRadius: 14, overflow: "hidden" },
+  submitGrad:    { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  submitText:    { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+  reviewCard:    { backgroundColor: C.noteBg, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
+  avatar:        { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary + "14", alignItems: "center", justifyContent: "center" },
+  avatarText:    { fontFamily: "NexaBold", fontSize: 15, color: C.primary },
+  reviewUser:    { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 2 },
+}); }

@@ -1,11 +1,12 @@
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
+import { Ionicons } from "@expo/vector-icons";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,23 +16,37 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Image,
-   useColorScheme,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+
 import { useAskPasswordResetMutation, useVerifyOtpMutation } from "@/services/authService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import logo from "@/assets/images/logo.jpeg";
-import { C, Colors} from "@/constants/theme";
+import { useAppTheme } from "@/app/_layout";
 
-/* ─── OTP BOXES (affichage visuel seulement) ────────────────────────── */
-const OtpDisplay = ({ code, onPress }: { code: string; onPress: () => void }) => {
+const LIGHT = {
+  bg:      "#F8F9FF",
+  primary: "#0047FF",
+  text:    "#1A1C1C",
+  muted:   "#747688",
+  input:   "#F4F6FF",
+  border:  "#E8EDF5",
+  white:   "#FFFFFF",
+  green:   "#22C55E",
+};
+const DARK: typeof LIGHT = {
+  bg:      "#0B1220",
+  primary: "#4D8DFF",
+  text:    "#EAF0FF",
+  muted:   "#9FB0D0",
+  input:   "#182033",
+  border:  "#1F2A44",
+  white:   "#FFFFFF",
+  green:   "#22C55E",
+};
 
- 
+function OtpDisplay({ code, onPress }: { code: string; onPress: () => void }) {
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const otp = useMemo(() => mkOtp(W), [isDark]);
   const digits = Array(6).fill("").map((_, i) => code[i] || "");
-  
   return (
     <TouchableOpacity activeOpacity={1} onPress={onPress} style={otp.row}>
       {digits.map((d, i) => {
@@ -39,33 +54,26 @@ const OtpDisplay = ({ code, onPress }: { code: string; onPress: () => void }) =>
         const current = i === code.length && code.length < 6;
         return (
           <View key={i} style={[otp.box, filled && otp.boxFilled, current && otp.boxCurrent]}>
-            <Text style={[otp.digit, filled && otp.digitFilled]}>
-              {filled ? d : "·"}
-            </Text>
+            <Text style={[otp.digit, filled && otp.digitFilled]}>{filled ? d : "·"}</Text>
             {current && <View style={otp.cursor} />}
           </View>
         );
       })}
     </TouchableOpacity>
   );
-};
+}
 
-/* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
-export default function VerifyCode() {
-   function useTheme() {
-    const scheme = useColorScheme();
-    const isDark  = scheme === "dark";
-    return { isDark, t: isDark ? Colors.dark : Colors.light };
-   }
-   const { isDark,t }             = useTheme();
+export default function CheckPwd() {
+  const { isDark } = useAppTheme();
+  const W = isDark ? DARK : LIGHT;
+  const s = useMemo(() => mkS(W), [isDark]);
   const router = useRouter();
   const [verifyOtp,        { isLoading }]          = useVerifyOtpMutation();
-  const [askPasswordReset, { isLoading: isValue }] = useAskPasswordResetMutation();
+  const [askPasswordReset, { isLoading: isResend }] = useAskPasswordResetMutation();
 
   const [code, setCode] = useState("");
   const inputRef = useRef<TextInput>(null);
 
-  /* ── Animations ── */
   const cardSlide  = useRef(new Animated.Value(60)).current;
   const cardOpac   = useRef(new Animated.Value(0)).current;
   const logoScale  = useRef(new Animated.Value(0.7)).current;
@@ -84,14 +92,13 @@ export default function VerifyCode() {
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatY, { toValue: -8, duration: 2500, useNativeDriver: true }),
-        Animated.timing(floatY, { toValue: 0,  duration: 2500, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: -10, duration: 2800, useNativeDriver: true }),
+        Animated.timing(floatY, { toValue: 0,   duration: 2800, useNativeDriver: true }),
       ])
     ).start();
 
-    // Auto-focus au montage
     setTimeout(() => inputRef.current?.focus(), 600);
-  }, [cardOpac, cardSlide, floatY, logoOpac, logoScale]);
+  }, []);
 
   useEffect(() => {
     if (code.length === 6) {
@@ -100,7 +107,7 @@ export default function VerifyCode() {
         Animated.spring(pulseScale, { toValue: 1,   friction: 4, useNativeDriver: true }),
       ]).start();
     }
-  }, [code.length, pulseScale]);
+  }, [code.length]);
 
   const shake = () => {
     Animated.sequence([
@@ -130,7 +137,7 @@ export default function VerifyCode() {
       const response = await askPasswordReset({ email }).unwrap();
       if (response) {
         await AsyncStorage.setItem("userId", String(response.userId));
-        Alert.alert("Vérifiez votre adresse email");
+        Alert.alert("Code renvoyé", "Vérifiez votre boîte email.");
       }
     } catch (err) {
       const dataMess = err as any;
@@ -138,28 +145,11 @@ export default function VerifyCode() {
     }
   };
 
-  const focusInput = () => inputRef.current?.focus();
-  const complete   = code.length === 6;
+  const complete = code.length === 6;
 
   return (
-    <View style={[{ flex: 1 }, { backgroundColor: t.gradientEnd }]}>
-      <StatusBar barStyle="light-content" />
-
-      <LinearGradient
-         colors={
-          isDark
-            ? ["#060D1F", "#091528", "#0D1F3C"]
-            : [t.gradientStart, t.gradientEnd, t.accent]
-        }
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Cercles décoratifs */}
-      <View style={[s.circle, s.circle1]} />
-      <View style={[s.circle, s.circle2]} />
-      <View style={[s.circle, s.circle3]} />
-      <View style={[s.circle, s.circle4]} />
+    <View style={s.screen}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={W.bg} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
@@ -167,47 +157,39 @@ export default function VerifyCode() {
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-
-          {/* ── Logo flottant ── */}
+          {/* Hero */}
           <Animated.View style={[s.logoArea, { opacity: logoOpac, transform: [{ scale: logoScale }, { translateY: floatY }] }]}>
-            <Animated.View style={{ transform: [{ scale: pulseScale }] }}>
-              <View style={s.logoWrap}>
-                <Image source={logo} style={s.logo} resizeMode="contain" />
+            <Animated.View style={[s.heroIconWrap, { transform: [{ scale: pulseScale }] }]}>
+              <View style={[s.heroIcon, complete && s.heroIconComplete]}>
+                <Ionicons name="lock-open-outline" size={32} color={complete ? W.green : W.primary} />
               </View>
               {complete && (
                 <View style={s.checkBadge}>
-                  <Ionicons name="checkmark" size={11} color={C.white} />
+                  <Ionicons name="checkmark" size={11} color={W.white} />
                 </View>
               )}
             </Animated.View>
-
-            <View style={s.logoAccentBar}>
-              <View style={[s.logoAccentSeg, { backgroundColor: C.primary, flex: 2 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.accent,  flex: 1 }]} />
-              <View style={[s.logoAccentSeg, { backgroundColor: C.gold,    flex: 1 }]} />
-            </View>
-
             <Text style={s.heroTitle}>Vérification du code</Text>
-            <Text style={s.heroSub}>
-              Entrez le code à 6 chiffres envoyé à votre adresse email
-            </Text>
+            <Text style={s.heroSub}>Entrez le code à 6 chiffres envoyé à votre adresse email</Text>
           </Animated.View>
 
-          {/* ── Card ── */}
-          <Animated.View style={[s.cardWrap, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
+          {/* Étape indicator */}
+          <View style={s.stepsRow}>
+            {[W.primary, W.primary, W.border].map((color, i) => (
+              <View key={i} style={[s.stepPill, { backgroundColor: color }]} />
+            ))}
+          </View>
 
-            {/* Section header */}
+          {/* Card */}
+          <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardSlide }, { translateX: shakeAnim }] }]}>
+
             <View style={s.sectionHeader}>
-              <View style={[s.sectionDot, { backgroundColor: complete ? "#22C55E" : C.accent }]} />
-              <Text style={s.sectionLabel}>
-                {complete ? "CODE COMPLET ✓" : "SAISIE DU CODE"}
-              </Text>
+              <View style={[s.dot, { backgroundColor: complete ? W.green : W.primary }]} />
+              <Text style={s.sectionLabel}>{complete ? "CODE COMPLET ✓" : "ÉTAPE 2/3 — SAISIE DU CODE"}</Text>
             </View>
 
-            {/* OTP visual — clique pour focus le vrai input */}
-            <OtpDisplay code={code} onPress={focusInput} />
+            <OtpDisplay code={code} onPress={() => inputRef.current?.focus()} />
 
-            {/* Input invisible positionné sur la zone OTP */}
             <TextInput
               ref={inputRef}
               value={code}
@@ -220,65 +202,59 @@ export default function VerifyCode() {
               caretHidden
             />
 
-            {/* Séparateur */}
             <View style={s.sep} />
 
-            {/* Info bulle */}
             <View style={s.infoBubble}>
-              <View style={[s.iconCircle, { backgroundColor: C.primary + "12", width: 32, height: 32, borderRadius: 16 }]}>
-                <Ionicons name="shield-checkmark-outline" size={15} color={C.primary} />
+              <View style={s.infoIcon}>
+                <Ionicons name="shield-checkmark-outline" size={15} color={W.primary} />
               </View>
               <Text style={s.infoText}>
                 Le code expire dans{" "}
-                <Text style={{ color: C.primary, fontWeight: "700" }}>10 minutes</Text>.
-                {" "}Vérifiez aussi vos spams.
+                <Text style={{ color: W.primary, fontWeight: "700" }}>10 minutes</Text>.{" "}
+                Vérifiez aussi vos spams.
               </Text>
             </View>
 
-            {/* CTA */}
-            <View style={{ marginTop: 22 }}>
-              <GradientButton
-                isLoad={isLoading}
-                title="Vérifier le code"
-                onPress={handleVerify}
-                leftIcon={<ArrowIcon width={20} height={14} />}
-                rightIcon={<ArrowRightIcon width={30} height={24} />}
-              />
-            </View>
+            <TouchableOpacity
+              style={[s.btn, { marginTop: 22 }, !complete && { opacity: 0.6 }]}
+              onPress={handleVerify}
+              disabled={isLoading || !complete}
+              activeOpacity={0.88}
+            >
+              {isLoading
+                ? <ActivityIndicator color={W.white} />
+                : <Text style={s.btnText}>Vérifier le code</Text>
+              }
+            </TouchableOpacity>
 
-            {/* Divider */}
             <View style={s.divider}>
               <View style={s.line} />
-              <View style={s.dividerBadge}>
-                <Text style={s.dividerText}>OU</Text>
-              </View>
+              <Text style={s.dividerText}>OU</Text>
               <View style={s.line} />
             </View>
 
-            {/* Renvoyer */}
             <TouchableOpacity
-              style={[s.resendBtn, isValue && { opacity: 0.7 }]}
+              style={[s.resendBtn, isResend && { opacity: 0.7 }]}
               onPress={handleResend}
-              disabled={isValue}
+              disabled={isResend}
               activeOpacity={0.85}
             >
-              <View style={[s.iconCircle, { backgroundColor: C.accent + "18" }]}>
-                {isValue
-                  ? <ActivityIndicator size="small" color={C.accent} />
-                  : <FontAwesome6 name="rotate-right" size={14} color={C.accent} />
+              <View style={s.resendIcon}>
+                {isResend
+                  ? <ActivityIndicator size="small" color={W.primary} />
+                  : <FontAwesome6 name="rotate-right" size={14} color={W.primary} />
                 }
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.resendMain}>Renvoyer le code</Text>
-                <Text style={s.resendSub}>{"Vous n'avez pas reçu le code ?"} </Text>
+                <Text style={s.resendSub}>Vous n'avez pas reçu le code ?</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={C.muted} />
+              <Ionicons name="chevron-forward" size={16} color={W.muted} />
             </TouchableOpacity>
 
-            {/* Retour */}
             <TouchableOpacity style={s.backBtn} onPress={() => router.push("/forgot-password")} activeOpacity={0.85}>
-              <View style={[s.iconCircle, { backgroundColor: C.f4, width: 36, height: 36, borderRadius: 18 }]}>
-                <FontAwesome6 name="arrow-left" size={13} color={C.muted} />
+              <View style={[s.backIcon]}>
+                <FontAwesome6 name="arrow-left" size={13} color={W.muted} />
               </View>
               <Text style={s.backText}>Retour</Text>
             </TouchableOpacity>
@@ -293,144 +269,127 @@ export default function VerifyCode() {
   );
 }
 
-VerifyCode.options = { headerShown: false };
+CheckPwd.options = { headerShown: false };
 
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: C.deep },
-
-  circle: { position: "absolute", borderRadius: 999 },
-  circle1: {
-    width: 300, height: 300, top: -130, right: -120,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.07)",
-  },
-  circle2: { width: 140, height: 140, top: 100, right: -40, backgroundColor: "rgba(57,6,199,0.15)" },
-  circle3: { width: 190, height: 190, bottom: 140, left: -80, backgroundColor: "rgba(77,150,255,0.1)" },
-  circle4: { width: 65,  height: 65,  top: "35%", left: 20,  backgroundColor: "rgba(255,215,0,0.08)" },
+function mkS(W: typeof LIGHT) { return StyleSheet.create({
+  screen: { flex: 1, backgroundColor: W.bg },
 
   logoArea: {
     alignItems: "center",
     paddingTop: Platform.OS === "ios" ? 65 : 46,
-    marginBottom: 22,
+    marginBottom: 16,
   },
-  logoWrap: {
-    width: 96, height: 96, borderRadius: 26,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
+  heroIconWrap: { position: "relative", marginBottom: 14 },
+  heroIcon: {
+    width: 88, height: 88, borderRadius: 26,
+    backgroundColor: W.white,
+    borderWidth: 2, borderColor: "#C8D8FF",
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden", elevation: 14,
-    shadowColor: C.black, shadowOpacity: 0.3,
-    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+    shadowColor: W.primary, shadowOpacity: 0.18,
+    shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
   },
-  logo: { width: 78, height: 78 },
+  heroIconComplete: { borderColor: W.green + "88", backgroundColor: "#F0FFF4" },
   checkBadge: {
     position: "absolute", top: -4, right: -4,
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: "#22C55E",
+    backgroundColor: W.green,
     alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: C.white,
+    borderWidth: 2, borderColor: W.white,
   },
-  logoAccentBar: {
-    flexDirection: "row", width: 56, height: 3,
-    borderRadius: 2, marginTop: 14, overflow: "hidden", gap: 2,
-  },
-  logoAccentSeg: { height: "100%", borderRadius: 2 },
-  heroTitle: {
-    color: C.white, fontFamily: "NexaLight", fontSize: 20,
-    letterSpacing: 0.3, textAlign: "center", marginTop: 14, marginBottom: 7,
-  },
-  heroSub: {
-    color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight",
-    fontSize: 13, textAlign: "center", lineHeight: 20, paddingHorizontal: 24,
-  },
+  heroTitle: { fontFamily: "NexaBold", fontSize: 20, color: W.text, textAlign: "center", marginBottom: 6 },
+  heroSub:   { fontFamily: "NexaRegular", fontSize: 13, color: W.muted, textAlign: "center", lineHeight: 20, paddingHorizontal: 24 },
 
-  cardWrap: {
-    backgroundColor: C.white, borderRadius: 28, padding: 22,
-    elevation: 10, shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 20,
+  stepsRow: { flexDirection: "row", gap: 6, marginHorizontal: 16, marginBottom: 16 },
+  stepPill: { flex: 1, height: 3, borderRadius: 2 },
+
+  card: {
+    backgroundColor: W.white, borderRadius: 28, padding: 22,
+    marginHorizontal: 0,
+    elevation: 6,
+    shadowColor: W.primary, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.10, shadowRadius: 16,
   },
 
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 20 },
-  sectionDot:   { width: 4, height: 16, borderRadius: 2 },
-  sectionLabel: {
-    fontFamily: "NexaLight", fontSize: 11,
-    color: C.muted, letterSpacing: 1.2, textTransform: "uppercase",
-  },
+  dot:           { width: 4, height: 16, borderRadius: 2 },
+  sectionLabel:  { fontFamily: "NexaRegular", fontSize: 11, color: W.muted, letterSpacing: 1.2, textTransform: "uppercase" },
 
-  /* Input invisible — couvre la zone OTP pour capter les taps */
-  hiddenInput: {
-    position: "absolute",
-    width: "100%",
-    height: 72,
-    top: 52,           // aligné sur les boxes OTP
-    opacity: 0,
-  },
+  hiddenInput: { position: "absolute", width: "100%", height: 72, top: 52, opacity: 0 },
 
-  sep: { height: 1, backgroundColor: "#E8EDF5", marginVertical: 20 },
-
-  iconCircle: {
-    width: 44, height: 44, borderRadius: 22,
-    justifyContent: "center", alignItems: "center", marginHorizontal: 6,
-  },
+  sep: { height: 1, backgroundColor: W.border, marginVertical: 20 },
 
   infoBubble: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: C.primary + "08", borderRadius: 14, padding: 10,
-    borderWidth: 1, borderColor: C.primary + "15",
+    backgroundColor: "#0047FF08", borderRadius: 14, padding: 10,
+    borderWidth: 1, borderColor: "#0047FF15",
   },
-  infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.muted, lineHeight: 17 },
+  infoIcon: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "#0047FF12",
+    alignItems: "center", justifyContent: "center",
+  },
+  infoText: { flex: 1, fontFamily: "NexaRegular", fontSize: 12, color: W.muted, lineHeight: 17 },
 
-  divider: { flexDirection: "row", alignItems: "center", marginVertical: 20, gap: 10 },
-  line: { flex: 1, height: 1, backgroundColor: "#E8EDF5" },
-  dividerBadge: {
-    paddingHorizontal: 12, paddingVertical: 4,
-    borderRadius: 20, backgroundColor: C.f4,
-    borderWidth: 1, borderColor: "#E8EDF5",
+  btn: {
+    backgroundColor: W.primary, borderRadius: 18, height: 54,
+    alignItems: "center", justifyContent: "center",
+    elevation: 4,
+    shadowColor: W.primary, shadowOpacity: 0.3, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
-  dividerText: { fontFamily: "NexaLight", fontSize: 11, color: C.muted, fontWeight: "700", letterSpacing: 1 },
+  btnText: { fontFamily: "NexaBold", fontSize: 15, color: W.white, letterSpacing: 0.5 },
+
+  divider: { flexDirection: "row", alignItems: "center", marginVertical: 20, gap: 12 },
+  line:        { flex: 1, height: 1, backgroundColor: W.border },
+  dividerText: { fontFamily: "NexaRegular", fontSize: 11, color: W.muted, fontWeight: "700" },
 
   resendBtn: {
     flexDirection: "row", alignItems: "center",
-    backgroundColor: C.f4, borderRadius: 18,
-    paddingVertical: 12, paddingHorizontal: 8, gap: 4,
+    backgroundColor: W.input,
+    borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, gap: 12,
+    borderWidth: 1, borderColor: W.border,
   },
-  resendMain: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700", color: C.text },
-  resendSub:  { fontFamily: "NexaLight", fontSize: 11, color: C.muted, marginTop: 2 },
+  resendIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "#0047FF12",
+    alignItems: "center", justifyContent: "center",
+  },
+  resendMain: { fontFamily: "NexaBold", fontSize: 14, color: W.text },
+  resendSub:  { fontFamily: "NexaRegular", fontSize: 11, color: W.muted, marginTop: 2 },
 
   backBtn: {
     flexDirection: "row", alignItems: "center",
     gap: 10, marginTop: 14,
-    backgroundColor: C.f4, borderRadius: 18,
+    backgroundColor: W.input, borderRadius: 18,
     paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: W.border,
   },
-  backText: {
-    fontFamily: "NexaLight", fontSize: 13,
-    color: C.muted, flex: 1,
+  backIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: W.border,
+    alignItems: "center", justifyContent: "center",
   },
+  backText: { fontFamily: "NexaRegular", fontSize: 13, color: W.muted, flex: 1 },
 
-  version: {
-    textAlign: "center", fontFamily: "NexaLight",
-    fontSize: 11, color: "rgba(255,255,255,0.28)", marginTop: 22,
-  },
-});
+  version: { textAlign: "center", fontFamily: "NexaRegular", fontSize: 11, color: W.muted, marginTop: 22 },
+}); }
 
-/* ─── OTP BOXES ─────────────────────────────────────────────────────── */
-const otp = StyleSheet.create({
+function mkOtp(W: typeof LIGHT) { return StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
   box: {
-    flex: 1, height: 56, borderRadius: 14,
-    borderWidth: 1.5, borderColor: "#E8EDF5",
-    backgroundColor: C.f4,
+    flex: 1, height: 58, borderRadius: 16,
+    borderWidth: 1.5, borderColor: W.border,
+    backgroundColor: W.input,
     alignItems: "center", justifyContent: "center",
     position: "relative",
   },
-  boxFilled:   { borderColor: C.primary, backgroundColor: C.primary + "0E" },
-  boxCurrent:  { borderColor: C.accent, borderWidth: 2, backgroundColor: "#EEF4FF" },
-  digit:       { fontFamily: "NexaLight", fontSize: 22, color: C.muted, fontWeight: "700" },
-  digitFilled: { color: C.primary },
+  boxFilled:   { borderColor: W.primary, backgroundColor: "#EEF4FF" },
+  boxCurrent:  { borderColor: W.primary, borderWidth: 2, backgroundColor: "#EEF4FF" },
+  digit:       { fontFamily: "NexaBold", fontSize: 22, color: W.muted },
+  digitFilled: { color: W.primary },
   cursor: {
-    position: "absolute", bottom: 10,
-    width: 2, height: 18, backgroundColor: C.accent, borderRadius: 1,
+    position: "absolute", bottom: 8,
+    width: 2, height: 18, backgroundColor: W.primary, borderRadius: 1,
   },
-});
+}); }

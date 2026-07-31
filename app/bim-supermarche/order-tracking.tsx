@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+/* eslint-disable */
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +13,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,50 +22,62 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useGetUserOrdersQuery, usePayOrderAtDeliveryMutation } from "@/services/orderService";
 import { useRateLivreurMutation } from "@/services/livreurService";
 import { connectSocket, getSocket } from "@/services/socketService";
+import { useAppTheme } from "@/app/_layout";
 
 const SUPPORT_PHONE   = "+243861166469";
 const SUPPORT_DISPLAY = "+243 861 166 469";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC", violet: "#3906C7", deep: "#302E99",
-  accent: "#4D96FF", gold: "#FFD700", green: "#22C55E",
-  red: "#EF4444", orange: "#F97316", white: "#FFFFFF",
-  text: "#0D1B3E", muted: "#7B8DB0", f4: "#F4F6FB",
+/* ─── PALETTE ────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary: "#0035C5", blue: "#0047FF", deep: "#001257",
+  white:   "#FFFFFF", bg: "#F7F8FC", surface: "#FFFFFF",
+  border:  "rgba(196,197,218,0.25)",
+  text:    "#1A1C1C", textSec: "#434657", textMut: "#747688",
+  green:   "#10B981", amber:   "#F59E0B", red:     "#EF4444",
+  purple:  "#7C3AED",
+  card:    "#FFFFFF", iconBtnBg: "#F3F4F8",
 };
-const TH = {
-  light: { bg: "#F0F4FF", card: "#FFFFFF", text: "#0D1B3E", sub: "#7B8DB0", border: "rgba(3,83,204,0.10)", headerGrad: [C.deep, C.primary] as [string, string] },
-  dark:  { bg: "#0A0F1E", card: "#111827", text: "#E2E8F0", sub: "#64748B", border: "rgba(255,255,255,0.08)", headerGrad: ["#060B18", "#0D1B3E"] as [string, string] },
+const DARK: typeof LIGHT = {
+  primary: "#0035C5", blue: "#4D8DFF", deep: "#001257",
+  white:   "#FFFFFF", bg: "#0B1220", surface: "#1A2540",
+  border:  "rgba(31,42,68,0.80)",
+  text:    "#EAF0FF", textSec: "#A3B4D0", textMut: "#6B7A99",
+  green:   "#059669", amber:   "#D97706", red:     "#DC2626",
+  purple:  "#7C3AED",
+  card:    "#1A2540", iconBtnBg: "#0F1A2E",
 };
-function useTheme() {
-  const isDark = useColorScheme() === "dark";
-  return { isDark, t: isDark ? TH.dark : TH.light };
-}
 
 /* ─── STATUS CONFIG ──────────────────────────────────────────────────── */
 type OrderStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled";
-
 const STATUS_STEPS: OrderStatus[] = ["pending", "confirmed", "processing", "shipped", "delivered"];
 
-const STATUS_META: Record<OrderStatus, { label: string; icon: string; color: string; desc: string }> = {
-  pending:    { label: "En attente",     icon: "time-outline",            color: C.orange,  desc: "Commande reçue, en attente de confirmation" },
-  confirmed:  { label: "Confirmée",      icon: "checkmark-circle-outline", color: C.primary, desc: "L'entreprise a confirmé votre commande" },
-  processing: { label: "En préparation", icon: "construct-outline",        color: C.violet,  desc: "Votre commande est en cours de préparation" },
-  shipped:    { label: "En livraison",   icon: "bicycle-outline",          color: C.accent,  desc: "Votre commande est en route vers vous" },
-  delivered:  { label: "Livrée",         icon: "bag-check-outline",        color: C.green,   desc: "Commande livrée avec succès !" },
-  cancelled:  { label: "Annulée",        icon: "close-circle-outline",     color: C.red,     desc: "Commande annulée" },
-};
+function getStatusMeta(C: typeof LIGHT): Record<OrderStatus, { label: string; icon: string; color: string; desc: string }> {
+  return {
+    pending:    { label: "En attente",     icon: "time-outline",             color: C.amber,   desc: "Commande reçue, en attente de confirmation" },
+    confirmed:  { label: "Confirmée",      icon: "checkmark-circle-outline", color: C.primary, desc: "L'entreprise a confirmé votre commande" },
+    processing: { label: "En préparation", icon: "construct-outline",        color: C.purple,  desc: "Votre commande est en cours de préparation" },
+    shipped:    { label: "En livraison",   icon: "bicycle-outline",          color: C.blue,    desc: "Votre commande est en route vers vous" },
+    delivered:  { label: "Livrée",         icon: "bag-check-outline",        color: C.green,   desc: "Commande livrée avec succès !" },
+    cancelled:  { label: "Annulée",        icon: "close-circle-outline",     color: C.red,     desc: "Commande annulée" },
+  };
+}
 
-/* ─── TIMELINE ───────────────────────────────────────────────────────── */
+/* ─── STATUS TIMELINE ─────────────────────────────────────────────────── */
 function StatusTimeline({ status }: { status: OrderStatus }) {
+  const { isDark } = useAppTheme();
+  const C          = isDark ? DARK : LIGHT;
+  const tl         = useMemo(() => mkTl(C), [isDark]);
+  const STATUS_META = useMemo(() => getStatusMeta(C), [isDark]);
   const isCancelled = status === "cancelled";
   const currentIdx  = STATUS_STEPS.indexOf(status);
 
   if (isCancelled) {
     const meta = STATUS_META.cancelled;
     return (
-      <View style={[tl.cancelled, { borderColor: C.red + "30", backgroundColor: C.red + "08" }]}>
-        <Ionicons name={meta.icon as any} size={32} color={C.red} />
+      <View style={tl.cancelledBox}>
+        <View style={[tl.cancelIcon, { backgroundColor: C.red + "12" }]}>
+          <Ionicons name={meta.icon as any} size={28} color={C.red} />
+        </View>
         <Text style={[tl.cancelTitle, { color: C.red }]}>{meta.label}</Text>
         <Text style={tl.cancelDesc}>{meta.desc}</Text>
       </View>
@@ -78,24 +90,29 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
         const meta    = STATUS_META[step];
         const done    = idx <= currentIdx;
         const current = idx === currentIdx;
+        const isLast  = idx === STATUS_STEPS.length - 1;
         return (
           <View key={step} style={tl.stepRow}>
-            {idx < STATUS_STEPS.length - 1 && (
-              <View style={[tl.line, done && idx < currentIdx && { backgroundColor: C.primary }]} />
+            {/* Vertical line */}
+            {!isLast && (
+              <View style={[tl.line, { backgroundColor: done && idx < currentIdx ? meta.color + "60" : C.border }]} />
             )}
+            {/* Circle */}
             <View style={[
               tl.circle,
-              done  && { backgroundColor: meta.color, borderColor: meta.color },
-              !done && { borderColor: C.muted + "50", backgroundColor: "transparent" },
+              done  ? { backgroundColor: meta.color, borderColor: meta.color } : { backgroundColor: C.bg, borderColor: C.border },
+              current && { shadowColor: meta.color, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
             ]}>
-              <Ionicons name={meta.icon as any} size={16} color={done ? C.white : C.muted} />
-              {current && <View style={[tl.pulse, { borderColor: meta.color }]} />}
+              <Ionicons name={meta.icon as any} size={15} color={done ? C.white : C.textMut} />
             </View>
+            {/* Info */}
             <View style={tl.stepInfo}>
-              <Text style={[tl.stepLabel, { color: done ? meta.color : C.muted, fontWeight: current ? "700" : "400" }]}>
+              <Text style={[tl.stepLabel, { color: done ? meta.color : C.textMut, fontFamily: current ? "NexaBold" : "NexaLight" }]}>
                 {meta.label}
               </Text>
-              {current && <Text style={[tl.stepDesc, { color: C.muted }]}>{meta.desc}</Text>}
+              {current && (
+                <Text style={tl.stepDesc}>{meta.desc}</Text>
+              )}
             </View>
           </View>
         );
@@ -104,8 +121,11 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
   );
 }
 
-/* ─── PIN PAD ────────────────────────────────────────────────────────── */
+/* ─── PIN PAD ─────────────────────────────────────────────────────────── */
 function PinPad({ value, onChange, onDelete }: { value: string; onChange: (k: string) => void; onDelete: () => void }) {
+  const { isDark } = useAppTheme();
+  const C = isDark ? DARK : LIGHT;
+  const pp = useMemo(() => mkPp(C), [isDark]);
   const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   return (
     <View style={pp.grid}>
@@ -113,7 +133,7 @@ function PinPad({ value, onChange, onDelete }: { value: string; onChange: (k: st
         k === "" ? <View key={i} style={pp.key} /> :
         k === "⌫" ? (
           <TouchableOpacity key={i} style={pp.key} onPress={onDelete}>
-            <Ionicons name="backspace-outline" size={22} color={C.muted} />
+            <Ionicons name="backspace-outline" size={22} color={C.textMut} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity key={i} style={pp.key} onPress={() => onChange(k)} disabled={value.length >= 6}>
@@ -125,30 +145,31 @@ function PinPad({ value, onChange, onDelete }: { value: string; onChange: (k: st
   );
 }
 
-/* ─── MAIN ───────────────────────────────────────────────────────────── */
+/* ─── MAIN ─────────────────────────────────────────────────────────────── */
 export default function OrderTracking() {
+  const { isDark }  = useAppTheme();
+  const C           = isDark ? DARK : LIGHT;
+  const s           = useMemo(() => mkS(C),          [isDark]);
+  const rm          = useMemo(() => mkRm(C),         [isDark]);
+  const STATUS_META = useMemo(() => getStatusMeta(C), [isDark]);
   const { orderNumber } = useLocalSearchParams<{ orderNumber: string }>();
   const router          = useRouter();
-  const { isDark, t }   = useTheme();
 
-  /* Payment state */
   const [showPay,  setShowPay]  = useState(false);
   const [pin,      setPin]      = useState("");
   const [pinError, setPinError] = useState("");
   const pinShake = useRef(new Animated.Value(0)).current;
 
-  /* Rating state */
-  const [showRating,     setShowRating]     = useState(false);
-  const [ratingScore,    setRatingScore]    = useState(0);
-  const [ratingComment,  setRatingComment]  = useState("");
-  const [ratingDone,     setRatingDone]     = useState(false);
+  const [showRating,    setShowRating]    = useState(false);
+  const [ratingScore,   setRatingScore]   = useState(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingDone,    setRatingDone]    = useState(false);
 
   const [payOrderAtDelivery, { isLoading: paying }] = usePayOrderAtDeliveryMutation();
-  const [rateLivreur, { isLoading: rating }] = useRateLivreurMutation();
+  const [rateLivreur,        { isLoading: rating }] = useRateLivreurMutation();
 
   const { data, isLoading, refetch, isFetching } = useGetUserOrdersQuery({});
 
-  // Temps réel — écouter les changements de statut via Socket.io
   useEffect(() => {
     if (!orderNumber) return;
     const socket = getSocket();
@@ -161,23 +182,22 @@ export default function OrderTracking() {
     return () => { socket.off("order:status_updated", handler); };
   }, [orderNumber, refetch]);
 
-  const orders: any[]   = data?.data || [];
-  const order           = orders.find(o => o.orderNumber === orderNumber);
+  const orders: any[]       = data?.data || [];
+  const order               = orders.find((o: any) => o.orderNumber === orderNumber);
   const status: OrderStatus = order?.status ?? "pending";
-  const paymentStatus   = order?.paymentStatus ?? "pending";
-  const meta            = STATUS_META[status] ?? STATUS_META.pending;
-  const items: any[]    = order?.items || [];
-  const total           = order?.grandTotal ?? 0;
-  const livreur         = order?.livreur ?? null;
-  const estimatedMinutes = order?.estimatedMinutes ?? null;
+  const paymentStatus       = order?.paymentStatus ?? "pending";
+  const meta                = STATUS_META[status] ?? STATUS_META.pending;
+  const items: any[]        = order?.items || [];
+  const total               = order?.grandTotal ?? 0;
+  const livreur             = order?.livreur ?? null;
+  const estimatedMinutes    = order?.estimatedMinutes ?? null;
 
-  const isCancelled    = status === "cancelled";
-  const isDelivered    = status === "delivered";
-  const alreadyPaid    = paymentStatus === "paid";
-  const canPay         = !isCancelled && !isDelivered && !alreadyPaid;
-  const canCancel      = !isCancelled && !isDelivered && ["pending", "confirmed"].includes(status);
+  const isCancelled = status === "cancelled";
+  const isDelivered = status === "delivered";
+  const alreadyPaid = paymentStatus === "paid";
+  const canPay      = !isCancelled && !isDelivered && !alreadyPaid;
+  const canCancel   = !isCancelled && !isDelivered && ["pending", "confirmed"].includes(status);
 
-  /* ── Shake PIN ── */
   const shakePin = () => {
     Animated.sequence([
       Animated.timing(pinShake, { toValue: 10,  duration: 50, useNativeDriver: true }),
@@ -187,211 +207,216 @@ export default function OrderTracking() {
     ]).start();
   };
 
-  /* ── Payer à la livraison ── */
   const handlePay = async () => {
     if (pin.length < 6) return;
     try {
       await payOrderAtDelivery({ orderNumber, pin }).unwrap();
-      setShowPay(false);
-      setPin("");
-      setPinError("");
+      setShowPay(false); setPin(""); setPinError("");
       refetch();
-      // Ouvrir la notation si un livreur est assigné
-      if (livreur?.livreurId) {
-        setShowRating(true);
-      } else {
-        Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
-      }
+      if (livreur?.livreurId) setShowRating(true);
+      else Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
     } catch (err: any) {
-      const msg = err?.data?.message || "Code PIN incorrect ou solde insuffisant";
-      setPinError(msg);
+      setPinError(err?.data?.message || "Code PIN incorrect ou solde insuffisant");
       shakePin();
     }
   };
 
-  /* ── Soumettre la note ── */
   const handleRate = async () => {
-    if (ratingScore === 0) {
-      Alert.alert("Note requise", "Veuillez sélectionner une note de 1 à 5 étoiles.");
-      return;
-    }
+    if (ratingScore === 0) { Alert.alert("Note requise", "Veuillez sélectionner une note."); return; }
     try {
       await rateLivreur({ id: livreur.livreurId, score: ratingScore, comment: ratingComment.trim() || undefined }).unwrap();
       setRatingDone(true);
-    } catch {
-      // On ferme quand même sans bloquer
-      setShowRating(false);
-    }
-  };
-
-  const handleSkipRating = () => {
-    setShowRating(false);
-    Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
+    } catch { setShowRating(false); }
   };
 
   return (
-    <View style={[s.root, { backgroundColor: t.bg }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={s.root}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.card} />
 
-      {/* ── HEADER ── */}
-      <View style={[s.header, { shadowColor: isDark ? "#000" : C.primary }]}>
-        <LinearGradient colors={t.headerGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <View style={s.deco1} />
-        <View style={s.deco2} />
-        <SafeAreaView edges={["top"]}>
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.replace("/(tabs)")}>
-              <Ionicons name="arrow-back" size={20} color={C.white} />
-            </TouchableOpacity>
-            <View style={s.titleWrap}>
-              <View style={s.titleBadge}>
-                <Ionicons name="receipt-outline" size={12} color={C.gold} />
-              </View>
-              <Text style={s.headerTitle}>SUIVI DE COMMANDE</Text>
-            </View>
-            <TouchableOpacity style={s.iconBtn} onPress={() => refetch()} disabled={isFetching}>
-              {isFetching ? <ActivityIndicator size="small" color={C.white} /> : <Ionicons name="refresh" size={20} color={C.white} />}
-            </TouchableOpacity>
+      {/* ── HEADER blanc ── */}
+      <SafeAreaView edges={["top"]} style={s.header}>
+        <View style={s.topBar}>
+          <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={C.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, alignItems: "center" }}>
+            <Text style={s.headerTitle}>Suivi de commande</Text>
+            {orderNumber ? <Text style={s.headerSub} numberOfLines={1}>{orderNumber}</Text> : null}
           </View>
-          <Text style={s.headerSub} numberOfLines={1}>{orderNumber}</Text>
-        </SafeAreaView>
-      </View>
+          <TouchableOpacity style={s.iconBtn} onPress={() => refetch()} disabled={isFetching}>
+            {isFetching
+              ? <ActivityIndicator size="small" color={C.primary} />
+              : <Ionicons name="refresh-outline" size={22} color={C.primary} />}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
       {isLoading ? (
         <View style={s.center}><ActivityIndicator size="large" color={C.primary} /></View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 16, paddingBottom: 50 }}
+          contentContainerStyle={s.scroll}
+          showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={C.primary} />}
         >
-          {/* Status hero */}
-          <View style={[s.statusCard, { backgroundColor: meta.color + "12", borderColor: meta.color + "30" }]}>
-            <View style={[s.statusIcon, { backgroundColor: meta.color + "20" }]}>
-              <Ionicons name={meta.icon as any} size={28} color={meta.color} />
+          {/* ── Status hero card ── */}
+          <View style={[s.statusCard, { borderColor: meta.color + "30" }]}>
+            <View style={[s.statusIcon, { backgroundColor: meta.color + "12" }]}>
+              <Ionicons name={meta.icon as any} size={30} color={meta.color} />
             </View>
-            <Text style={[s.statusLabel, { color: meta.color }]}>{meta.label}</Text>
-            <Text style={[s.statusDesc, { color: t.sub }]}>{meta.desc}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.statusLabel, { color: meta.color }]}>{meta.label}</Text>
+              <Text style={s.statusDesc}>{meta.desc}</Text>
+            </View>
             {alreadyPaid && (
               <View style={s.paidBadge}>
-                <Ionicons name="shield-checkmark-outline" size={13} color={C.green} />
+                <Ionicons name="shield-checkmark-outline" size={12} color={C.green} />
                 <Text style={s.paidBadgeText}>Payé</Text>
               </View>
             )}
           </View>
 
-          {/* Timeline */}
-          <View style={[s.card, { backgroundColor: t.card, borderColor: t.border }]}>
-            <View style={s.sectionHeader}>
-              <View style={[s.dot, { backgroundColor: C.primary }]} />
-              <Text style={[s.sectionTitle, { color: t.sub }]}>PROGRESSION</Text>
-            </View>
+          {/* ── Progression ── */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Progression</Text>
             <StatusTimeline status={status} />
           </View>
 
-          {/* Articles */}
-          <View style={[s.card, { backgroundColor: t.card, borderColor: t.border }]}>
-            <View style={s.sectionHeader}>
-              <View style={[s.dot, { backgroundColor: C.gold }]} />
-              <Text style={[s.sectionTitle, { color: t.sub }]}>ARTICLES ({items.length})</Text>
-            </View>
-            {items.map((item, i) => (
-              <View key={i} style={[s.itemRow, i < items.length - 1 && { borderBottomWidth: 1, borderBottomColor: t.border }]}>
-                <Text style={[s.itemName, { color: t.text }]} numberOfLines={1}>{item.product?.name || "Produit"}</Text>
-                <Text style={[s.itemQty, { color: t.sub }]}>×{item.qty}</Text>
+          {/* ── Articles ── */}
+          <View style={s.card}>
+            <Text style={s.cardTitle}>Articles · {items.length}</Text>
+            {items.map((item: any, i: number) => (
+              <View key={i} style={[s.itemRow, i < items.length - 1 && s.itemDivider]}>
+                <View style={s.itemDot} />
+                <Text style={s.itemName} numberOfLines={1}>{item.product?.name || "Produit"}</Text>
+                <Text style={s.itemQty}>×{item.qty}</Text>
                 <Text style={s.itemPrice}>{parseFloat(item.totalAmount).toFixed(2)} EC</Text>
               </View>
             ))}
-            <View style={[s.totalRow, { borderTopColor: t.border }]}>
-              <Text style={[s.totalLabel, { color: t.text }]}>Total</Text>
-              <Text style={s.totalVal}>{total.toFixed(2)} EC</Text>
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Total</Text>
+              <Text style={s.totalVal}>{parseFloat(total).toFixed(2)} EC</Text>
             </View>
           </View>
 
-          {/* Livraison */}
+          {/* ── Adresse ── */}
           {order?.shippingAddress && (
-            <View style={[s.card, { backgroundColor: t.card, borderColor: t.border }]}>
-              <View style={s.sectionHeader}>
-                <View style={[s.dot, { backgroundColor: C.violet }]} />
-                <Text style={[s.sectionTitle, { color: t.sub }]}>LIVRAISON</Text>
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Livraison</Text>
+              <View style={s.addrRow}>
+                <View style={[s.addrIcon, { backgroundColor: C.primary + "10" }]}>
+                  <Ionicons name="location-outline" size={16} color={C.primary} />
+                </View>
+                <Text style={s.addrText}>{order.shippingAddress}</Text>
               </View>
-              <View style={s.addressRow}>
-                <Ionicons name="location-outline" size={16} color={C.primary} />
-                <Text style={[s.addressText, { color: t.text }]}>{order.shippingAddress}</Text>
+              {order?.clientPhone && (
+                <View style={[s.addrRow, { marginTop: 8 }]}>
+                  <View style={[s.addrIcon, { backgroundColor: C.green + "10" }]}>
+                    <Ionicons name="call-outline" size={16} color={C.green} />
+                  </View>
+                  <Text style={s.addrText}>{order.clientPhone}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── Livreur ── */}
+          {livreur && (
+            <View style={s.card}>
+              <Text style={s.cardTitle}>Votre livreur</Text>
+              <View style={s.livreurRow}>
+                <View style={s.livreurAvatar}>
+                  <Ionicons name="bicycle" size={20} color={C.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.livreurName}>{livreur.user?.username ?? "Livreur BIM"}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={{ color: "#F59E0B", fontSize: 12 }}>★</Text>
+                    <Text style={s.livreurRating}>{parseFloat(livreur.rating || 0).toFixed(1)}</Text>
+                    <View style={s.onlineDot} />
+                    <Text style={s.onlineText}>En ligne</Text>
+                  </View>
+                </View>
+              </View>
+              {estimatedMinutes && (
+                <View style={s.etaRow}>
+                  <Ionicons name="time-outline" size={14} color={C.amber} />
+                  <Text style={s.etaText}>Livraison estimée dans {estimatedMinutes} min</Text>
+                </View>
+              )}
+              <View style={s.livreurBtns}>
+                {livreur.telephone && (
+                  <TouchableOpacity style={[s.livreurBtn, { backgroundColor: C.green }]} onPress={() => Linking.openURL(`tel:${livreur.telephone}`)} activeOpacity={0.85}>
+                    <Ionicons name="call" size={15} color={C.white} />
+                    <Text style={s.livreurBtnText}>Appeler</Text>
+                  </TouchableOpacity>
+                )}
+                {livreur.latitude && livreur.longitude && (
+                  <TouchableOpacity style={[s.livreurBtn, { backgroundColor: C.primary }]} onPress={() => Linking.openURL(`https://maps.google.com/?q=${livreur.latitude},${livreur.longitude}`)} activeOpacity={0.85}>
+                    <Ionicons name="navigate" size={15} color={C.white} />
+                    <Text style={s.livreurBtnText}>Position</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           )}
 
-          {/* ── PAYER À LA LIVRAISON ── */}
+          {/* ── Payer à la livraison ── */}
           {canPay && !showPay && (
             <TouchableOpacity style={s.payBtn} onPress={() => setShowPay(true)} activeOpacity={0.88}>
-              <LinearGradient colors={[C.green, "#16A34A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payGrad}>
+              <LinearGradient colors={[C.green, "#059669"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payGrad}>
                 <View style={s.payIconWrap}>
                   <Ionicons name="wallet-outline" size={20} color={C.white} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.payTitle}>Payer à la livraison</Text>
-                  <Text style={s.paySub}>{total.toFixed(2)} EC — Portefeuille BIM</Text>
+                  <Text style={s.paySub}>{parseFloat(total).toFixed(2)} EC — Portefeuille BIM</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={C.white} />
               </LinearGradient>
             </TouchableOpacity>
           )}
 
-          {/* ── PIN PAD ── */}
+          {/* ── PIN ── */}
           {canPay && showPay && (
-            <View style={[s.card, s.payCard, { backgroundColor: t.card, borderColor: C.green + "40" }]}>
-              <View style={s.sectionHeader}>
-                <View style={[s.dot, { backgroundColor: C.green }]} />
-                <Text style={[s.sectionTitle, { color: C.green }]}>PAIEMENT — {total.toFixed(2)} EC</Text>
-                <TouchableOpacity onPress={() => { setShowPay(false); setPin(""); setPinError(""); }} style={{ marginLeft: "auto" }}>
-                  <Ionicons name="close-circle-outline" size={20} color={C.muted} />
+            <View style={s.card}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <Text style={s.cardTitle}>Paiement · {parseFloat(total).toFixed(2)} EC</Text>
+                <TouchableOpacity onPress={() => { setShowPay(false); setPin(""); setPinError(""); }}>
+                  <Ionicons name="close-circle-outline" size={22} color={C.textMut} />
                 </TouchableOpacity>
               </View>
-
-              <Text style={[s.pinHint, { color: t.sub }]}>Entrez votre code PIN (6 chiffres)</Text>
-
+              <Text style={s.pinHint}>Entrez votre code PIN (6 chiffres)</Text>
               <Animated.View style={[s.pinDots, { transform: [{ translateX: pinShake }] }]}>
                 {[0,1,2,3,4,5].map(i => (
-                  <View key={i} style={[
-                    s.pinDot,
-                    { borderColor: pinError ? C.red : C.green },
-                    i < pin.length && { backgroundColor: C.green },
-                  ]} />
+                  <View key={i} style={[s.pinDot, { borderColor: pinError ? C.red : C.green }, i < pin.length && { backgroundColor: C.green }]} />
                 ))}
               </Animated.View>
               {pinError ? <Text style={s.pinError}>{pinError}</Text> : null}
-
               <PinPad value={pin} onChange={k => { setPinError(""); setPin(p => p.length < 6 ? p + k : p); }} onDelete={() => setPin(p => p.slice(0, -1))} />
-
               <TouchableOpacity
-                style={[s.confirmBtn, (paying || pin.length < 6) && { opacity: 0.55 }]}
+                style={[s.confirmBtn, (paying || pin.length < 6) && { opacity: 0.5 }]}
                 onPress={handlePay}
                 disabled={paying || pin.length < 6}
               >
-                <LinearGradient colors={[C.green, "#16A34A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
+                <LinearGradient colors={[C.green, "#059669"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
                   {paying
-                    ? <ActivityIndicator color={C.white} size="small" />
-                    : <>
-                        <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                        <Text style={s.confirmText}>Confirmer le paiement</Text>
-                      </>
-                  }
+                    ? <ActivityIndicator size="small" color={C.white} />
+                    : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.confirmText}>Confirmer le paiement</Text></>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* ── ANNULER ── */}
+          {/* ── Annuler / Remboursement ── */}
           {alreadyPaid ? (
-            <View style={[s.refundCard, { backgroundColor: t.card, borderColor: C.orange + "40" }]}>
-              <Ionicons name="information-circle-outline" size={18} color={C.orange} />
+            <View style={s.refundCard}>
+              <Ionicons name="information-circle-outline" size={18} color={C.amber} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.refundTitle, { color: C.orange }]}>Commande déjà payée</Text>
-                <Text style={[s.refundSub, { color: t.sub }]}>
-                  Pour un remboursement, contactez BIM NEXT ou l'entreprise auprès de qui vous avez passé commande.
-                </Text>
+                <Text style={[s.refundTitle, { color: C.amber }]}>Commande déjà payée</Text>
+                <Text style={s.refundSub}>Pour un remboursement, contactez BIM NEXT ou l'entreprise.</Text>
                 <TouchableOpacity onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)} style={s.refundCall}>
-                  <Ionicons name="call" size={13} color={C.green} />
+                  <Ionicons name="call" size={12} color={C.green} />
                   <Text style={s.refundCallText}>{SUPPORT_DISPLAY}</Text>
                 </TouchableOpacity>
               </View>
@@ -401,338 +426,238 @@ export default function OrderTracking() {
               style={s.cancelBtn}
               onPress={() => Alert.alert(
                 "Annuler la commande",
-                "Voulez-vous vraiment annuler cette commande ?",
+                "Voulez-vous vraiment annuler ?",
                 [
                   { text: "Non", style: "cancel" },
-                  { text: "Annuler la commande", style: "destructive", onPress: () => {
-                    /* updateOrderStatus to cancelled — handled via existing mutation */
-                    Alert.alert("Contactez le support", `Veuillez appeler BIM NEXT au ${SUPPORT_DISPLAY} pour annuler votre commande.`);
-                  }},
+                  { text: "Annuler", style: "destructive", onPress: () => Alert.alert("Contact requis", `Appelez le ${SUPPORT_DISPLAY} pour annuler.`) },
                 ]
               )}
               activeOpacity={0.85}
             >
-              <Ionicons name="close-circle-outline" size={16} color={C.red} />
+              <Ionicons name="close-circle-outline" size={15} color={C.red} />
               <Text style={s.cancelText}>Annuler la commande</Text>
             </TouchableOpacity>
           ) : null}
 
-          {/* Livreur assigné */}
-          {livreur && (
-            <View style={s.livreurCard}>
-              <View style={s.livreurHeader}>
-                <View style={s.livreurIconWrap}>
-                  <Ionicons name="bicycle" size={20} color={C.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.livreurTitle, { color: t.text }]}>Votre livreur</Text>
-                  <Text style={[s.livreurSub, { color: t.sub }]}>En route vers vous</Text>
-                </View>
-                <View style={s.livreurOnline}>
-                  <Text style={s.livreurOnlineTxt}>🟢 En ligne</Text>
-                </View>
-              </View>
-              {estimatedMinutes && (
-                <View style={s.estTimeRow}>
-                  <Ionicons name="time-outline" size={14} color={C.orange} />
-                  <Text style={s.estTimeTxt}>Livraison dans environ {estimatedMinutes} min</Text>
-                </View>
-              )}
-              <View style={s.livreurRow}>
-                <Ionicons name="person-circle-outline" size={16} color={C.muted} />
-                <Text style={[s.livreurInfo, { color: t.text }]}>{livreur.user?.username ?? "Livreur BIM"}</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 8 }}>
-                  <Text style={{ color: "#FFD700", fontSize: 12 }}>★</Text>
-                  <Text style={[s.livreurInfo, { color: C.muted }]}>{parseFloat(livreur.rating || 0).toFixed(1)}</Text>
-                </View>
-              </View>
-              <View style={s.livreurBtns}>
-                {livreur.telephone && (
-                  <TouchableOpacity
-                    style={s.livreurBtn}
-                    onPress={() => Linking.openURL(`tel:${livreur.telephone}`)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="call" size={16} color="#fff" style={{ marginRight: 6 }} />
-                    <Text style={s.livreurBtnTxt}>Appeler · {livreur.telephone}</Text>
-                  </TouchableOpacity>
-                )}
-                {livreur.latitude && livreur.longitude && (
-                  <TouchableOpacity
-                    style={[s.livreurBtn, { backgroundColor: C.primary }]}
-                    onPress={() => Linking.openURL(`https://maps.google.com/?q=${livreur.latitude},${livreur.longitude}`)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="navigate" size={16} color="#fff" style={{ marginRight: 6 }} />
-                    <Text style={s.livreurBtnTxt}>Voir sa position</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Support */}
+          {/* ── Support ── */}
           <TouchableOpacity style={s.supportBtn} onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)} activeOpacity={0.85}>
-            <View style={s.supportIconWrap}>
-              <Ionicons name="call" size={18} color={C.green} />
+            <View style={[s.supportIcon, { backgroundColor: C.green + "12" }]}>
+              <Ionicons name="call-outline" size={18} color={C.green} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[s.supportLabel, { color: t.sub }]}>Un problème avec votre commande ?</Text>
+              <Text style={s.supportLabel}>Un problème avec votre commande ?</Text>
               <Text style={s.supportNum}>{SUPPORT_DISPLAY}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={C.green} />
+            <Ionicons name="chevron-forward" size={16} color={C.textMut} />
           </TouchableOpacity>
 
           {(isDelivered || alreadyPaid) && (
-            <TouchableOpacity style={s.homeBtn} onPress={() => router.replace("/(tabs)")}>
-              <LinearGradient colors={[C.deep, C.primary]} style={s.homeBtnGrad}>
+            <TouchableOpacity style={s.homeBtn} onPress={() => router.replace("/(tabs)" as any)} activeOpacity={0.88}>
+              <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.homeGrad}>
                 <Ionicons name="home-outline" size={18} color={C.white} />
-                <Text style={s.homeBtnText}>Retour à l'accueil</Text>
+                <Text style={s.homeText}>Retour à l'accueil</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
+
+          <View style={{ height: 40 }} />
         </ScrollView>
       )}
 
-      {/* ══ MODAL NOTATION LIVREUR ══ */}
-      <Modal visible={showRating} transparent animationType="slide" onRequestClose={handleSkipRating}>
-        <View style={s.ratingOverlay}>
-          <View style={[s.ratingSheet, { backgroundColor: isDark ? TH.dark.card : "#FFF" }]}>
-
+      {/* ── MODAL NOTATION ── */}
+      <Modal visible={showRating} transparent animationType="slide" onRequestClose={() => setShowRating(false)}>
+        <View style={rm.overlay}>
+          <View style={rm.sheet}>
+            <View style={rm.handle} />
             {!ratingDone ? (
               <>
-                {/* Header */}
-                <View style={s.ratingHeader}>
-                  <View style={s.ratingAvatarWrap}>
-                    <Ionicons name="bicycle" size={28} color={C.primary} />
-                  </View>
-                  <Text style={[s.ratingTitle, { color: isDark ? TH.dark.text : C.text }]}>
-                    Évaluer votre livreur
-                  </Text>
-                  <Text style={[s.ratingSub, { color: isDark ? TH.dark.sub : C.muted }]}>
-                    {livreur?.user?.username ?? "Votre livreur"} · Comment s'est passée la livraison ?
-                  </Text>
+                <View style={rm.avatarWrap}>
+                  <Ionicons name="bicycle" size={28} color={C.primary} />
                 </View>
-
-                {/* Étoiles */}
-                <View style={s.starsRow}>
-                  {[1, 2, 3, 4, 5].map(star => (
+                <Text style={rm.title}>Évaluer votre livreur</Text>
+                <Text style={rm.sub}>{livreur?.user?.username ?? "Votre livreur"} — Comment s'est passée la livraison ?</Text>
+                <View style={rm.stars}>
+                  {[1,2,3,4,5].map(star => (
                     <TouchableOpacity key={star} onPress={() => setRatingScore(star)} activeOpacity={0.7}>
-                      <Ionicons
-                        name={star <= ratingScore ? "star" : "star-outline"}
-                        size={40}
-                        color={star <= ratingScore ? "#FFD700" : (isDark ? "#374151" : "#D1D5DB")}
-                      />
+                      <Ionicons name={star <= ratingScore ? "star" : "star-outline"} size={38} color={star <= ratingScore ? "#F59E0B" : "#D1D5DB"} />
                     </TouchableOpacity>
                   ))}
                 </View>
-
-                {/* Label selon score */}
                 {ratingScore > 0 && (
-                  <Text style={[s.ratingScoreLabel, { color: ratingScore >= 4 ? C.green : ratingScore >= 3 ? C.orange : C.red }]}>
+                  <Text style={[rm.scoreLabel, { color: ratingScore >= 4 ? C.green : ratingScore >= 3 ? C.amber : C.red }]}>
                     {ratingScore === 5 ? "Excellent ! 🎉" : ratingScore === 4 ? "Très bien 👍" : ratingScore === 3 ? "Correct 😐" : ratingScore === 2 ? "Décevant 😕" : "Mauvais 😞"}
                   </Text>
                 )}
-
-                {/* Commentaire optionnel */}
                 <TextInput
-                  style={[s.ratingInput, {
-                    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(3,83,204,0.15)",
-                    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#F8FAFF",
-                    color: isDark ? TH.dark.text : C.text,
-                  }]}
-                  placeholder="Laissez un commentaire (optionnel)"
-                  placeholderTextColor={isDark ? TH.dark.sub : C.muted}
+                  style={rm.input}
+                  placeholder="Commentaire optionnel…"
+                  placeholderTextColor={C.textMut}
                   value={ratingComment}
                   onChangeText={setRatingComment}
-                  multiline
-                  maxLength={200}
+                  multiline maxLength={200}
                 />
-
-                {/* Boutons */}
-                <TouchableOpacity
-                  style={[s.ratingSubmitBtn, ratingScore === 0 && { opacity: 0.5 }]}
-                  onPress={handleRate}
-                  disabled={ratingScore === 0 || rating}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient colors={[C.deep, C.primary]} style={s.ratingSubmitGrad}>
-                    {rating
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <><Ionicons name="star" size={16} color="#fff" /><Text style={s.ratingSubmitTxt}>Envoyer ma note</Text></>
-                    }
+                <TouchableOpacity style={[rm.submitBtn, ratingScore === 0 && { opacity: 0.5 }]} onPress={handleRate} disabled={ratingScore === 0 || rating} activeOpacity={0.85}>
+                  <LinearGradient colors={[C.blue, C.deep]} style={rm.submitGrad}>
+                    {rating ? <ActivityIndicator size="small" color={C.white} /> : <><Ionicons name="star" size={15} color={C.white} /><Text style={rm.submitText}>Envoyer ma note</Text></>}
                   </LinearGradient>
                 </TouchableOpacity>
-
-                <TouchableOpacity style={s.ratingSkip} onPress={handleSkipRating}>
-                  <Text style={[s.ratingSkipTxt, { color: isDark ? TH.dark.sub : C.muted }]}>Passer cette étape</Text>
+                <TouchableOpacity style={rm.skipBtn} onPress={() => { setShowRating(false); Alert.alert("Paiement effectué ✅", "Merci !"); }}>
+                  <Text style={rm.skipText}>Passer cette étape</Text>
                 </TouchableOpacity>
               </>
             ) : (
-              /* Succès */
-              <View style={s.ratingSuccess}>
-                <View style={s.ratingSuccessIcon}>
-                  <Ionicons name="checkmark-circle" size={56} color={C.green} />
-                </View>
-                <Text style={[s.ratingTitle, { color: isDark ? TH.dark.text : C.text }]}>Merci pour votre avis !</Text>
-                <Text style={[s.ratingSub, { color: isDark ? TH.dark.sub : C.muted, textAlign: "center" }]}>
-                  Votre évaluation aide l'entreprise à garantir la qualité des livraisons.
-                </Text>
-                <View style={s.starsRow}>
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <Ionicons key={star} name={star <= ratingScore ? "star" : "star-outline"} size={28} color={star <= ratingScore ? "#FFD700" : "#D1D5DB"} />
+              <View style={rm.successWrap}>
+                <Ionicons name="checkmark-circle" size={60} color={C.green} />
+                <Text style={rm.title}>Merci pour votre avis !</Text>
+                <Text style={rm.sub}>Votre évaluation aide à améliorer la qualité des livraisons.</Text>
+                <View style={rm.stars}>
+                  {[1,2,3,4,5].map(star => (
+                    <Ionicons key={star} name={star <= ratingScore ? "star" : "star-outline"} size={26} color={star <= ratingScore ? "#F59E0B" : "#D1D5DB"} />
                   ))}
                 </View>
-                <TouchableOpacity
-                  style={[s.ratingSubmitBtn, { marginTop: 16 }]}
-                  onPress={() => { setShowRating(false); }}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient colors={[C.deep, C.primary]} style={s.ratingSubmitGrad}>
-                    <Ionicons name="home-outline" size={16} color="#fff" />
-                    <Text style={s.ratingSubmitTxt}>Retour à l'accueil</Text>
+                <TouchableOpacity style={[rm.submitBtn, { marginTop: 12 }]} onPress={() => setShowRating(false)} activeOpacity={0.85}>
+                  <LinearGradient colors={[C.blue, C.deep]} style={rm.submitGrad}>
+                    <Ionicons name="home-outline" size={15} color={C.white} />
+                    <Text style={rm.submitText}>Retour</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
             )}
-
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root:   { flex: 1 },
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  root:   { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  scroll: { paddingHorizontal: 16, paddingBottom: 60, paddingTop: 12, gap: 12 },
 
-  header: {
-    overflow: "hidden", borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    paddingBottom: 16, elevation: 12,
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16,
-  },
-  deco1: { position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.05)", top: -70, right: -60 },
-  deco2: { position: "absolute", width: 130, height: 130, borderRadius: 65,  backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -30 },
-  topBar:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 8 },
-  iconBtn:     { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  titleWrap:   { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, justifyContent: "center" },
-  titleBadge:  { width: 28, height: 28, borderRadius: 9, backgroundColor: "rgba(255,215,0,0.2)", alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: C.white, fontSize: 14, fontFamily: "NexaLight", letterSpacing: 1.5 },
-  headerSub:   { color: "rgba(255,255,255,0.6)", fontFamily: "NexaLight", fontSize: 11, paddingHorizontal: 20, marginTop: 4, marginBottom: 4 },
+  /* Header */
+  header:      { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  topBar:      { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+  iconBtn:     { width: 40, height: 40, borderRadius: 20, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  headerSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginTop: 1 },
 
-  statusCard:  { borderRadius: 20, borderWidth: 1, padding: 20, alignItems: "center", marginBottom: 14, gap: 8 },
-  statusIcon:  { width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
-  statusLabel: { fontFamily: "NexaLight", fontSize: 18, fontWeight: "700" },
-  statusDesc:  { fontFamily: "NexaLight", fontSize: 13, textAlign: "center" },
-  paidBadge:   { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.green + "15", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
-  paidBadgeText: { fontFamily: "NexaLight", fontSize: 12, fontWeight: "700", color: C.green },
+  /* Status card */
+  statusCard:  { backgroundColor: C.card, borderRadius: 20, borderWidth: 1, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, elevation: 1, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  statusIcon:  { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  statusLabel: { fontFamily: "NexaBold", fontSize: 16 },
+  statusDesc:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginTop: 3, lineHeight: 17 },
+  paidBadge:   { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: C.green + "12", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  paidBadgeText: { fontFamily: "NexaBold", fontSize: 11, color: C.green },
 
-  card:          { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 14 },
-  payCard:       { borderWidth: 1.5 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
-  dot:           { width: 4, height: 16, borderRadius: 2 },
-  sectionTitle:  { fontFamily: "NexaLight", fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase" },
+  /* Card */
+  card:      { backgroundColor: C.card, borderRadius: 20, padding: 18, elevation: 1, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+  cardTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 14 },
 
-  itemRow:   { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8 },
-  itemName:  { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
-  itemQty:   { fontFamily: "NexaLight", fontSize: 12 },
-  itemPrice: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "700", color: C.primary, minWidth: 70, textAlign: "right" },
-  totalRow:  { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, borderTopWidth: 1, marginTop: 4 },
-  totalLabel: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
-  totalVal:   { fontFamily: "NexaLight", fontSize: 16, fontWeight: "700", color: C.primary },
+  /* Items */
+  itemRow:     { flexDirection: "row", alignItems: "center", paddingVertical: 9, gap: 8 },
+  itemDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
+  itemDot:     { width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary + "50" },
+  itemName:    { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+  itemQty:     { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  itemPrice:   { fontFamily: "NexaBold", fontSize: 13, color: C.primary, minWidth: 72, textAlign: "right" },
+  totalRow:    { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, marginTop: 4, borderTopWidth: 1, borderTopColor: C.border },
+  totalLabel:  { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  totalVal:    { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
 
-  addressRow:  { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  addressText: { fontFamily: "NexaLight", fontSize: 13, flex: 1, lineHeight: 19 },
+  /* Address */
+  addrRow:  { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  addrIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  addrText: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text, lineHeight: 19, paddingTop: 6 },
+
+  /* Livreur */
+  livreurRow:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  livreurAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.primary + "10", alignItems: "center", justifyContent: "center" },
+  livreurName:   { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  livreurRating: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  onlineDot:     { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green },
+  onlineText:    { fontFamily: "NexaBold", fontSize: 10, color: C.green },
+  etaRow:        { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.amber + "10", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
+  etaText:       { fontFamily: "NexaBold", fontSize: 12, color: C.amber },
+  livreurBtns:   { flexDirection: "row", gap: 10 },
+  livreurBtn:    { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10 },
+  livreurBtnText:{ fontFamily: "NexaBold", fontSize: 13, color: C.white },
 
   /* Pay button */
-  payBtn:      { borderRadius: 20, overflow: "hidden", marginBottom: 14, elevation: 4, shadowColor: C.green, shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  payBtn:      { borderRadius: 20, overflow: "hidden", elevation: 3, shadowColor: C.green, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   payGrad:     { flexDirection: "row", alignItems: "center", padding: 16, gap: 14 },
   payIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" },
-  payTitle:    { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
-  paySub:      { color: "rgba(255,255,255,0.75)", fontFamily: "NexaLight", fontSize: 12, marginTop: 2 },
+  payTitle:    { fontFamily: "NexaBold", fontSize: 15, color: C.white },
+  paySub:      { fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.80)", marginTop: 2 },
 
   /* PIN */
-  pinHint:   { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", marginBottom: 16 },
-  pinDots:   { flexDirection: "row", justifyContent: "center", gap: 12, marginBottom: 8 },
-  pinDot:    { width: 16, height: 16, borderRadius: 8, borderWidth: 2, backgroundColor: "transparent" },
-  pinError:  { fontFamily: "NexaLight", fontSize: 12, color: C.red, textAlign: "center", marginBottom: 8 },
-  confirmBtn:  { borderRadius: 16, overflow: "hidden", marginTop: 16 },
-  confirmGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
-  confirmText: { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
+  pinHint:    { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, textAlign: "center", marginBottom: 16 },
+  pinDots:    { flexDirection: "row", justifyContent: "center", gap: 12, marginBottom: 8 },
+  pinDot:     { width: 16, height: 16, borderRadius: 8, borderWidth: 2, backgroundColor: "transparent" },
+  pinError:   { fontFamily: "NexaLight", fontSize: 12, color: C.red, textAlign: "center", marginBottom: 8 },
+  confirmBtn: { borderRadius: 16, overflow: "hidden", marginTop: 16 },
+  confirmGrad:{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
+  confirmText:{ fontFamily: "NexaBold", fontSize: 15, color: C.white },
 
-  /* Cancel */
-  cancelBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: C.red + "30", backgroundColor: C.red + "08", marginBottom: 12 },
-  cancelText: { fontFamily: "NexaLight", fontSize: 13, color: C.red, fontWeight: "700" },
-
-  /* Refund */
-  refundCard:  { flexDirection: "row", alignItems: "flex-start", gap: 12, borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12 },
-  refundTitle: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "700", marginBottom: 4 },
-  refundSub:   { fontFamily: "NexaLight", fontSize: 12, lineHeight: 17 },
-  refundCall:  { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
-  refundCallText: { fontFamily: "NexaLight", fontSize: 13, fontWeight: "700", color: C.green },
+  /* Cancel / Refund */
+  cancelBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: C.red + "30", backgroundColor: C.red + "06" },
+  cancelText: { fontFamily: "NexaBold", fontSize: 13, color: C.red },
+  refundCard: { flexDirection: "row", alignItems: "flex-start", gap: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.amber + "30", padding: 14 },
+  refundTitle:{ fontFamily: "NexaBold", fontSize: 13, marginBottom: 4 },
+  refundSub:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 17 },
+  refundCall: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
+  refundCallText: { fontFamily: "NexaBold", fontSize: 13, color: C.green },
 
   /* Support */
-  livreurCard:     { backgroundColor: "#EFF6FF", borderRadius: 16, borderWidth: 1, borderColor: C.primary + "25", padding: 14, marginBottom: 12 },
-  livreurHeader:   { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  livreurIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary + "15", alignItems: "center", justifyContent: "center" },
-  livreurTitle:    { fontFamily: "NexaBold", fontSize: 14 },
-  livreurSub:      { fontFamily: "NexaLight", fontSize: 11, marginTop: 1 },
-  livreurOnline:   { backgroundColor: "#DCFCE7", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  livreurOnlineTxt:{ fontFamily: "NexaBold", fontSize: 10, color: "#16A34A" },
-  livreurRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  livreurInfo:     { fontFamily: "NexaBold", fontSize: 13 },
-  livreurBtns:     { flexDirection: "row", gap: 8 },
-  livreurBtn:      { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#22C55E", borderRadius: 10, paddingVertical: 10 },
-  livreurBtnTxt:   { fontFamily: "NexaBold", fontSize: 12, color: "#fff" },
-  estTimeRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10, backgroundColor: "#FFF7ED", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  estTimeTxt:      { fontFamily: "NexaBold", fontSize: 12, color: "#F97316" },
-  supportBtn:      { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 16, padding: 14, marginTop: 4, marginBottom: 12, borderWidth: 1, borderColor: C.green + "30" },
-  supportIconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.green + "15", alignItems: "center", justifyContent: "center" },
-  supportLabel:    { fontFamily: "NexaLight", fontSize: 11, marginBottom: 2 },
-  supportNum:      { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700", color: C.green, letterSpacing: 0.3 },
+  supportBtn:  { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
+  supportIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  supportLabel:{ fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginBottom: 2 },
+  supportNum:  { fontFamily: "NexaBold", fontSize: 14, color: C.green },
 
-  homeBtn:     { borderRadius: 18, overflow: "hidden", marginTop: 4 },
-  homeBtnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  homeBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 15, fontWeight: "700" },
+  /* Home button */
+  homeBtn:  { borderRadius: 20, overflow: "hidden", elevation: 3, shadowColor: C.blue, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  homeGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
+  homeText: { fontFamily: "NexaBold", fontSize: 15, color: C.white },
+}); }
 
-  /* Rating modal */
-  ratingOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  ratingSheet:   { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36 },
-  ratingHeader:  { alignItems: "center", marginBottom: 20 },
-  ratingAvatarWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primary + "15", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  ratingTitle:   { fontFamily: "NexaLight", fontSize: 18, fontWeight: "700", marginBottom: 4 },
-  ratingSub:     { fontFamily: "NexaLight", fontSize: 12, textAlign: "center", lineHeight: 18 },
-  starsRow:      { flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 12 },
-  ratingScoreLabel: { fontFamily: "NexaLight", fontSize: 14, fontWeight: "700", textAlign: "center", marginBottom: 14 },
-  ratingInput:   { borderWidth: 1.5, borderRadius: 14, padding: 12, fontFamily: "NexaLight", fontSize: 13, minHeight: 70, marginBottom: 16 },
-  ratingSubmitBtn:  { borderRadius: 16, overflow: "hidden" },
-  ratingSubmitGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15 },
-  ratingSubmitTxt:  { color: "#fff", fontFamily: "NexaLight", fontSize: 14, fontWeight: "700" },
-  ratingSkip:    { alignItems: "center", paddingVertical: 14 },
-  ratingSkipTxt: { fontFamily: "NexaLight", fontSize: 13 },
-  ratingSuccess: { alignItems: "center", paddingVertical: 8, gap: 10 },
-  ratingSuccessIcon: { marginBottom: 8 },
-});
+/* ─── TIMELINE STYLES ─────────────────────────────────────────────────── */
+function mkTl(C: typeof LIGHT) { return StyleSheet.create({
+  wrap:         { gap: 0 },
+  stepRow:      { flexDirection: "row", alignItems: "flex-start", paddingBottom: 20 },
+  line:         { position: "absolute", left: 17, top: 36, width: 2, height: "100%", zIndex: -1 },
+  circle:       { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: "center", justifyContent: "center", marginRight: 12, zIndex: 1 },
+  stepInfo:     { flex: 1, paddingTop: 6 },
+  stepLabel:    { fontSize: 13 },
+  stepDesc:     { fontFamily: "NexaLight", fontSize: 11, color: C.textSec, marginTop: 3, lineHeight: 16 },
+  cancelledBox: { alignItems: "center", gap: 10, paddingVertical: 8 },
+  cancelIcon:   { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
+  cancelTitle:  { fontFamily: "NexaBold", fontSize: 16 },
+  cancelDesc:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, textAlign: "center" },
+}); }
 
-const tl = StyleSheet.create({
-  wrap:    { gap: 0 },
-  stepRow: { flexDirection: "row", alignItems: "flex-start", position: "relative", paddingBottom: 20 },
-  line:    { position: "absolute", left: 17, top: 34, width: 2, height: "100%", backgroundColor: "rgba(3,83,204,0.12)", zIndex: -1 },
-  circle:  { width: 36, height: 36, borderRadius: 18, borderWidth: 2, justifyContent: "center", alignItems: "center", marginRight: 12, zIndex: 1 },
-  pulse:   { position: "absolute", width: 48, height: 48, borderRadius: 24, borderWidth: 2, opacity: 0.3 },
-  stepInfo:  { flex: 1, paddingTop: 6 },
-  stepLabel: { fontFamily: "NexaLight", fontSize: 13 },
-  stepDesc:  { fontFamily: "NexaLight", fontSize: 11, marginTop: 2, lineHeight: 16 },
-  cancelled: { borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center", gap: 8 },
-  cancelTitle: { fontFamily: "NexaLight", fontSize: 16, fontWeight: "700" },
-  cancelDesc:  { fontFamily: "NexaLight", fontSize: 12, color: C.muted, textAlign: "center" },
-});
-
-const pp = StyleSheet.create({
+/* ─── PIN PAD STYLES ─────────────────────────────────────────────────── */
+function mkPp(C: typeof LIGHT) { return StyleSheet.create({
   grid:    { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
   key:     { width: "33.33%", alignItems: "center", justifyContent: "center", paddingVertical: 16 },
-  keyText: { fontFamily: "NexaLight", fontSize: 22, fontWeight: "700", color: C.text },
-});
+  keyText: { fontFamily: "NexaBold", fontSize: 22, color: C.text },
+}); }
+
+/* ─── RATING MODAL STYLES ─────────────────────────────────────────────── */
+function mkRm(C: typeof LIGHT) { return StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.48)", justifyContent: "flex-end" },
+  sheet:       { backgroundColor: C.card, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, paddingBottom: 40, alignItems: "center" },
+  handle:      { width: 40, height: 4, borderRadius: 2, backgroundColor: "#D1D5DB", alignSelf: "center", marginBottom: 20 },
+  avatarWrap:  { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primary + "10", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  title:       { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 4, textAlign: "center" },
+  sub:         { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, textAlign: "center", marginBottom: 16, lineHeight: 18 },
+  stars:       { flexDirection: "row", gap: 8, marginBottom: 10 },
+  scoreLabel:  { fontFamily: "NexaBold", fontSize: 14, marginBottom: 14 },
+  input:       { width: "100%", borderWidth: 1.5, borderColor: C.border, borderRadius: 14, padding: 12, fontFamily: "NexaLight", fontSize: 13, minHeight: 70, marginBottom: 16, color: C.text },
+  submitBtn:   { borderRadius: 16, overflow: "hidden", width: "100%" },
+  submitGrad:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15 },
+  submitText:  { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+  skipBtn:     { paddingVertical: 14 },
+  skipText:    { fontFamily: "NexaLight", fontSize: 13, color: C.textMut },
+  successWrap: { alignItems: "center", gap: 10, paddingVertical: 8, width: "100%" },
+}); }

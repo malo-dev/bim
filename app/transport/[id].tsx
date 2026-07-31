@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
+import { useAppTheme } from "@/app/_layout";
 import {
     FlatList,
     StyleSheet,
@@ -18,7 +19,7 @@ const transports = [
 ];
 
 export default function TransportPage() {
-
+  const { isDark } = useAppTheme();
   const [showPopup, setShowPopup] = useState(true);
 
   // Popup s'ouvre automatiquement
@@ -27,7 +28,7 @@ export default function TransportPage() {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDark ? "#0B1220" : "#F5F6FA" }]}>
 
       {/* HEADER */}
       <LinearGradient colors={["#302E99", "#3906C7"]} style={styles.header}>
@@ -54,9 +55,9 @@ export default function TransportPage() {
 
       {/* POPUP AUTOMATIQUE */}
       <Modal isVisible={showPopup}>
-        <View style={styles.popupBox}>
+        <View style={[styles.popupBox, { backgroundColor: isDark ? "#1A2540" : "white" }]}>
 
-          <Text style={styles.popupTitle}>
+          <Text style={[styles.popupTitle, { color: isDark ? "#EAF0FF" : "#1A1C1C" }]}>
             Que voulez-vous faire ?
           </Text>
 

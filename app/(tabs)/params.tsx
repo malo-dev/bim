@@ -1,13 +1,7 @@
-import { ArrowIcon, ArrowRightIcon } from "@/assets/svg/ArrowIcon";
-import GradientButton from "@/components/ui/GradientButton";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import {
   Alert,
   Animated,
-  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -20,165 +14,125 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLogOutMutation } from "@/services/authService";
 import { useDeleteAccountMutation } from "@/services/userService";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Colors } from "@/constants/theme";
 import { useAppTheme } from "@/app/_layout";
+import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useTranslation } from "react-i18next";
 import { changeLanguage } from "@/i18n";
 
-/* ─── PALETTE BRAND (fixe) ───────────────────────────────────────────── */
-const B = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  gold:    "#FFD700",
-  white:   "#FFFFFF",
-  red:     "#EF4444",
+/* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const LIGHT = {
+  primary:    "#0035C5",
+  bg:         "#F9F9F9",
+  surface:    "#FFFFFF",
+  outline:    "#747688",
+  secondary:  "#5C5E63",
+  onSurface:  "#1A1C1C",
+  outlineVar: "#C4C5DA",
+  error:      "#BA1A1A",
+  errCont:    "#FFDAD6",
+  errOnCont:  "#93000A",
+  container:  "#EEEEEE",
+};
+const DARK = {
+  primary:    "#4D8DFF",
+  bg:         "#0B1220",
+  surface:    "#1A2540",
+  outline:    "#6B7A99",
+  secondary:  "#A3B4D0",
+  onSurface:  "#EAF0FF",
+  outlineVar: "rgba(31,42,68,0.80)",
+  error:      "#DC2626",
+  errCont:    "#3D1010",
+  errOnCont:  "#FFAAAA",
+  container:  "#0F1A2E",
 };
 
+
 const LANGUAGES = [
-  { code: "fr", label: "🇫🇷 Français"  },
-  { code: "en", label: "🇬🇧 English"   },
-  { code: "ln", label: "🇨🇩 Lingala"   },
-  { code: "sw", label: "🇹🇿 Swahili"   },
+  { code: "fr", label: "🇫🇷 Français" },
+  { code: "en", label: "🇬🇧 English" },
+  { code: "ln", label: "🇨🇩 Lingala" },
+  { code: "sw", label: "🇹🇿 Swahili" },
 ];
 
 /* ─── SECTION LABEL ──────────────────────────────────────────────────── */
-function SectionLabel({ title, icon }: { title: string; icon: string }) {
+function SectionLabel({
+  icon, title, danger = false, colors,
+}: { icon: string; title: string; danger?: boolean; colors: typeof LIGHT }) {
+  const col = danger ? colors.error : colors.primary;
+  const textCol = danger ? colors.error : colors.outline;
   return (
     <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color="rgba(255,255,255,0.7)" />
-      <Text style={sl.text}>{title}</Text>
+      <Ionicons name={icon as any} size={14} color={col} />
+      <Text style={[sl.text, { color: textCol }]}>{title}</Text>
     </View>
   );
 }
 
-/* ─── MENU ITEM ──────────────────────────────────────────────────────── */
-function MenuItem({
-  item, onPress, isLast, isDark, theme,
-}: {
-  item: { id: string; title: string; icon: string; route: string };
-  onPress: () => void;
-  isLast: boolean; isDark: boolean; theme: any;
-}) {
-  const scale    = useRef(new Animated.Value(1)).current;
-  const pressIn  = () => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start();
-
+/* ─── MENU ROW ────────────────────────────────────────────────────────── */
+function MenuRow({
+  icon, label, isLast, onPress, colors,
+}: { icon: string; label: string; isLast: boolean; onPress: () => void; colors: typeof LIGHT }) {
+  const scale = useRef(new Animated.Value(1)).current;
   return (
-    <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={onPress}>
-      <Animated.View style={[
-        ms.row,
-        !isLast && { borderBottomWidth: 1, borderBottomColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.10)" },
-        { transform: [{ scale }] },
-      ]}>
-        <View style={[ms.iconWrap, {
-          backgroundColor: isDark ? "rgba(77,150,255,0.12)" : "rgba(3,83,204,0.06)",
-        }]}>
-          <Ionicons name={item.icon as any} size={18} color={isDark ? "#93C5FD" : B.primary} />
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
+      onPress={onPress}
+    >
+      <Animated.View style={[mr.row, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.outlineVar + "40" }, { transform: [{ scale }] }]}>
+        <View style={[mr.iconBox, { backgroundColor: colors.primary + "12" }]}>
+          <Ionicons name={icon as any} size={20} color={colors.primary} />
         </View>
-        <Text style={[ms.title, { color: isDark ? theme.text : "#0D1B3E" }]}>
-          {item.title}
-        </Text>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? theme.textSecondary : "#7B8DB0"} />
+        <Text style={[mr.label, { color: colors.onSurface }]}>{label}</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.outline} />
       </Animated.View>
     </TouchableOpacity>
   );
 }
 
-/* ─── FAQ ITEM ───────────────────────────────────────────────────────── */
-function FaqItem({
-  item, index, total, active, onToggle, isDark, theme,
-}: {
-  item: { q: string; a: string }; index: number; total: number; active: boolean;
-  onToggle: () => void; isDark: boolean; theme: any;
-}) {
-  return (
-    <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
-      <View style={[
-        fs.item,
-        index < total - 1 && {
-          borderBottomWidth: 1,
-          borderBottomColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.10)",
-        },
-      ]}>
-        <View style={fs.row}>
-          <View style={[fs.qIcon, {
-            backgroundColor: isDark ? "rgba(77,150,255,0.15)" : B.primary + "15",
-          }]}>
-            <Text style={[fs.qLetter, { color: isDark ? "#93C5FD" : B.primary }]}>Q</Text>
-          </View>
-          <Text style={[fs.question, { color: isDark ? theme.text : "#0D1B3E" }]} numberOfLines={active ? undefined : 2}>
-            {item.q}
-          </Text>
-          <Ionicons
-            name={active ? "chevron-up" : "chevron-down"}
-            size={16}
-            color={isDark ? theme.textSecondary : "#7B8DB0"}
-          />
-        </View>
-        {active && (
-          <View style={[fs.answerBox, {
-            backgroundColor: isDark ? "rgba(30,42,60,0.80)" : "rgba(3,83,204,0.06)",
-            borderLeftColor: isDark ? "#4D96FF" : B.primary,
-          }]}>
-            <Text style={[fs.answer, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
-              {item.a}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-/* ─── MAIN SCREEN ────────────────────────────────────────────────────── */
+/* ─── MAIN ────────────────────────────────────────────────────────────── */
 export default function Params() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isDark, followSystem, toggleTheme, setFollowSystem } = useAppTheme();
-  const theme = isDark ? Colors.dark : Colors.light;
+  const { followSystem, isDark, toggleTheme, setFollowSystem } = useAppTheme();
+  const { unread } = useUnreadNotifications();
   const { t, i18n } = useTranslation();
-  const [logOut,         { isLoading }]          = useLogOutMutation();
-  const [deleteAccount,  { isLoading: isDeleting }] = useDeleteAccountMutation();
+  const C = isDark ? DARK : LIGHT;
+  const s  = useMemo(() => mkS(C), [isDark]);
+  const m  = useMemo(() => mkM(C), [isDark]);
+  const dm = useMemo(() => mkDm(C), [isDark]);
 
-  const [langModalVisible,   setLangModalVisible]   = useState(false);
-  const [activeFaq,          setActiveFaq]           = useState<number | null>(null);
-  const [deleteModalVisible, setDeleteModalVisible]  = useState(false);
-  const [deletePassword,     setDeletePassword]      = useState("");
-  const [showDeletePwd,      setShowDeletePwd]       = useState(false);
+  const [logOut,        { isLoading }]           = useLogOutMutation();
+  const [deleteAccount, { isLoading: isDeleting }] = useDeleteAccountMutation();
+
+  const [langModal,   setLangModal]   = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deletePwd,   setDeletePwd]   = useState("");
+  const [showPwd,     setShowPwd]     = useState(false);
 
   const currentLang = i18n.language ?? "fr";
   const currentLangLabel = LANGUAGES.find(l => l.code === currentLang)?.label ?? "🇫🇷 Français";
 
-  const MENU_ITEMS = [
-    { id: "profile",       title: t("params.profile"),       icon: "person-outline",            route: "/profile"      },
-    { id: "notifications", title: t("params.notifications"), icon: "notifications-outline",      route: "/notification" },
-    { id: "history",       title: t("params.history"),       icon: "time-outline",               route: "/scan"         },
-    { id: "support",       title: t("params.support"),       icon: "help-circle-outline",        route: "/support"      },
-    { id: "terms",         title: t("params.terms"),         icon: "document-text-outline",      route: "/terms"        },
-    { id: "about",         title: t("params.about"),         icon: "information-circle-outline", route: "/apropos"      },
+  const NAV = [
+    { id: "profile",       icon: "person-outline",            label: t("params.profile"),       route: "/profile"      },
+    { id: "notifications", icon: "notifications-outline",     label: t("params.notifications"), route: "/notification" },
+    { id: "favorites",     icon: "heart-outline",             label: "Mes Favoris",             route: "/favorites"    },
+    { id: "history",       icon: "time-outline",              label: t("params.history"),       route: "/history"      },
+    { id: "support",       icon: "help-circle-outline",       label: t("params.support"),       route: "/support"      },
+    { id: "faq",           icon: "help-buoy-outline",         label: t("params.faq"),           route: "/faqs"         },
+    { id: "about",         icon: "information-circle-outline",label: t("params.about"),         route: "/apropos"      },
   ];
 
-  const FAQS = [
-    { q: t("params.faq1q"), a: t("params.faq1a") },
-    { q: t("params.faq2q"), a: t("params.faq2a") },
-    { q: t("params.faq3q"), a: t("params.faq3a") },
-  ];
-
-  const toggleFaq = (i: number) => {
-    LayoutAnimation.easeInEaseOut();
-    setActiveFaq(activeFaq === i ? null : i);
-  };
-
-  const handleSelectLanguage = async (code: string) => {
-    setLangModalVisible(false);
-    await changeLanguage(code);
-  };
-
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert(
       t("params.logoutTitle"),
       t("params.logoutMsg"),
@@ -189,12 +143,10 @@ export default function Params() {
           onPress: async () => {
             try {
               const email = await AsyncStorage.getItem("email");
-              const res   = await logOut({ email: String(email) });
-              if (res) {
-                await AsyncStorage.clear();
-                if (email) await AsyncStorage.setItem("email", email);
-                router.replace("/login");
-              }
+              await logOut({ email: String(email) });
+              await AsyncStorage.clear();
+              if (email) await AsyncStorage.setItem("email", email);
+              router.replace("/login");
             } catch (err: any) {
               Alert.alert(err?.data?.error || t("common.error"));
             }
@@ -205,14 +157,14 @@ export default function Params() {
   };
 
   const handleDeleteAccount = async () => {
-    if (!deletePassword.trim()) {
+    if (!deletePwd.trim()) {
       Alert.alert(t("common.error"), t("params.deleteAccountPwdPlaceholder"));
       return;
     }
     try {
-      await deleteAccount({ password: deletePassword }).unwrap();
-      setDeleteModalVisible(false);
-      setDeletePassword("");
+      await deleteAccount({ password: deletePwd }).unwrap();
+      setDeleteModal(false);
+      setDeletePwd("");
       await AsyncStorage.clear();
       router.replace("/login");
     } catch (err: any) {
@@ -220,50 +172,47 @@ export default function Params() {
     }
   };
 
-  const headerGradient: [string, string] = isDark
-    ? ["#1A1F3A", "#0A1628"]
-    : [B.deep, B.primary];
-
-  const cardBg       = isDark ? theme.card    : "#FFFFFF";
-  const dividerColor = isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.10)";
+  const HEADER_H = (Platform.OS === "ios" ? insets.top : StatusBar.currentHeight ?? 0) + 64;
 
   return (
-    <View style={[s.root, { backgroundColor: isDark ? theme.background : B.primary }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={[s.root, { backgroundColor: C.bg }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
 
-      {/* ── LANGUAGE PICKER MODAL ── */}
-      <Modal
-        visible={langModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLangModalVisible(false)}
-      >
-        <Pressable style={s.modalOverlay} onPress={() => setLangModalVisible(false)}>
-          <Pressable style={[s.modalBox, { backgroundColor: isDark ? "#1A2340" : "#FFFFFF" }]}>
-            <Text style={[s.modalTitle, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}>
-              {t("language.select")}
-            </Text>
-            {LANGUAGES.map((lang) => {
-              const isSelected = lang.code === currentLang;
+      {/* ── FIXED TOP BAR ── */}
+      <View style={[s.topBar, { backgroundColor: C.surface, paddingTop: Platform.OS === "ios" ? insets.top : (StatusBar.currentHeight ?? 0) + 8 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={s.topSide}>
+          <Ionicons name="arrow-back" size={22} color={C.onSurface} />
+        </TouchableOpacity>
+
+        <Text style={[s.topTitle, { color: C.onSurface }]}>Paramètres</Text>
+
+        <TouchableOpacity onPress={() => router.push("/notification")} style={s.topSide}>
+          <View style={{ position: "relative" }}>
+            <Ionicons name="notifications-outline" size={22} color={C.onSurface} />
+            {unread > 0 && (
+              <View style={[s.notifBadge, { backgroundColor: "#DC0302" }]}>
+                <Text style={s.notifBadgeText}>{unread > 99 ? "99+" : unread}</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── LANGUAGE MODAL ── */}
+      <Modal visible={langModal} transparent animationType="fade" onRequestClose={() => setLangModal(false)}>
+        <Pressable style={m.overlay} onPress={() => setLangModal(false)}>
+          <Pressable style={m.box}>
+            <Text style={m.title}>{t("language.select")}</Text>
+            {LANGUAGES.map(lang => {
+              const sel = lang.code === currentLang;
               return (
                 <TouchableOpacity
                   key={lang.code}
-                  style={[s.langOption, {
-                    backgroundColor: isSelected
-                      ? (isDark ? "rgba(77,150,255,0.15)" : "rgba(3,83,204,0.08)")
-                      : "transparent",
-                    borderColor: isSelected
-                      ? (isDark ? "#4D96FF" : B.primary)
-                      : (isDark ? "rgba(77,150,255,0.12)" : "rgba(3,83,204,0.10)"),
-                  }]}
-                  onPress={() => handleSelectLanguage(lang.code)}
+                  style={[m.option, sel && m.optionSel]}
+                  onPress={async () => { setLangModal(false); await changeLanguage(lang.code); }}
                 >
-                  <Text style={[s.langOptionText, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}>
-                    {lang.label}
-                  </Text>
-                  {isSelected && (
-                    <Ionicons name="checkmark-circle" size={18} color={isDark ? "#4D96FF" : B.primary} />
-                  )}
+                  <Text style={m.optionText}>{lang.label}</Text>
+                  {sel && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
                 </TouchableOpacity>
               );
             })}
@@ -271,76 +220,56 @@ export default function Params() {
         </Pressable>
       </Modal>
 
-      {/* ── DELETE ACCOUNT MODAL ── */}
-      <Modal
-        visible={deleteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setDeleteModalVisible(false); setDeletePassword(""); }}
-      >
-        <Pressable style={s.modalOverlay} onPress={() => { setDeleteModalVisible(false); setDeletePassword(""); }}>
-          <Pressable style={[s.modalBox, { backgroundColor: isDark ? "#1A2340" : "#FFFFFF" }]}>
+      {/* ── DELETE MODAL ── */}
+      <Modal visible={deleteModal} transparent animationType="slide"
+        onRequestClose={() => { setDeleteModal(false); setDeletePwd(""); }}>
+        <Pressable style={dm.overlay} onPress={() => { setDeleteModal(false); setDeletePwd(""); }}>
+          <Pressable style={dm.sheet}>
 
-            {/* Icône danger */}
+            {/* Poignée */}
+            <View style={dm.handle} />
+
+            {/* Icône */}
             <View style={dm.iconWrap}>
-              <Ionicons name="warning" size={32} color="#EF4444" />
+              <Ionicons name="trash" size={26} color={C.error} />
             </View>
 
-            <Text style={[s.modalTitle, { color: "#EF4444" }]}>
-              {t("params.deleteAccountTitle")}
-            </Text>
+            {/* Titre */}
+            <Text style={dm.title}>Supprimer le compte</Text>
 
-            <Text style={[dm.warning, { color: isDark ? "#CBD5E1" : "#475569" }]}>
-              {t("params.deleteAccountMsg")}
-            </Text>
-
-            <Text style={[dm.danger, { color: isDark ? "#FCA5A5" : "#DC2626" }]}>
-              {t("params.deleteAccountWarning")}
+            {/* Message */}
+            <Text style={dm.msg}>
+              Entrez votre mot de passe pour confirmer. Cette action est <Text style={dm.bold}>irréversible</Text>.
             </Text>
 
             {/* Champ mot de passe */}
-            <View style={[dm.inputRow, {
-              backgroundColor: isDark ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.05)",
-              borderColor:     isDark ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.20)",
-            }]}>
-              <Ionicons name="lock-closed-outline" size={16} color="#EF4444" style={{ marginRight: 8 }} />
+            <View style={dm.inputRow}>
+              <Ionicons name="lock-closed-outline" size={16} color={C.outline} />
               <TextInput
-                style={[dm.input, { color: isDark ? "#FFFFFF" : "#0D1B3E" }]}
-                placeholder={t("params.deleteAccountPwdPlaceholder")}
-                placeholderTextColor={isDark ? "rgba(255,255,255,0.35)" : "rgba(13,27,62,0.35)"}
-                secureTextEntry={!showDeletePwd}
-                value={deletePassword}
-                onChangeText={setDeletePassword}
+                style={dm.input}
+                placeholder="Mot de passe"
+                placeholderTextColor={C.outline}
+                secureTextEntry={!showPwd}
+                value={deletePwd}
+                onChangeText={setDeletePwd}
                 autoCapitalize="none"
               />
-              <TouchableOpacity onPress={() => setShowDeletePwd(v => !v)}>
-                <Ionicons
-                  name={showDeletePwd ? "eye-off-outline" : "eye-outline"}
-                  size={16}
-                  color={isDark ? "rgba(255,255,255,0.4)" : "rgba(13,27,62,0.4)"}
-                />
+              <TouchableOpacity onPress={() => setShowPwd(v => !v)}>
+                <Ionicons name={showPwd ? "eye-off-outline" : "eye-outline"} size={16} color={C.outline} />
               </TouchableOpacity>
             </View>
 
             {/* Boutons */}
             <View style={dm.btnRow}>
-              <TouchableOpacity
-                style={[dm.btnCancel, { borderColor: isDark ? "rgba(77,150,255,0.25)" : "rgba(3,83,204,0.15)" }]}
-                onPress={() => { setDeleteModalVisible(false); setDeletePassword(""); }}
-              >
-                <Text style={[dm.btnCancelText, { color: isDark ? "#93C5FD" : B.primary }]}>
-                  {t("common.cancel")}
-                </Text>
+              <TouchableOpacity style={dm.btnCancel}
+                onPress={() => { setDeleteModal(false); setDeletePwd(""); }}>
+                <Text style={dm.btnCancelTxt}>Annuler</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[dm.btnDelete, isDeleting && { opacity: 0.6 }]}
-                onPress={handleDeleteAccount}
-                disabled={isDeleting}
-              >
+              <TouchableOpacity style={[dm.btnDelete, isDeleting && { opacity: 0.6 }]}
+                onPress={handleDeleteAccount} disabled={isDeleting}>
                 {isDeleting
-                  ? <Ionicons name="hourglass-outline" size={16} color="#FFFFFF" />
-                  : <Text style={dm.btnDeleteText}>{t("params.deleteAccountConfirm")}</Text>
+                  ? <Ionicons name="hourglass-outline" size={16} color="#fff" />
+                  : <Text style={dm.btnDeleteTxt}>Supprimer</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -349,436 +278,257 @@ export default function Params() {
         </Pressable>
       </Modal>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
-
-        {/* ── HEADER ── */}
-        <View style={[s.header, { shadowColor: isDark ? "#000" : B.primary }]}>
-          <LinearGradient
-            colors={headerGradient}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[s.deco1, {
-            backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(255,255,255,0.06)",
-            borderWidth: isDark ? 1 : 0,
-            borderColor: "rgba(77,150,255,0.15)",
-          }]} />
-          <View style={[s.deco2, {
-            backgroundColor: isDark ? "rgba(57,6,199,0.18)" : "rgba(255,255,255,0.04)",
-          }]} />
-
-          <View style={s.topBar}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={22} color={B.white} />
-            </TouchableOpacity>
-            <Text style={s.headerTitle}>{t("params.title")}</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <Text style={s.headerSub}>{t("params.subtitle")}</Text>
+      {/* ── SCROLL ── */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[s.scroll, { paddingTop: HEADER_H + 8 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Page header */}
+        <View style={s.pageHeader}>
+          <Text style={[s.pageSub, { color: C.secondary }]}>{t("params.subtitle")}</Text>
         </View>
 
-        {/* ── PREFERENCES CARD ── */}
+        {/* ── PRÉFÉRENCES ── */}
         <View style={s.section}>
-          <SectionLabel title={t("params.preferences")} icon="settings-outline" />
-
-          <View style={[s.card, {
-            backgroundColor: cardBg,
-            borderWidth: isDark ? 1 : 0,
-            borderColor: "rgba(77,150,255,0.15)",
-          }]}>
+          <SectionLabel icon="settings-outline" title={t("params.preferences")} colors={C} />
+          <View style={[s.card, { backgroundColor: C.surface }]}>
             {/* Langue */}
-            <View style={s.prefRow}>
+            <View style={[s.prefRow]}>
               <View style={s.prefLeft}>
-                <View style={[s.prefIcon, {
-                  backgroundColor: isDark ? "rgba(77,150,255,0.15)" : B.primary + "15",
-                }]}>
-                  <Ionicons name="language-outline" size={16} color={isDark ? "#93C5FD" : B.primary} />
+                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
+                  <Ionicons name="language-outline" size={20} color={C.primary} />
                 </View>
-                <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
-                  {t("params.language")}
-                </Text>
+                <Text style={[s.prefLabel, { color: C.onSurface }]}>{t("params.language")}</Text>
               </View>
-              <TouchableOpacity
-                style={[s.langBtn, {
-                  backgroundColor: isDark ? "rgba(77,150,255,0.10)" : "rgba(3,83,204,0.06)",
-                  borderColor:     isDark ? "rgba(77,150,255,0.20)" : "rgba(3,83,204,0.10)",
-                }]}
-                onPress={() => setLangModalVisible(true)}
-              >
-                <Ionicons name="globe-outline" size={13} color={isDark ? "#93C5FD" : B.primary} />
-                <Text style={[s.langText, { color: isDark ? "#93C5FD" : B.primary }]}>
-                  {currentLangLabel}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={isDark ? "#93C5FD" : B.primary} />
+              <TouchableOpacity style={[s.langPill, { borderColor: C.outlineVar, backgroundColor: C.surface }]} onPress={() => setLangModal(true)}>
+                <Text style={[s.langPillText, { color: C.onSurface }]}>{currentLangLabel}</Text>
+                <Ionicons name="chevron-down" size={15} color={C.outline} />
               </TouchableOpacity>
             </View>
 
-            <View style={[s.divider, { backgroundColor: dividerColor }]} />
+            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
 
-            {/* Suivre le thème du système */}
+            {/* Thème système */}
             <View style={s.prefRow}>
               <View style={s.prefLeft}>
-                <View style={[s.prefIcon, {
-                  backgroundColor: isDark ? "rgba(6,182,212,0.18)" : "#06B6D415",
-                }]}>
-                  <Ionicons
-                    name="phone-portrait-outline"
-                    size={16}
-                    color="#06B6D4"
-                  />
+                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
+                  <Ionicons name="phone-portrait-outline" size={20} color={C.primary} />
                 </View>
                 <View>
-                  <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
-                    {t("params.followSystem")}
-                  </Text>
-                  <Text style={[s.prefSub, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
-                    {followSystem ? t("params.followSystemOn") : t("params.followSystemOff")}
-                  </Text>
+                  <Text style={[s.prefLabel, { color: C.onSurface }]}>{t("params.followSystem")}</Text>
+                  <Text style={[s.prefSub, { color: C.outline }]}>{t("params.followSystemOn")}</Text>
                 </View>
               </View>
               <Switch
                 value={followSystem}
                 onValueChange={setFollowSystem}
-                trackColor={{ false: "rgba(6,182,212,0.20)", true: "#06B6D4" }}
-                thumbColor={followSystem ? "#FFFFFF" : "#06B6D4"}
-                ios_backgroundColor="rgba(6,182,212,0.20)"
+                trackColor={{ false: C.container, true: C.primary }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor={C.container}
               />
             </View>
 
-            <View style={[s.divider, { backgroundColor: dividerColor }]} />
+            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
 
-            {/* Mode sombre — Switch (désactivé si followSystem actif) */}
-            <View style={[s.prefRow, followSystem && { opacity: 0.4 }]}>
+            {/* Mode sombre */}
+            <View style={[s.prefRow, followSystem && { opacity: 0.45 }]}>
               <View style={s.prefLeft}>
-                <View style={[s.prefIcon, {
-                  backgroundColor: isDark ? "rgba(139,92,246,0.18)" : "#8B5CF615",
-                }]}>
-                  <Ionicons
-                    name={isDark ? "moon" : "sunny-outline"}
-                    size={16}
-                    color="#8B5CF6"
-                  />
+                <View style={[s.prefIcon, { backgroundColor: C.container }]}>
+                  <Ionicons name={isDark ? "moon" : "sunny-outline"} size={20} color={C.secondary} />
                 </View>
                 <View>
-                  <Text style={[s.prefLabel, { color: isDark ? theme.text : "#0D1B3E" }]}>
-                    {t("params.darkMode")}
-                  </Text>
-                  {followSystem && (
-                    <Text style={[s.prefSub, { color: isDark ? theme.textSecondary : "#7B8DB0" }]}>
-                      {t("params.darkModeAuto")}
-                    </Text>
-                  )}
+                  <Text style={[s.prefLabel, { color: C.secondary }]}>{t("params.darkMode")}</Text>
+                  <Text style={[s.prefSub, { color: C.outline }]}>{t("params.darkModeAuto")}</Text>
                 </View>
               </View>
               <Switch
                 value={isDark}
                 onValueChange={followSystem ? undefined : toggleTheme}
                 disabled={followSystem}
-                trackColor={{ false: "rgba(139,92,246,0.20)", true: "#8B5CF6" }}
-                thumbColor={isDark ? "#FFFFFF" : "#8B5CF6"}
-                ios_backgroundColor="rgba(139,92,246,0.20)"
+                trackColor={{ false: C.container, true: C.secondary }}
+                thumbColor={followSystem ? "rgba(255,255,255,0.5)" : "#FFFFFF"}
+                ios_backgroundColor={C.container}
               />
             </View>
-
           </View>
         </View>
 
-        {/* ── MENU ── */}
+        {/* ── NAVIGATION ── */}
         <View style={s.section}>
-          <SectionLabel title={t("params.navigation")} icon="grid-outline" />
-          <View style={[s.card, {
-            backgroundColor: cardBg,
-            borderWidth: isDark ? 1 : 0,
-            borderColor: "rgba(77,150,255,0.15)",
-          }]}>
-            {MENU_ITEMS.map((item, i) => (
-              <MenuItem
+          <SectionLabel icon="grid-outline" title={t("params.navigation")} colors={C} />
+          <View style={[s.card, { backgroundColor: C.surface }]}>
+            {NAV.map((item, i) => (
+              <MenuRow
                 key={item.id}
-                item={item}
-                isLast={i === MENU_ITEMS.length - 1}
-                isDark={isDark}
-                theme={theme}
+                icon={item.icon}
+                label={item.label}
+                isLast={i === NAV.length - 1}
                 onPress={() => router.push(item.route as any)}
+                colors={C}
               />
             ))}
           </View>
         </View>
 
-        {/* ── FAQ ── */}
+        {/* ── ZONE DE DANGER ── */}
         <View style={s.section}>
-          <SectionLabel title={t("params.faq")} icon="help-buoy-outline" />
-          <View style={[s.card, {
-            backgroundColor: cardBg,
-            borderWidth: isDark ? 1 : 0,
-            borderColor: "rgba(77,150,255,0.15)",
-          }]}>
-            {FAQS.map((item, i) => (
-              <FaqItem
-                key={i}
-                item={item}
-                index={i}
-                total={FAQS.length}
-                active={activeFaq === i}
-                onToggle={() => toggleFaq(i)}
-                isDark={isDark}
-                theme={theme}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* ── DANGER ZONE ── */}
-        <View style={s.section}>
-          <SectionLabel title={t("params.deleteAccountSection")} icon="warning-outline" />
-          <View style={[
-            s.card,
-            isDark
-              ? { backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.28)" }
-              : { backgroundColor: "#FFF5F5",              borderWidth: 1, borderColor: "#FECACA" },
-          ]}>
-            <TouchableOpacity
-              style={dm.dangerRow}
-              onPress={() => setDeleteModalVisible(true)}
-              activeOpacity={0.75}
-            >
-              {/* Icône avec fond rouge visible en light ET dark */}
-              <View style={[
-                dm.dangerIconWrap,
-                isDark
-                  ? { backgroundColor: "rgba(239,68,68,0.18)" }
-                  : { backgroundColor: "#FEE2E2" },
-              ]}>
-                <Ionicons name="trash-outline" size={18} color="#EF4444" />
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={[dm.dangerTitle, { color: isDark ? "#FCA5A5" : "#DC2626" }]}>
-                  {t("params.deleteAccount")}
-                </Text>
-                <Text style={[dm.dangerSub, { color: isDark ? "#FDA4AF" : "#EF4444" }]}>
-                  {t("params.deleteAccountWarning")}
-                </Text>
-              </View>
-
-              <View style={[
-                dm.dangerArrow,
-                isDark
-                  ? { backgroundColor: "rgba(239,68,68,0.15)" }
-                  : { backgroundColor: "#FEE2E2" },
-              ]}>
-                <Ionicons name="chevron-forward" size={14} color="#EF4444" />
-              </View>
-            </TouchableOpacity>
-          </View>
+          <SectionLabel icon="warning-outline" title={t("params.deleteAccountSection")} danger colors={C} />
+          <TouchableOpacity
+            style={s.dangerCard}
+            onPress={() => setDeleteModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={s.dangerIcon}>
+              <Ionicons name="trash" size={20} color={C.error} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.dangerTitle}>{t("params.deleteAccount")}</Text>
+              <Text style={s.dangerSub} numberOfLines={2}>{t("params.deleteAccountWarning")}</Text>
+            </View>
+            <View style={s.dangerChevron}>
+              <Ionicons name="chevron-forward" size={17} color={C.error} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* ── LOGOUT ── */}
-        <View style={s.logoutWrap}>
-          <GradientButton
-            isLoad={isLoading}
-            title={t("params.logout")}
-            onPress={handleLogout}
-            leftIcon={<ArrowIcon width={18} height={12} color={B.violet} />}
-            rightIcon={<ArrowRightIcon width={26} height={20} />}
-          />
-        </View>
+        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
+          <LinearGradient
+            colors={[C.primary, "#0047FF"]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={s.logoutGrad}
+          >
+            {isLoading
+              ? <Ionicons name="hourglass-outline" size={20} color="#fff" />
+              : <>
+                  <Ionicons name="log-out-outline" size={20} color="#fff" />
+                  <Text style={s.logoutText}>{t("params.logout")}</Text>
+                </>
+            }
+          </LinearGradient>
+        </TouchableOpacity>
 
-        <Text style={s.version}>{t("common.version")}</Text>
-        <View style={{ height: 80 }} />
+        {/* ── FOOTER ── */}
+        <Text style={s.footer}>{t("common.version")}</Text>
+        <View style={{ height: insets.bottom + 80 }} />
       </ScrollView>
     </View>
   );
 }
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root:   { flex: 1 },
-  scroll: { paddingBottom: 20 },
+function mkS(C: typeof LIGHT) { return StyleSheet.create({
+  root:  { flex: 1 },
+  scroll: { paddingHorizontal: 20 },
 
-  header: {
-    height: 180, overflow: "hidden",
-    borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
-    elevation: 12,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16,
-    marginBottom: 20,
-  },
-  deco1: {
-    position: "absolute", width: 180, height: 180,
-    borderRadius: 90, top: -50, right: -40,
-  },
-  deco2: {
-    position: "absolute", width: 120, height: 120,
-    borderRadius: 60, bottom: -20, left: -20,
-  },
   topBar: {
-    marginTop: Platform.OS === "ios" ? 52 : 36,
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between", paddingHorizontal: 20,
+    position: "absolute", top: 0, left: 0, right: 0, zIndex: 50,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 12,
+    elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
   },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center", justifyContent: "center",
-  },
-  headerTitle: { color: B.white, fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  headerSub: {
-    color: "rgba(255,255,255,0.7)", fontSize: 12,
-    fontFamily: "NexaLight", paddingHorizontal: 20, marginTop: 8,
-  },
+  topSide: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  topTitle: { flex: 1, textAlign: "center", fontFamily: "NexaBold", fontSize: 17 },
 
-  section: { paddingHorizontal: 16, marginBottom: 16 },
+  notifBadge:     { position: "absolute", top: -4, right: -6, minWidth: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: "#fff" },
+  notifBadgeText: { color: "#fff", fontSize: 9, fontFamily: "NexaBold" },
+
+  pageHeader: { marginBottom: 28, marginTop: 8 },
+  pageTitle:  { fontFamily: "NexaBold", fontSize: 26, color: C.onSurface, marginBottom: 4 },
+  pageSub:    { fontFamily: "NexaLight", fontSize: 14, color: C.secondary },
+
+  section: { marginBottom: 20 },
 
   card: {
+    backgroundColor: C.surface,
     borderRadius: 20, overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8,
+    elevation: 3, shadowColor: "rgba(0,71,255,0.08)",
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12,
   },
 
-  prefRow: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16, paddingVertical: 14,
-  },
-  prefLeft:  { flexDirection: "row", alignItems: "center", gap: 10 },
-  prefIcon:  { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  prefLabel: { fontFamily: "NexaLight", fontSize: 14 },
-  prefSub:   { fontFamily: "NexaLight", fontSize: 11, marginTop: 1 },
+  prefRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
+  prefLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  prefIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(0,53,197,0.05)", alignItems: "center", justifyContent: "center" },
+  prefLabel: { fontFamily: "NexaLight", fontSize: 15, color: C.onSurface },
+  prefSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.outline, marginTop: 1 },
 
-  divider: { height: 1, marginHorizontal: 16 },
+  hdiv: { height: 1, backgroundColor: "rgba(196,197,218,0.15)", marginHorizontal: 0 },
 
-  langBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1,
-  },
-  langText: { fontFamily: "NexaLight", fontSize: 12 },
+  langPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVar, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.surface },
+  langPillText: { fontFamily: "NexaLight", fontSize: 13, color: C.onSurface },
 
-  logoutWrap: { paddingHorizontal: 16, marginBottom: 16 },
+  dangerCard: { backgroundColor: C.errCont, borderWidth: 1, borderColor: C.error + "40", borderRadius: 20, flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
+  dangerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center" },
+  dangerTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.error, marginBottom: 2 },
+  dangerSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.errOnCont, lineHeight: 16 },
+  dangerChevron: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center" },
 
-  version: {
-    textAlign: "center", fontFamily: "NexaLight",
-    fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4,
-  },
+  logoutBtn: { borderRadius: 20, overflow: "hidden", marginBottom: 12 },
+  logoutGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16, elevation: 4, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  logoutText: { fontFamily: "NexaBold", fontSize: 16, color: "#FFFFFF" },
 
-  modalOverlay: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center", alignItems: "center",
-  },
-  modalBox: {
-    width: "80%", borderRadius: 20,
-    padding: 20, gap: 8,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3, shadowRadius: 16,
-  },
-  modalTitle: {
-    fontFamily: "NexaLight", fontSize: 15,
-    marginBottom: 8, textAlign: "center",
-  },
-  langOption: {
-    flexDirection: "row", alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  langOptionText: { fontFamily: "NexaLight", fontSize: 14 },
-});
+  footer: { textAlign: "center", fontFamily: "NexaLight", fontSize: 10, color: C.outline, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 },
 
-const ms = StyleSheet.create({
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  modalBox: { width: "82%", backgroundColor: C.surface, borderRadius: 24, padding: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20 },
+  modalTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.onSurface, textAlign: "center", marginBottom: 12 },
+  langOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, borderColor: "rgba(196,197,218,0.4)", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  langOptionSel: { backgroundColor: "rgba(0,53,197,0.06)", borderColor: C.primary },
+  langOptionText: { fontFamily: "NexaLight", fontSize: 14, color: C.onSurface },
+}); }
+
+/* ─── MENU ROW STYLES ──────────────────────────────────────────────────── */
+const mr = StyleSheet.create({
   row: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
-  iconWrap: {
-    width: 36, height: 36, borderRadius: 10,
+  divider: { borderBottomWidth: 1, borderBottomColor: "rgba(196,197,218,0.15)" },
+  iconBox: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: "rgba(0,53,197,0.05)",
     alignItems: "center", justifyContent: "center",
   },
-  title: { flex: 1, fontFamily: "NexaLight", fontSize: 14 },
+  label: { flex: 1, fontFamily: "NexaLight", fontSize: 15 },
 });
 
-const fs = StyleSheet.create({
-  item:       { paddingHorizontal: 16, paddingVertical: 14 },
-  row:        { flexDirection: "row", alignItems: "center", gap: 10 },
-  qIcon:      { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  qLetter:    { fontFamily: "NexaLight", fontSize: 13 },
-  question:   { flex: 1, fontFamily: "NexaLight", fontSize: 13 },
-  answerBox:  { marginTop: 10, marginLeft: 38, borderRadius: 12, padding: 12, borderLeftWidth: 3 },
-  answer:     { fontFamily: "NexaLight", fontSize: 12, lineHeight: 18 },
-});
-
+/* ─── SECTION LABEL STYLES ──────────────────────────────────────────────── */
 const sl = StyleSheet.create({
-  row:  { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8, paddingLeft: 4 },
-  text: { fontFamily: "NexaLight", fontSize: 11, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 0.8 },
+  row: {
+    flexDirection: "row", alignItems: "center",
+    gap: 6, marginBottom: 10, paddingLeft: 4,
+  },
+  text: {
+    fontFamily: "NexaLight", fontSize: 11,
+    textTransform: "uppercase", letterSpacing: 1.5,
+  },
 });
 
-const dm = StyleSheet.create({
-  /* ── Danger zone row ── */
-  dangerRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
-  },
-  dangerIconWrap: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: "rgba(239,68,68,0.12)",
-    alignItems: "center", justifyContent: "center",
-  },
-  dangerTitle: {
-    fontFamily: "NexaLight", fontSize: 14, color: "#EF4444", marginBottom: 2,
-  },
-  dangerSub: {
-    fontFamily: "NexaLight", fontSize: 11, lineHeight: 15,
-  },
-  dangerArrow: {
-    width: 28, height: 28, borderRadius: 8,
-    alignItems: "center", justifyContent: "center",
-  },
+/* ─── MODAL STYLES (lang + delete) ─────────────────────────────────────── */
+function mkM(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
+  box: { width: "82%", backgroundColor: C.surface, borderRadius: 24, padding: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20 },
+  title: { fontFamily: "NexaBold", fontSize: 15, color: C.onSurface, textAlign: "center", marginBottom: 12 },
+  option: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, borderColor: C.outlineVar, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
+  optionSel: { backgroundColor: C.primary + "14", borderColor: C.primary },
+  optionText: { fontFamily: "NexaLight", fontSize: 14, color: C.onSurface },
+}); }
 
-  /* ── Modal ── */
-  iconWrap: {
-    alignSelf: "center",
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: "rgba(239,68,68,0.12)",
-    alignItems: "center", justifyContent: "center",
-    marginBottom: 12,
-  },
-  warning: {
-    fontFamily: "NexaLight", fontSize: 13, textAlign: "center",
-    lineHeight: 19, marginBottom: 8,
-  },
-  danger: {
-    fontFamily: "NexaLight", fontSize: 12, textAlign: "center",
-    lineHeight: 17, marginBottom: 16,
-  },
-  inputRow: {
-    flexDirection: "row", alignItems: "center",
-    borderWidth: 1, borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 12,
-    marginBottom: 16,
-  },
-  input: {
-    flex: 1, fontFamily: "NexaLight", fontSize: 14,
-  },
-  btnRow: {
-    flexDirection: "row", gap: 10,
-  },
-  btnCancel: {
-    flex: 1, borderWidth: 1, borderRadius: 14,
-    paddingVertical: 12, alignItems: "center",
-  },
-  btnCancelText: {
-    fontFamily: "NexaLight", fontSize: 14,
-  },
-  btnDelete: {
-    flex: 1, borderRadius: 14,
-    paddingVertical: 12, alignItems: "center",
-    backgroundColor: "#EF4444",
-  },
-  btnDeleteText: {
-    fontFamily: "NexaLight", fontSize: 14, color: "#FFFFFF",
-  },
-});
+/* ─── DELETE MODAL STYLES ───────────────────────────────────────────────── */
+function mkDm(C: typeof LIGHT) { return StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 36, elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 20 },
+  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: C.outlineVar, marginBottom: 24 },
+  iconWrap: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  title: { fontFamily: "NexaBold", fontSize: 18, color: C.onSurface, textAlign: "center", marginBottom: 10 },
+  msg: { fontFamily: "NexaLight", fontSize: 14, color: C.secondary, textAlign: "center", lineHeight: 21, marginBottom: 20 },
+  bold: { fontFamily: "NexaBold", color: C.error },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderColor: C.outlineVar, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: C.bg, marginBottom: 20 },
+  input: { flex: 1, fontFamily: "NexaLight", fontSize: 15, color: C.onSurface },
+  btnRow: { flexDirection: "row", gap: 12 },
+  btnCancel: { flex: 1, borderWidth: 1.5, borderColor: C.outlineVar, borderRadius: 16, paddingVertical: 14, alignItems: "center", backgroundColor: C.bg },
+  btnCancelTxt: { fontFamily: "NexaBold", fontSize: 15, color: C.secondary },
+  btnDelete: { flex: 1, borderRadius: 16, paddingVertical: 14, alignItems: "center", backgroundColor: C.error },
+  btnDeleteTxt: { fontFamily: "NexaBold", fontSize: 15, color: "#FFFFFF" },
+}); }
