@@ -403,6 +403,7 @@ export default function Stats() {
         data={isLoading ? [] : sorted}
         keyExtractor={(item: any) => item.transactionId?.toString() ?? Math.random().toString()}
         ListHeaderComponent={ListHeader}
+        style={{ flex: 1, marginBottom: insets.bottom + 84 }}
         contentContainerStyle={s.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={

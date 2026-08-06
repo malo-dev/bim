@@ -23,7 +23,8 @@
       "android": {
         "track": "production",
         "releaseStatus": "completed",
-        "changesNotSentForReview": false
+        "changesNotSentForReview": false,
+        "serviceAccountKeyPath": "./my-project-83113-461520-1879b74be2d1.json"
       },
       "ios": {
         "language": "fr-FR"

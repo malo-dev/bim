@@ -280,7 +280,7 @@ export default function Params() {
 
       {/* ── SCROLL ── */}
       <ScrollView
-        style={{ flex: 1 }}
+        style={{ flex: 1, marginBottom: insets.bottom + 84 }}
         contentContainerStyle={[s.scroll, { paddingTop: HEADER_H + 8 }]}
         showsVerticalScrollIndicator={false}
       >
@@ -411,7 +411,6 @@ export default function Params() {
 
         {/* ── FOOTER ── */}
         <Text style={s.footer}>{t("common.version")}</Text>
-        <View style={{ height: insets.bottom + 80 }} />
       </ScrollView>
     </View>
   );
@@ -420,7 +419,7 @@ export default function Params() {
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
   root:  { flex: 1 },
-  scroll: { paddingHorizontal: 20 },
+  scroll: { paddingHorizontal: 20, paddingBottom: 8 },
 
   topBar: {
     position: "absolute", top: 0, left: 0, right: 0, zIndex: 50,
@@ -450,13 +449,13 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   prefRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
   prefLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   prefIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(0,53,197,0.05)", alignItems: "center", justifyContent: "center" },
-  prefLabel: { fontFamily: "NexaLight", fontSize: 15, color: C.onSurface },
+  prefLabel: { fontFamily: "NexaBold", fontSize: 14, color: C.onSurface },
   prefSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.outline, marginTop: 1 },
 
   hdiv: { height: 1, backgroundColor: "rgba(196,197,218,0.15)", marginHorizontal: 0 },
 
   langPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVar, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.surface },
-  langPillText: { fontFamily: "NexaLight", fontSize: 13, color: C.onSurface },
+  langPillText: { fontFamily: "NexaBold", fontSize: 12, color: C.onSurface },
 
   dangerCard: { backgroundColor: C.errCont, borderWidth: 1, borderColor: C.error + "40", borderRadius: 20, flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
   dangerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center" },
@@ -475,7 +474,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   modalTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.onSurface, textAlign: "center", marginBottom: 12 },
   langOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, borderColor: "rgba(196,197,218,0.4)", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
   langOptionSel: { backgroundColor: "rgba(0,53,197,0.06)", borderColor: C.primary },
-  langOptionText: { fontFamily: "NexaLight", fontSize: 14, color: C.onSurface },
+  langOptionText: { fontFamily: "NexaBold", fontSize: 13, color: C.onSurface },
 }); }
 
 /* ─── MENU ROW STYLES ──────────────────────────────────────────────────── */
@@ -490,7 +489,7 @@ const mr = StyleSheet.create({
     backgroundColor: "rgba(0,53,197,0.05)",
     alignItems: "center", justifyContent: "center",
   },
-  label: { flex: 1, fontFamily: "NexaLight", fontSize: 15 },
+  label: { flex: 1, fontFamily: "NexaBold", fontSize: 14 },
 });
 
 /* ─── SECTION LABEL STYLES ──────────────────────────────────────────────── */

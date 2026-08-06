@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
   Animated,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -28,38 +29,39 @@ import {
   View,
 } from "react-native";
 import Modal from "react-native-modal";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import { useAppTheme } from "@/app/_layout";
 
 /* ─── PALETTE ────────────────────────────────────────────────────────── */
+const ios = Platform.OS === "ios";
 const LIGHT = {
   primary: "#0035C5",
   blue:    "#0047FF",
   text:    "#1A1C1C",
   textSec: "#434657",
   textMut: "#747688",
-  bg:      "#F9F9F9",
+  bg:      ios ? "#F9F9F9"              : "#F0F4FA",
   white:   "#FFFFFF",
   green:   "#10B981",
   amber:   "#F59E0B",
-  border:  "rgba(196,197,218,0.30)",
-  glassBg:     "rgba(255,255,255,0.70)",
-  glassBord:   "rgba(255,255,255,0.80)",
-  heroBg:      "rgba(255,255,255,0.40)",
-  heroBord:    "rgba(255,255,255,0.50)",
-  topBarBg:    "rgba(255,255,255,0.60)",
-  topBord:     "rgba(0,0,0,0.03)",
+  border:  ios ? "rgba(196,197,218,0.30)" : "rgba(196,197,218,0.40)",
+  glassBg:  ios ? "rgba(255,255,255,0.70)" : "#FFFFFF",
+  glassBord: ios ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.07)",
+  heroBg:   ios ? "rgba(255,255,255,0.40)" : "#FFFFFF",
+  heroBord: ios ? "rgba(255,255,255,0.50)" : "rgba(0,53,197,0.10)",
+  topBarBg: ios ? "rgba(255,255,255,0.60)" : "rgba(255,255,255,0.97)",
+  topBord:  ios ? "rgba(0,0,0,0.03)"       : "rgba(0,0,0,0.07)",
   iconBg:      "#FFFFFF",
-  labelMut:    "rgba(67,70,87,0.50)",
-  labelTier:   "rgba(67,70,87,0.60)",
-  metaLbl:     "rgba(67,70,87,0.40)",
-  heroAccNum:  "rgba(26,28,28,0.60)",
-  actionLbl:   "rgba(26,28,28,0.70)",
+  labelMut:  ios ? "rgba(67,70,87,0.50)" : "rgba(67,70,87,0.55)",
+  labelTier: ios ? "rgba(67,70,87,0.60)" : "rgba(67,70,87,0.65)",
+  metaLbl:   ios ? "rgba(67,70,87,0.40)" : "rgba(67,70,87,0.45)",
+  heroAccNum: ios ? "rgba(26,28,28,0.60)" : "rgba(26,28,28,0.65)",
+  actionLbl:  ios ? "rgba(26,28,28,0.70)" : "rgba(26,28,28,0.75)",
   sectorImgBg: "#EEF4FF",
-  recImgBg:    "rgba(0,53,197,0.04)",
-  divider:     "rgba(0,0,0,0.03)",
-  avatarBg:    "rgba(0,53,197,0.10)",
+  recImgBg:    "rgba(0,53,197,0.06)",
+  divider:  ios ? "rgba(0,0,0,0.03)" : "rgba(0,0,0,0.07)",
+  avatarBg: "rgba(0,53,197,0.10)",
 };
 const DARK: typeof LIGHT = {
   primary: "#4D8DFF",
@@ -247,6 +249,7 @@ export default function HomeScreen() {
   const router   = useRouter();
   const dispatch = useDispatch();
   const { t: tr } = useTranslation();
+  const insets  = useSafeAreaInsets();
   const { isDark } = useAppTheme();
   const C = isDark ? DARK : LIGHT;
   const s = useMemo(() => mkS(C), [isDark]);
@@ -347,6 +350,7 @@ export default function HomeScreen() {
       </SafeAreaView>
 
       <ScrollView
+        style={{ flex: 1, marginBottom: insets.bottom + 84 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} />}
         contentContainerStyle={s.scroll}
@@ -366,7 +370,7 @@ export default function HomeScreen() {
                 <Text style={s.heroEC}>EC</Text>
               </View>
             </View>
-            <Text style={s.heroBrand}>BIMNext</Text>
+            <Text style={s.heroBrand}>BIMNEXT</Text>
           </View>
 
           {/* bottom row */}
@@ -643,7 +647,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   badge:      { position: "absolute", top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: "#DC0302", alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: C.white },
   badgeText:  { color: C.white, fontSize: 9, fontFamily: "NexaBold" },
 
-  scroll: { paddingTop: 8 },
+  scroll: { paddingTop: 8, paddingBottom: 8 },
 
   /* Hero card */
   heroCard: {
@@ -662,7 +666,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   heroBalRow: { flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 6 },
   heroBal:    { fontFamily: "NexaBold", fontSize: 44, color: C.text, letterSpacing: -1 },
   heroEC:     { fontFamily: "NexaBold", fontSize: 22, color: C.primary },
-  heroBrand:  { fontFamily: "NexaBold", fontSize: 20, color: "rgba(0,53,197,0.35)", fontStyle: "italic" },
+  heroBrand:  { fontFamily: "NexaBold", fontSize: 20, color: "rgba(0,53,197,0.35)" },
   heroBot:    { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", zIndex: 1 },
   heroAccNum: { fontFamily: "NexaLight", fontSize: 13, color: C.heroAccNum, letterSpacing: 3 },
   heroMetaRow:{ flexDirection: "row", gap: 24, marginTop: 4 },
@@ -671,7 +675,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   greenDot:   { width: 6, height: 6, borderRadius: 3, backgroundColor: "#10B981" },
   activeText: { fontFamily: "NexaBold", fontSize: 11, color: "#059669" },
   circleGroup:{ flexDirection: "row", alignItems: "center" },
-  circle:     { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,53,197,0.08)", borderWidth: 2, borderColor: "rgba(255,255,255,0.90)" },
+  circle:     { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(0,53,197,0.08)", borderWidth: 2, borderColor: C.heroBord },
 
   /* Quick actions */
   section:     { paddingHorizontal: 20, marginTop: 28 },

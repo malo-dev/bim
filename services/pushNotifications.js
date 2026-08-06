@@ -2,6 +2,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform, Alert } from 'react-native';
+import Constants from 'expo-constants';
 
 /**
  * Enregistre l'appareil pour les notifications push Expo
@@ -32,8 +33,11 @@ export const registerForPushNotificationsAsync = async () => {
       return;
     }
 
-    // Récupère le token Expo
-    const expoPushTokenData = await Notifications.getExpoPushTokenAsync();
+    // Récupère le token Expo (projectId obligatoire en production)
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
+    const expoPushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     token = expoPushTokenData.data;
 
     // Configure le channel Android

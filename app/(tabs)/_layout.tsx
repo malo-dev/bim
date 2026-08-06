@@ -134,7 +134,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 export default function TabLayout() {
   return (
     <Tabs
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, lazy: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tabs.Screen name="index"   options={{ title: "Accueil", href: "/(tabs)/index"   }} />

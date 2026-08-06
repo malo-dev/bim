@@ -2,7 +2,7 @@
   "expo": {
     "name": "BimNext",
     "slug": "frontend",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "bimnext",
@@ -44,8 +44,7 @@
         "android.permission.USE_FINGERPRINT",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.bimnext.app",
-      "versionCode": 1
+      "package": "com.bimnext.app"
     },
     "web": {
       "output": "static",
@@ -104,11 +103,10 @@
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/68b578a1-d490-4427-848d-a5e0d8ba1280"
     }
   }
 }
+

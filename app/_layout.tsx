@@ -173,8 +173,10 @@ export default function RootLayout() {
 
   /* ── Fonts ── */
   const [fontsLoaded] = useFonts({
-    Gobold:    require("@/assets/fonts/Gobold Bold.otf"),
-    NexaLight: require("@/assets/fonts/Nexa-ExtraLight.ttf"),
+    Gobold:      require("@/assets/fonts/Gobold Bold.otf"),
+    NexaLight:   require("@/assets/fonts/Nexa-ExtraLight.ttf"),
+    NexaRegular: require("@/assets/fonts/Nexa-ExtraLight.ttf"),
+    NexaBold:    require("@/assets/fonts/Nexa-Heavy.ttf"),
   });
 
   useEffect(() => {

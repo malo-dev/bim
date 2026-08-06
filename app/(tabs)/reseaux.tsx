@@ -442,7 +442,8 @@ export default function Reseaux() {
         data={dataList}
         keyExtractor={(item: Sector) => String(item.businessId)}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        style={{ flex: 1, marginBottom: insets.bottom + 84 }}
+        contentContainerStyle={{ paddingBottom: 16 }}
         ListHeaderComponent={
           <ReseauxListHeader
             headerH={effectiveH}

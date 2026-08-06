@@ -44,7 +44,9 @@ async function registerPushToken(userId: string) {
   }
 
   try {
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({
       projectId,
     });
