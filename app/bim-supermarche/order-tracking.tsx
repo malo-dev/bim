@@ -19,7 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useGetUserOrdersQuery, usePayOrderAtDeliveryMutation } from "@/services/orderService";
+import { useGetUserOrdersQuery, usePayOrderAtDeliveryMutation, useUpdateOrderShippingMutation } from "@/services/orderService";
 import { useRateLivreurMutation } from "@/services/livreurService";
 import { connectSocket, getSocket } from "@/services/socketService";
 import { useAppTheme } from "@/app/_layout";
@@ -151,14 +151,10 @@ export default function OrderTracking() {
   const C           = isDark ? DARK : LIGHT;
   const s           = useMemo(() => mkS(C),          [isDark]);
   const rm          = useMemo(() => mkRm(C),         [isDark]);
+  const pm          = useMemo(() => mkPm(C),         [isDark]);
   const STATUS_META = useMemo(() => getStatusMeta(C), [isDark]);
   const { orderNumber } = useLocalSearchParams<{ orderNumber: string }>();
   const router          = useRouter();
-
-  const [showPay,  setShowPay]  = useState(false);
-  const [pin,      setPin]      = useState("");
-  const [pinError, setPinError] = useState("");
-  const pinShake = useRef(new Animated.Value(0)).current;
 
   const [showRating,    setShowRating]    = useState(false);
   const [ratingScore,   setRatingScore]   = useState(0);
@@ -167,6 +163,10 @@ export default function OrderTracking() {
 
   const [payOrderAtDelivery, { isLoading: paying }] = usePayOrderAtDeliveryMutation();
   const [rateLivreur,        { isLoading: rating }] = useRateLivreurMutation();
+  const [updateOrderShipping, { isLoading: savingAddress }] = useUpdateOrderShippingMutation();
+
+  const [bonusAddress, setBonusAddress] = useState("");
+  const [bonusPhone,   setBonusPhone]   = useState("");
 
   const { data, isLoading, refetch, isFetching } = useGetUserOrdersQuery({});
 
@@ -195,30 +195,29 @@ export default function OrderTracking() {
   const isCancelled = status === "cancelled";
   const isDelivered = status === "delivered";
   const alreadyPaid = paymentStatus === "paid";
-  const canPay      = !isCancelled && !isDelivered && !alreadyPaid;
+  const canPay      = status === "shipped" && !alreadyPaid;
   const canCancel   = !isCancelled && !isDelivered && ["pending", "confirmed"].includes(status);
 
-  const shakePin = () => {
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue: 10,  duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: 6,   duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: 0,   duration: 50, useNativeDriver: true }),
-    ]).start();
-  };
-
   const handlePay = async () => {
-    if (pin.length < 6) return;
     try {
-      await payOrderAtDelivery({ orderNumber, pin }).unwrap();
-      setShowPay(false); setPin(""); setPinError("");
+      await payOrderAtDelivery({ orderNumber }).unwrap();
       refetch();
       if (livreur?.livreurId) setShowRating(true);
       else Alert.alert("Paiement effectué ✅", "Votre commande est marquée comme livrée et payée. Merci !");
     } catch (err: any) {
-      setPinError(err?.data?.message || "Code PIN incorrect ou solde insuffisant");
-      shakePin();
+      Alert.alert("Erreur", err?.data?.message || "Le paiement n'a pas pu être effectué");
     }
+  };
+
+  const confirmPay = () => {
+    Alert.alert(
+      "Confirmer le paiement",
+      `Payer ${Number(total).toFixed(2)} EC pour cette commande ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Payer", onPress: handlePay },
+      ]
+    );
   };
 
   const handleRate = async () => {
@@ -320,6 +319,49 @@ export default function OrderTracking() {
             </View>
           )}
 
+          {/* ── Produit offert (bonus fidélité) sans adresse : on la demande ── */}
+          {order?.paymentMethod === "bonus" && !order?.shippingAddress && (
+            <View style={s.card}>
+              <View style={[s.addrRow, { marginBottom: 10 }]}>
+                <View style={[s.addrIcon, { backgroundColor: C.amber + "10" }]}>
+                  <Ionicons name="gift-outline" size={16} color={C.amber} />
+                </View>
+                <Text style={s.cardTitle}>🎁 Produit offert — où vous livrer ?</Text>
+              </View>
+              <TextInput
+                value={bonusAddress}
+                onChangeText={setBonusAddress}
+                placeholder="Adresse de livraison"
+                placeholderTextColor={C.textMut}
+                style={s.bonusInput}
+              />
+              <TextInput
+                value={bonusPhone}
+                onChangeText={setBonusPhone}
+                placeholder="Téléphone"
+                placeholderTextColor={C.textMut}
+                keyboardType="phone-pad"
+                style={[s.bonusInput, { marginTop: 8 }]}
+              />
+              <TouchableOpacity
+                style={[s.confirmBtn, { marginTop: 4, opacity: bonusAddress.trim() ? 1 : 0.5 }]}
+                disabled={!bonusAddress.trim() || savingAddress}
+                onPress={async () => {
+                  try {
+                    await updateOrderShipping({ id: order.orderId, shippingAddress: bonusAddress.trim(), clientPhone: bonusPhone.trim() }).unwrap();
+                    refetch();
+                  } catch {
+                    Alert.alert("Erreur", "Impossible d'enregistrer l'adresse, réessayez.");
+                  }
+                }}
+              >
+                <LinearGradient colors={[C.amber, "#D97706"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
+                  {savingAddress ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.confirmText}>Confirmer la livraison</Text>}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* ── Livreur ── */}
           {livreur && (
             <View style={s.card}>
@@ -362,8 +404,8 @@ export default function OrderTracking() {
           )}
 
           {/* ── Payer à la livraison ── */}
-          {canPay && !showPay && (
-            <TouchableOpacity style={s.payBtn} onPress={() => setShowPay(true)} activeOpacity={0.88}>
+          {canPay && (
+            <TouchableOpacity style={s.payBtn} onPress={confirmPay} activeOpacity={0.88} disabled={paying}>
               <LinearGradient colors={[C.green, "#059669"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payGrad}>
                 <View style={s.payIconWrap}>
                   <Ionicons name="wallet-outline" size={20} color={C.white} />
@@ -375,37 +417,6 @@ export default function OrderTracking() {
                 <Ionicons name="chevron-forward" size={18} color={C.white} />
               </LinearGradient>
             </TouchableOpacity>
-          )}
-
-          {/* ── PIN ── */}
-          {canPay && showPay && (
-            <View style={s.card}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                <Text style={s.cardTitle}>Paiement · {parseFloat(total).toFixed(2)} EC</Text>
-                <TouchableOpacity onPress={() => { setShowPay(false); setPin(""); setPinError(""); }}>
-                  <Ionicons name="close-circle-outline" size={22} color={C.textMut} />
-                </TouchableOpacity>
-              </View>
-              <Text style={s.pinHint}>Entrez votre code PIN (6 chiffres)</Text>
-              <Animated.View style={[s.pinDots, { transform: [{ translateX: pinShake }] }]}>
-                {[0,1,2,3,4,5].map(i => (
-                  <View key={i} style={[s.pinDot, { borderColor: pinError ? C.red : C.green }, i < pin.length && { backgroundColor: C.green }]} />
-                ))}
-              </Animated.View>
-              {pinError ? <Text style={s.pinError}>{pinError}</Text> : null}
-              <PinPad value={pin} onChange={k => { setPinError(""); setPin(p => p.length < 6 ? p + k : p); }} onDelete={() => setPin(p => p.slice(0, -1))} />
-              <TouchableOpacity
-                style={[s.confirmBtn, (paying || pin.length < 6) && { opacity: 0.5 }]}
-                onPress={handlePay}
-                disabled={paying || pin.length < 6}
-              >
-                <LinearGradient colors={[C.green, "#059669"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
-                  {paying
-                    ? <ActivityIndicator size="small" color={C.white} />
-                    : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.confirmText}>Confirmer le paiement</Text></>}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
           )}
 
           {/* ── Annuler / Remboursement ── */}
@@ -569,6 +580,12 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   /* Address */
   addrRow:  { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   addrIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  bonusInput: {
+    borderWidth: 1, borderColor: C.border, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: "NexaLight", fontSize: 14, color: C.text,
+    backgroundColor: C.bg,
+  },
   addrText: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text, lineHeight: 19, paddingTop: 6 },
 
   /* Livreur */
@@ -641,6 +658,26 @@ function mkPp(C: typeof LIGHT) { return StyleSheet.create({
   grid:    { flexDirection: "row", flexWrap: "wrap", marginTop: 8 },
   key:     { width: "33.33%", alignItems: "center", justifyContent: "center", paddingVertical: 16 },
   keyText: { fontFamily: "NexaBold", fontSize: 22, color: C.text },
+}); }
+
+/* ─── PAYMENT BOTTOM SHEET STYLES ────────────────────────────────────── */
+function mkPm(C: typeof LIGHT) { return StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.52)", justifyContent: "flex-end" },
+  sheet:       { borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: 24, paddingBottom: 36 },
+  handle:      { width: 40, height: 4, borderRadius: 2, backgroundColor: "#D1D5DB", alignSelf: "center", marginVertical: 14 },
+  header:      { alignItems: "center", marginBottom: 8 },
+  amountBadge: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.green + "12", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 12 },
+  amountTxt:   { fontFamily: "NexaBold", fontSize: 18 },
+  title:       { fontFamily: "NexaBold", fontSize: 20, marginBottom: 6, textAlign: "center" },
+  sub:         { fontFamily: "NexaBold", fontSize: 13, textAlign: "center", lineHeight: 18 },
+  dots:        { flexDirection: "row", justifyContent: "center", gap: 14, marginVertical: 18 },
+  dot:         { width: 18, height: 18, borderRadius: 9, borderWidth: 2, backgroundColor: "transparent" },
+  pinError:    { fontFamily: "NexaBold", fontSize: 13, textAlign: "center", marginBottom: 4 },
+  confirmBtn:  { borderRadius: 18, overflow: "hidden", marginTop: 12 },
+  confirmGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
+  confirmTxt:  { fontFamily: "NexaBold", fontSize: 16, color: C.white },
+  cancelBtn:   { alignItems: "center", paddingVertical: 14 },
+  cancelTxt:   { fontFamily: "NexaBold", fontSize: 14 },
 }); }
 
 /* ─── RATING MODAL STYLES ─────────────────────────────────────────────── */

@@ -43,7 +43,6 @@ const LIGHT = {
   heroCardBg: "rgba(255,255,255,0.82)",
   heroCardBord: "rgba(255,255,255,0.55)",
   catPillBord:  "rgba(196,197,218,0.40)",
-  bottomNavBg:  "rgba(255,255,255,0.92)",
 };
 const DARK: typeof LIGHT = {
   primary: "#0035C5", blue: "#4D8DFF", deep: "#001257",
@@ -56,20 +55,16 @@ const DARK: typeof LIGHT = {
   heroCardBg: "rgba(26,37,64,0.85)",
   heroCardBord: "rgba(31,42,68,0.80)",
   catPillBord:  "rgba(31,42,68,0.60)",
-  bottomNavBg:  "rgba(11,18,32,0.94)",
 };
 
 /* ─── ASSETS ─────────────────────────────────────────────────────────── */
 const HERO_IMAGE =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuA32MC7i6OUY-QZ0Sygxcb768CetUXb_ulivVXeQsBURFgGEKPmX9X_ietfkBICGh18Nw5TBDgwJNZSvFAx0NnUKKMoIgRXkrkUx8bDpumQMzPV35kzLdDtKTkFR41T63jwWmKSHCmeiV890vN3jxPoESdyLqxkaica79UyPhkYeFgTJqMt4xTJJ-hhZO8bcOQbPK0cp8Sgf3teWGu8QFqp3u9aqlsIYYONbv5zmQW3OwIqcQdEgPre603v_uM6sIMYcYn9gR77XFE";
 
-const FALLBACK_IMAGES = [
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuDQ8nSucgb7yIGmUn1cusxX94lbpaxYyprHKjsWtHr1-PmNuB2pITmGLL7hKeWazbuBIcmzH5Uqvlr2app0EUk_8yThBZZPyU7UQ6r9uy3Hhg_ouIB_BZjJ4XOAoS8cfQI1i1gnHGjIk2z3ZXHMLbCVLqXm6WV5AgVKArXFXFX7sFgRxpHpvn2IrbjZWpdrJCltiV9vkcaZUa7LfZxfk-ALEdScpBwXQmkODBs_aC-kwthBlFbRJgRmVJWtfq-Iw37VhfhSCFYZ_1w",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuDSErKl0YpJZzCZOLq3BU23VzFwYe8Pvy106iSCv6n7CCZbRS_pOCeWpRkeQ5KqCLDSksLPhZjMy3H72UqpjujL7hsN_6gLN4rJWf6G69r8NOloOpofQ93FnotJB1DYfpeCnfgazOEAc5bH6tNAsTrOFxVZ7lhl-0KbHJLa-NoReZi0uOEn_thXi5ZWtNC6QU6ndEitlqhzS6N5Q34mZY8lCCZP_BaFjfhZHRGlReilspsYtFtlNUIVCSBEA6I7jK0xbsUjxLqwo7o",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuDaIa2Vl5sRaoCyBvWAU8b50JP15Og5o5XkLZaTy0kM56CyGXJsgCS9bfGnf86GoYDd8pgSTK8Sx-gNHB09ZHearHLweef4naPT02rXzV4gyjbGB_PCd0jfuiWj_OtVEAcBLWOpQPu5XQGxVfE7Nr5OB1YzcT-E9G2UrXCRhQvEKNACRPZu2XwqBFNRuBlorlHDjM8y9JXKdq4w4mPKY5OZ3tNg3c2BZ9yjf7uCQ4N7CMsR6EAON4f5dpA64V69eZ0mnah7uGKXzOQ",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuBOQfAUT0_Zkt8l63QABhwSEDPkPT8BKhnk2rnDRf44CCttkjRQqiTfX0h2XSH4JXzW8emNXTR08pzy58IX0cD70VScqDcKZPs1KT6I1KX42AgKV_3RxFx5ATw_vNfbnP6wrBVMQlUsTif6of-OtF9wH0fnFbY_boKrXRRqk5TF2AKvFLH_PA1FAcrHntRLAt54bL_zaxSRkbyrKm5izStFmYCaxNGphFV5duU6s40ftvgkPFbmUMvcTCnPccZF48gXVAlkhgrjZcQ",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuD1ArqtY5ZEUs-0_lnU2VKFQVRS6dkymWhZvEC5-DYEPpGjSpBO4wLCT5YdbFfoC_O9nf0lHZpXC5lOnam9KDvQTW9KW2yEhm7X9XJFgCG3G4jHfkKJ7m4nyehJK4W9dd783XVztxrob0p8ZG9NudQDANKsWNw624umfkNvKgCjxnrmTzfSobW3-PFig5tpy3_G2nZA3DIXg8NATHI8iIdkx9Cp-EMyTrWs0xRDN8SKef2eUhgg1dF-_P21yFDGdO5vV887C_csNn4",
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuAeYoJS6mSlPkFWQYRQLLPni0Bjks4jH8rbv9RRikdHMALnkW_m1XjwQMkwSEjnsFU6TXPXornP-L6bKUthBPIds5oLz2ir5w8oTyezMeX5tfy4xWXN56WmqpxUdLPA_X8VHubf6kczHUt-77wRGLfwKu2cnX1fagaEVwzCV-1jfOmReSVW3Ehxsa7UQpD5rXSmi8Aqmv8OuSdbCVhfh9ZFXQ60q7le5zf-mMuQto4OrIfe6o3oU_45ECb2lek-eYOswUX4rvoTQNs",
+/* Couleurs de fond cohérentes pour les placeholders produit (pas d'image externe) */
+const PLACEHOLDER_COLORS = [
+  "#EFF6FF", "#F0FDF4", "#FFF7ED", "#FDF4FF", "#FFFBEB",
+  "#F0F9FF", "#FFF1F2", "#F7F7F7", "#ECFDF5", "#EEF2FF",
 ];
 
 /* categories are derived from real product data at runtime */
@@ -91,11 +86,20 @@ export type CartItem = {
 };
 
 /* ─── HELPERS ─────────────────────────────────────────────────────────── */
-function getImgUri(item: any, index: number): string {
-  if (item.imageUrl) {
-    return item.imageUrl.startsWith("http") ? item.imageUrl : `${API_URL_BASE}${item.imageUrl}`;
-  }
-  return FALLBACK_IMAGES[index % FALLBACK_IMAGES.length];
+/** Returns the full image URI, or null if none — never broken external URLs */
+function getImgUri(item: any): string | null {
+  if (!item.imageUrl) return null;
+  return item.imageUrl.startsWith("http") ? item.imageUrl : `${API_URL_BASE}${item.imageUrl}`;
+}
+
+/** Placeholder background color derived from product name */
+function getPlaceholderColor(index: number): string {
+  return PLACEHOLDER_COLORS[index % PLACEHOLDER_COLORS.length];
+}
+
+/** First letter of product name for placeholder */
+function getInitialLetter(name: string): string {
+  return (name ?? "P")[0].toUpperCase();
 }
 
 const SORT_OPTIONS = [
@@ -261,7 +265,7 @@ function ProductSheet({
   const discount  = hasDiscount(product);
   const total     = (price * qty).toFixed(2);
   const maxQty    = product.qty ?? 99;
-  const imgUri    = getImgUri(product, index);
+  const imgUri    = getImgUri(product);
   const hasStock  = (product.qty ?? 1) > 0;
 
   return (
@@ -271,8 +275,14 @@ function ProductSheet({
         <View style={sh.handle} />
 
         {/* Image produit */}
-        <View style={sh.imgArea}>
-          <Image source={{ uri: imgUri }} style={sh.img} contentFit="contain" transition={200} />
+        <View style={[sh.imgArea, !imgUri && { backgroundColor: getPlaceholderColor(index), justifyContent: "center", alignItems: "center" }]}>
+          {imgUri ? (
+            <Image source={{ uri: imgUri }} style={sh.img} contentFit="contain" transition={200} />
+          ) : (
+            <Text style={{ fontSize: 48, fontWeight: "700", color: "#0035C5", opacity: 0.18 }}>
+              {getInitialLetter(product.name)}
+            </Text>
+          )}
         </View>
 
         <View style={sh.body}>
@@ -363,7 +373,7 @@ function RecommendedCard({ item, index, onPress, isFav, onFav }: {
   const C = isDark ? DARK : LIGHT;
   const rc = useMemo(() => mkRc(C), [isDark]);
   const scale    = useRef(new Animated.Value(1)).current;
-  const imgUri   = getImgUri(item, index);
+  const imgUri   = getImgUri(item);
   const price    = effectivePrice(item);
   const discount = hasDiscount(item);
 
@@ -383,8 +393,14 @@ function RecommendedCard({ item, index, onPress, isFav, onFav }: {
         <TouchableOpacity style={rc.heartBtn} onPress={() => onFav?.(item.productId)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
           <Ionicons name={isFav ? "heart" : "heart-outline"} size={16} color={isFav ? "#EF4444" : C.textMut} />
         </TouchableOpacity>
-        <View style={rc.imgWrap}>
-          <Image source={{ uri: imgUri }} style={rc.img} contentFit="contain" transition={200} />
+        <View style={[rc.imgWrap, !imgUri && { backgroundColor: getPlaceholderColor(index), justifyContent: "center", alignItems: "center" }]}>
+          {imgUri ? (
+            <Image source={{ uri: imgUri }} style={rc.img} contentFit="contain" transition={200} />
+          ) : (
+            <Text style={{ fontSize: 28, fontWeight: "700", color: "#0035C5", opacity: 0.2 }}>
+              {getInitialLetter(item.name)}
+            </Text>
+          )}
         </View>
         <Text style={rc.name} numberOfLines={2}>{item.name}</Text>
         <View style={rc.footer}>
@@ -420,7 +436,7 @@ function ProductRowBase({ item, index, onPress, isFav, onFav }: {
     ]).start();
   }, []);
 
-  const imgUri    = getImgUri(item, index);
+  const imgUri    = getImgUri(item);
   const price     = effectivePrice(item);
   const origPrice = parseFloat(item.price ?? 0);
   const discount  = hasDiscount(item);
@@ -432,8 +448,14 @@ function ProductRowBase({ item, index, onPress, isFav, onFav }: {
   return (
     <Animated.View style={[pr.card, { opacity: opac, transform: [{ translateX: slideX }] }]}>
       <TouchableOpacity style={pr.inner} onPress={onPress} activeOpacity={0.88}>
-        <View style={pr.imgWrap}>
-          <Image source={{ uri: imgUri }} style={pr.img} contentFit="contain" transition={200} />
+        <View style={[pr.imgWrap, !imgUri && { backgroundColor: getPlaceholderColor(index), justifyContent: "center", alignItems: "center" }]}>
+          {imgUri ? (
+            <Image source={{ uri: imgUri }} style={pr.img} contentFit="contain" transition={200} />
+          ) : (
+            <Text style={{ fontSize: 22, fontWeight: "700", color: "#0035C5", opacity: 0.2 }}>
+              {getInitialLetter(item.name)}
+            </Text>
+          )}
           <TouchableOpacity style={pr.heartBtn} onPress={() => onFav?.(item.productId)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Ionicons name={isFav ? "heart" : "heart-outline"} size={13} color={isFav ? "#EF4444" : C.textMut} />
           </TouchableOpacity>
@@ -722,7 +744,7 @@ export default function SupermarcheDetail() {
           ListEmptyComponent={
             <View style={{ alignItems: "center", paddingTop: 24 }}><NoData /></View>
           }
-          contentContainerStyle={{ paddingBottom: cartCount > 0 ? 164 : 100 }}
+          contentContainerStyle={{ paddingBottom: cartCount > 0 ? 120 : 32 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />
@@ -751,25 +773,6 @@ export default function SupermarcheDetail() {
           </LinearGradient>
         </TouchableOpacity>
       )}
-
-      {/* ── BOTTOM NAV ── */}
-      <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navItem} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="home-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItemActive} activeOpacity={0.85}>
-          <Ionicons name="language-outline" size={22} color={C.white} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
-          <Ionicons name="qr-code-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
-          <Ionicons name="stats-chart-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => router.push("/profile" as any)} activeOpacity={0.7}>
-          <Ionicons name="settings-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-      </View>
 
       {/* ── PRODUCT DETAIL SHEET ── */}
       <ProductSheet
@@ -833,15 +836,12 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   allHeader: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 12 },
 
-  floatCart:    { position: "absolute", bottom: 80, left: 16, right: 16, borderRadius: 24, overflow: "hidden", elevation: 14, shadowColor: C.blue, shadowOpacity: 0.38, shadowRadius: 20, shadowOffset: { width: 0, height: 6 } },
+  floatCart:    { position: "absolute", bottom: 24, left: 16, right: 16, borderRadius: 24, overflow: "hidden", elevation: 14, shadowColor: C.blue, shadowOpacity: 0.38, shadowRadius: 20, shadowOffset: { width: 0, height: 6 } },
   floatGrad:    { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, height: 62 },
   floatText:    { fontFamily: "NexaBold", fontSize: 16, color: C.white },
   floatDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.22)" },
   floatTotal:   { fontFamily: "NexaBold", fontSize: 16, color: C.white },
 
-  bottomNav:     { position: "absolute", bottom: 0, left: 0, right: 0, height: 72, paddingBottom: 8, backgroundColor: C.bottomNavBg, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center", justifyContent: "space-around", elevation: 12, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: -3 } },
-  navItem:       { flex: 1, alignItems: "center", justifyContent: "center", height: 48 },
-  navItemActive: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
 }); }
 
 /* ─── RECOMMENDED CARD STYLES ─────────────────────────────────────────── */

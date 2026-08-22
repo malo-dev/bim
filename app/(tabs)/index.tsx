@@ -1,8 +1,12 @@
 /* eslint-disable */
 import { API_URL_BASE } from "@/constants/api";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
-import { useGetUserOrdersQuery } from "@/services/orderService";
+import { useContentUpdate } from "@/hooks/useContentUpdate";
+import { useOtaUpdate } from "@/hooks/useOtaUpdate";
+import { useAppVersionCheck } from "@/hooks/useAppVersionCheck";
+import { useGetUserOrdersQuery, useCreateOrderMutation } from "@/services/orderService";
 import { useGetAllProductsQuery } from "@/services/productServices";
+import { useGetAllBannersQuery } from "@/services/bannerService";
 import { setSectors } from "@/services/globalApi";
 import { useGetAllSectorsQuery } from "@/services/sectorsServices";
 import { useGetAllTransactionsQuery } from "@/services/tsxService";
@@ -18,7 +22,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  Linking,
   Platform,
   RefreshControl,
   ScrollView,
@@ -32,8 +38,70 @@ import Modal from "react-native-modal";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import { useAppTheme } from "@/app/_layout";
+import RandomProductModal from "@/components/RandomProductModal";
+
+const RANDOM_CART_KEY = "bim_random_products_cart";
 
 /* ─── PALETTE ────────────────────────────────────────────────────────── */
+/* ─── SKELETON ───────────────────────────────────────────────────────── */
+function Sk({ w, h, r = 6, bg }: { w: number | string; h: number; r?: number; bg: string }) {
+  return <View style={{ width: w as any, height: h, borderRadius: r, backgroundColor: bg }} />;
+}
+
+function HomeSkeleton({ C, s, insets }: { C: typeof LIGHT; s: any; insets: { bottom: number } }) {
+  const sk = C.skeleton;
+  return (
+    <View style={s.screen}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <SafeAreaView edges={["top"]} style={s.safeBar}>
+        <View style={s.topBar}>
+          <View style={s.topLeft}>
+            <View style={[s.avatarWrap, { backgroundColor: sk }]} />
+            <View style={{ gap: 6 }}>
+              <Sk w={56} h={8} bg={sk} />
+              <Sk w={110} h={13} bg={sk} />
+            </View>
+          </View>
+          <View style={[s.bellBtn, { backgroundColor: sk, borderColor: "transparent", elevation: 0, shadowOpacity: 0 }]} />
+        </View>
+      </SafeAreaView>
+
+      <ScrollView scrollEnabled={false} style={{ flex: 1, marginBottom: insets.bottom + 84 }} contentContainerStyle={{ paddingTop: 8, paddingBottom: 8 }}>
+        {/* Hero card */}
+        <View style={[s.heroCard, { backgroundColor: sk, borderColor: "transparent", elevation: 0, shadowOpacity: 0 }]} />
+
+        {/* Actions */}
+        <View style={s.section}>
+          <Sk w={90} h={13} bg={sk} />
+          <View style={[s.actionsGrid, { marginTop: 16 }]}>
+            {[0,1,2,3,4,5].map(i => (
+              <View key={i} style={[s.actionWrap, { gap: 8 }]}>
+                <View style={[s.actionIcon, { backgroundColor: sk, borderColor: "transparent", elevation: 0, shadowOpacity: 0 }]} />
+                <Sk w={36} h={8} bg={sk} />
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Transactions */}
+        <View style={[s.sectionHeader, { marginTop: 24 }]}>
+          <Sk w={110} h={13} bg={sk} />
+        </View>
+        {[0,1,2,3].map(i => (
+          <View key={i} style={{ flexDirection: "row", alignItems: "center", padding: 18, gap: 14 }}>
+            <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: sk }} />
+            <View style={{ flex: 1, gap: 8 }}>
+              <Sk w="60%" h={12} bg={sk} />
+              <Sk w="35%" h={9} bg={sk} />
+            </View>
+            <Sk w={44} h={13} bg={sk} />
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 const ios = Platform.OS === "ios";
 const LIGHT = {
   primary: "#0035C5",
@@ -45,6 +113,7 @@ const LIGHT = {
   white:   "#FFFFFF",
   green:   "#10B981",
   amber:   "#F59E0B",
+  red:     "#EF4444",
   border:  ios ? "rgba(196,197,218,0.30)" : "rgba(196,197,218,0.40)",
   glassBg:  ios ? "rgba(255,255,255,0.70)" : "#FFFFFF",
   glassBord: ios ? "rgba(255,255,255,0.80)" : "rgba(0,0,0,0.07)",
@@ -62,6 +131,7 @@ const LIGHT = {
   recImgBg:    "rgba(0,53,197,0.06)",
   divider:  ios ? "rgba(0,0,0,0.03)" : "rgba(0,0,0,0.07)",
   avatarBg: "rgba(0,53,197,0.10)",
+  skeleton: "#E4E8F0",
 };
 const DARK: typeof LIGHT = {
   primary: "#4D8DFF",
@@ -73,6 +143,7 @@ const DARK: typeof LIGHT = {
   white:   "#FFFFFF",
   green:   "#10B981",
   amber:   "#F59E0B",
+  red:     "#DC2626",
   border:  "rgba(31,42,68,0.80)",
   glassBg:     "rgba(26,37,64,0.70)",
   glassBord:   "rgba(31,42,68,0.80)",
@@ -90,6 +161,7 @@ const DARK: typeof LIGHT = {
   recImgBg:    "rgba(77,150,255,0.06)",
   divider:     "rgba(31,42,68,0.50)",
   avatarBg:    "rgba(77,150,255,0.10)",
+  skeleton:    "#1A2540",
 };
 
 /* ─── SECTOR IMAGE MAP ───────────────────────────────────────────────── */
@@ -131,7 +203,7 @@ const QUICK_ACTIONS = [
   { key: "transfert", labelKey: "home.transfer", icon: "swap-horizontal-outline", route: "/transfert" },
   { key: "scanner",   labelKey: "home.scanner",  icon: "qr-code-outline",         route: "/qrcode"    },
   { key: "support",   labelKey: "home.support",  icon: "headset-outline",         route: "/support"   },
-  { key: "refresh",   labelKey: "home.refresh",  icon: "refresh-outline",         route: null         },
+  { key: "orders",    labelKey: "home.orders",   icon: "receipt-outline",         route: "/mes-commandes" },
 ] as const;
 
 /* ─── SUB-COMPONENTS ─────────────────────────────────────────────────── */
@@ -257,17 +329,93 @@ export default function HomeScreen() {
 
   const [userId,      setUserId]      = useState<string | null>(null);
   const [userIdReady, setUserIdReady] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [refreshing,  setRefreshing]  = useState(false);
   const [openScanner, setOpenScanner] = useState(false);
   const [cartItems,   setCartItems]   = useState<any[]>([]);
   const [cartMeta,    setCartMeta]    = useState<{ companyId: string; companyName: string } | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
-  const { data: sectorsData, isLoading: isSectorsLoading } = useGetAllSectorsQuery({ page: 1, pageSize: 10, search: "", paginate: false });
+  const { data: sectorsData, isLoading: isSectorsLoading, refetch: refetchSectors } = useGetAllSectorsQuery({ page: 1, pageSize: 10, search: "", paginate: false });
   const { data: user, isLoading, isError, refetch }        = useGetUserByIdQuery(userId!, { skip: !userId });
-  const { data: txData }       = useGetAllTransactionsQuery({ userId, page: 1, pageSize: 6 }, { skip: !userId });
-  const { data: ordersData }   = useGetUserOrdersQuery({ page: 1, pageSize: 6 }, { skip: !userId });
-  const { data: productsData } = useGetAllProductsQuery({ paginate: false });
+  const { data: txData, refetch: refetchTx }       = useGetAllTransactionsQuery({ userId, page: 1, pageSize: 6 }, { skip: !userId });
+  const { data: ordersData, refetch: refetchOrders }   = useGetUserOrdersQuery({ page: 1, pageSize: 6 }, { skip: !userId });
+  const { data: productsData, refetch: refetchProducts } = useGetAllProductsQuery({ paginate: false });
+  const { data: randomProductsData, refetch: refetchRandomProducts } = useGetAllProductsQuery({ standalone: "true", paginate: false });
+  const { data: bannersData, refetch: refetchBanners } = useGetAllBannersQuery({});
+  const [createRandomOrder, { isLoading: orderingRandom }] = useCreateOrderMutation();
+
+  /* ── Mises à jour : contenu (temps réel), OTA (eas update), version PlayStore ── */
+  const contentUpdate = useContentUpdate();
+  const otaUpdate      = useOtaUpdate();
+  const versionCheck   = useAppVersionCheck();
+
+  const applyContentUpdate = useCallback(async () => {
+    await Promise.all([refetchRandomProducts(), refetchBanners()]);
+    contentUpdate.dismiss();
+  }, [contentUpdate]);
+
+  const openStoreUpdate = useCallback(() => {
+    if (versionCheck.storeUrl) Linking.openURL(versionCheck.storeUrl);
+    versionCheck.dismiss();
+  }, [versionCheck.storeUrl, versionCheck.dismiss]);
+
+  const [selectedRandomProduct, setSelectedRandomProduct] = useState<any | null>(null);
+  const [previewBanner, setPreviewBanner] = useState<{ uri: string; title?: string } | null>(null);
+
+  /* ── Panier "Produits du moment" (produits sans entreprise) ───────────── */
+  const [randomCart, setRandomCart] = useState<any[]>([]);
+
+  const loadRandomCart = useCallback(() => {
+    (async () => {
+      const raw = await AsyncStorage.getItem(RANDOM_CART_KEY);
+      setRandomCart(raw ? JSON.parse(raw) : []);
+    })();
+  }, []);
+
+  useFocusEffect(loadRandomCart);
+
+  const persistRandomCart = async (items: any[]) => {
+    setRandomCart(items);
+    await AsyncStorage.setItem(RANDOM_CART_KEY, JSON.stringify(items));
+  };
+
+  const addToRandomCart = (product: any) => {
+    const id = product.productId ?? product.id;
+    const existing = randomCart.find((i) => i.productId === id);
+    const next = existing
+      ? randomCart.map((i) => (i.productId === id ? { ...i, qty: i.qty + 1 } : i))
+      : [...randomCart, { productId: id, name: product.name, unitPrice: Number(product.price ?? 0), imageUrl: product.imageUrl, qty: 1 }];
+    persistRandomCart(next);
+  };
+
+  const randomCartTotal = randomCart.reduce((n: number, i: any) => n + i.unitPrice * i.qty, 0);
+
+  const orderRandomCart = () => {
+    if (randomCart.length === 0) return;
+    Alert.alert(
+      "Confirmer la commande",
+      `Commander ${randomCart.length} article(s) pour ${randomCartTotal.toFixed(2)} EC ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Commander",
+          onPress: async () => {
+            try {
+              await createRandomOrder({
+                items: randomCart.map((i) => ({ productId: i.productId, qty: i.qty, unitPrice: i.unitPrice })),
+                paymentMethod: "delivery",
+              }).unwrap();
+              await persistRandomCart([]);
+              Alert.alert("Commande envoyée", "Votre commande a bien été enregistrée. Suivez-la dans « Mes commandes ».");
+            } catch {
+              Alert.alert("Erreur", "La commande n'a pas pu être envoyée, réessayez.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     AsyncStorage.getItem("userId").then(id => { setUserId(id); setUserIdReady(true); });
@@ -288,7 +436,21 @@ export default function HomeScreen() {
   useEffect(() => { if (!permission?.granted) requestPermission(); }, [permission?.granted]);
 
   const onRefresh = async () => {
-    try { setRefreshing(true); await refetch(); } finally { setRefreshing(false); }
+    try {
+      setRefreshing(true);
+      await Promise.all([
+        refetch(),
+        refetchSectors(),
+        refetchTx(),
+        refetchOrders(),
+        refetchProducts(),
+        refetchRandomProducts(),
+        refetchBanners(),
+        loadCart(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleGoto = (item: any) => {
@@ -308,13 +470,14 @@ export default function HomeScreen() {
     ? user.imageUrl.startsWith("http") ? user.imageUrl : `${API_URL_BASE}${user.imageUrl}`
     : null;
 
-  /* Seul cas bloquant : AsyncStorage pas encore lu (< 200 ms en général) */
-  if (!userIdReady) {
-    return (
-      <View style={s.loader}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
-    );
+  /* Une fois les données affichées une première fois, on ne repasse plus jamais
+     par le skeleton — évite le clignotement "chargement" lors des refetchs en
+     arrière-plan (focus, socket, pull-to-refresh…). */
+  useEffect(() => { if (user) setHasLoadedOnce(true); }, [user]);
+
+  /* Show skeleton while AsyncStorage is loading or user data is not yet ready */
+  if (!hasLoadedOnce && (!userIdReady || (userIdReady && !!userId && isLoading && !user))) {
+    return <HomeSkeleton C={C} s={s} insets={insets} />;
   }
 
   return (
@@ -324,7 +487,7 @@ export default function HomeScreen() {
       {/* ── TOP BAR ────────────────────────────────────────────────────── */}
       <SafeAreaView edges={["top"]} style={s.safeBar}>
         <View style={s.topBar}>
-          <View style={s.topLeft}>
+          <TouchableOpacity style={s.topLeft} onPress={() => router.push("/profile" as any)} activeOpacity={0.8}>
             <View style={s.avatarWrap}>
               {avatarUri
                 ? <Image source={{ uri: avatarUri }} style={s.avatar} contentFit="cover" />
@@ -337,7 +500,7 @@ export default function HomeScreen() {
               <Text style={s.topTier}>PREMIUM TIER</Text>
               <Text style={s.topGreeting}>Salut, {user?.username ?? "..."}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity style={s.bellBtn} onPress={() => router.push("/notification" as any)}>
             <Ionicons name="notifications-outline" size={20} color={C.text} />
             {unread > 0 && (
@@ -395,6 +558,114 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* ── MISES À JOUR DISPONIBLES ──────────────────────────────────── */}
+        {contentUpdate.available && (
+          <TouchableOpacity style={[s.updateBanner, { backgroundColor: C.primary }]} onPress={applyContentUpdate} activeOpacity={0.88}>
+            <Ionicons name="sparkles-outline" size={18} color="#fff" />
+            <Text style={s.updateBannerText}>Nouveau contenu disponible · Mettre à jour</Text>
+            <Ionicons name="refresh-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
+        {otaUpdate.available && (
+          <TouchableOpacity style={[s.updateBanner, { backgroundColor: C.green }]} onPress={otaUpdate.apply} activeOpacity={0.88} disabled={otaUpdate.applying}>
+            {otaUpdate.applying
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Ionicons name="cloud-download-outline" size={18} color="#fff" />}
+            <Text style={s.updateBannerText}>{otaUpdate.applying ? "Mise à jour en cours…" : "Mise à jour disponible · Installer"}</Text>
+            {!otaUpdate.applying && <Ionicons name="chevron-forward" size={16} color="#fff" />}
+          </TouchableOpacity>
+        )}
+        {versionCheck.available && (
+          <TouchableOpacity style={[s.updateBanner, { backgroundColor: C.amber }]} onPress={openStoreUpdate} activeOpacity={0.88}>
+            <Ionicons name="rocket-outline" size={18} color="#fff" />
+            <Text style={s.updateBannerText}>Nouvelle version {versionCheck.latestVersion} disponible sur le store</Text>
+            <Ionicons name="open-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {/* ── NOS OFFRES SPÉCIALES ──────────────────────────────────────── */}
+        {(bannersData?.data ?? []).length > 0 && (
+          <>
+            <View style={[s.sectionHeader, { marginTop: 20 }]}>
+              <Text style={s.sectionTitle}>Nos offres spéciales</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.sectorsScroll}>
+              {(bannersData?.data ?? []).map((banner: any) => {
+                const imgUri = banner.imageUrl
+                  ? banner.imageUrl.startsWith("http") ? banner.imageUrl : `${API_URL_BASE}${banner.imageUrl}`
+                  : null;
+                return (
+                  <TouchableOpacity
+                    key={banner.bannerId}
+                    style={s.offerCard}
+                    activeOpacity={0.88}
+                    onPress={() => imgUri && setPreviewBanner({ uri: imgUri, title: banner.title })}
+                  >
+                    <View style={s.offerImgWrap}>
+                      {imgUri
+                        ? <Image source={{ uri: imgUri }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={300} />
+                        : <Ionicons name="pricetag-outline" size={30} color={C.primary} style={{ opacity: 0.3 }} />
+                      }
+                    </View>
+                    <View style={{ padding: 14 }}>
+                      <Text style={s.offerTitle} numberOfLines={1}>{banner.title}</Text>
+                      {!!banner.tagline && <Text style={s.offerTagline} numberOfLines={2}>{banner.tagline}</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
+
+        {/* ── PRODUITS DU MOMENT (sans entreprise) ───────────────────────── */}
+        {(randomProductsData?.data ?? []).length > 0 && (
+          <>
+            <View style={[s.sectionHeader, { marginTop: 20 }]}>
+              <Text style={s.sectionTitle}>Produits du moment</Text>
+              {randomCart.length > 0 && (
+                <Text style={s.seeAll}>{randomCart.length} article(s)</Text>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.sectorsScroll}>
+              {(randomProductsData?.data ?? []).map((product: any) => {
+                const imgUri = product.imageUrl
+                  ? product.imageUrl.startsWith("http") ? product.imageUrl : `${API_URL_BASE}${product.imageUrl}`
+                  : null;
+                const price = Number(product.price ?? 0).toFixed(2);
+                return (
+                  <TouchableOpacity key={`rnd-${product.productId}`} style={s.recCard} activeOpacity={0.9} onPress={() => setSelectedRandomProduct(product)}>
+                    <View style={s.recImgWrap}>
+                      {imgUri
+                        ? <Image source={{ uri: imgUri }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={300} />
+                        : <Ionicons name="cube-outline" size={32} color={C.primary} style={{ opacity: 0.3 }} />
+                      }
+                    </View>
+                    <View style={{ padding: 12 }}>
+                      <Text style={s.recName} numberOfLines={1}>{product.name}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                        {product.priceOnRequest
+                          ? <Text style={[s.recPrice, { fontSize: 11 }]}>Prix à discuter</Text>
+                          : <Text style={s.recPrice}>{price} EC</Text>}
+                        <TouchableOpacity style={s.addToCartBtn} onPress={() => addToRandomCart(product)} activeOpacity={0.8}>
+                          <Ionicons name="add" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            {randomCart.length > 0 && (
+              <TouchableOpacity style={[s.checkoutBtn, { marginHorizontal: 20, marginTop: 4 }]} onPress={orderRandomCart} activeOpacity={0.88} disabled={orderingRandom}>
+                {orderingRandom
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={s.checkoutText}>Commander · {randomCartTotal.toFixed(2)} EC</Text>}
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+
         {/* ── QUICK ACTIONS ──────────────────────────────────────────── */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Actions Rapides</Text>
@@ -416,6 +687,22 @@ export default function HomeScreen() {
             ))}
           </View>
         </View>
+
+        {/* ── ESPACE AGENT (only visible if user.isAgent) ──────────────── */}
+        {user?.isAgent && (
+          <TouchableOpacity style={s.agentBanner} onPress={() => router.push("/agent-dashboard" as any)} activeOpacity={0.85}>
+            <View style={s.agentBannerLeft}>
+              <View style={s.agentIconWrap}>
+                <Ionicons name="id-card-outline" size={22} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={s.agentBannerTitle}>Espace Agent</Text>
+                <Text style={s.agentBannerSub}>Voir mes retraits & commissions</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.70)" />
+          </TouchableOpacity>
+        )}
 
         {/* ── SECTEURS BIM ───────────────────────────────────────────── */}
         <View style={s.sectionHeader}>
@@ -451,12 +738,18 @@ export default function HomeScreen() {
             </View>
           ) : (
             orders.map((order: any, i: number) => {
-              const isDelivered = ["delivered", "completed"].includes(order.status);
-              const isPending   = order.status === "pending";
-              const statusColor = isDelivered ? C.green : isPending ? C.amber : C.primary;
-              const statusLabel = isDelivered ? "Livré" : isPending ? "En attente" : "En cours";
-              const iconName    = isDelivered ? "checkmark-circle-outline" : "cube-outline";
-              const iconBg      = isDelivered ? "rgba(16,185,129,0.06)" : "rgba(0,53,197,0.05)";
+              const st = order.status ?? "pending";
+              const statusMeta: Record<string, { label: string; color: string; icon: string; iconBg: string }> = {
+                pending:    { label: "En attente",   color: C.amber,   icon: "time-outline",             iconBg: "rgba(245,158,11,0.07)"  },
+                confirmed:  { label: "Confirmée",    color: C.primary, icon: "checkmark-circle-outline", iconBg: "rgba(0,53,197,0.06)"    },
+                processing: { label: "En préparation",color: C.primary,icon: "construct-outline",        iconBg: "rgba(0,53,197,0.06)"    },
+                shipped:    { label: "En livraison", color: "#0047FF", icon: "bicycle-outline",           iconBg: "rgba(0,71,255,0.07)"    },
+                delivered:  { label: "Livré",        color: C.green,   icon: "bag-check-outline",        iconBg: "rgba(16,185,129,0.07)"  },
+                completed:  { label: "Livré",        color: C.green,   icon: "bag-check-outline",        iconBg: "rgba(16,185,129,0.07)"  },
+                cancelled:  { label: "Annulé",       color: C.red,     icon: "close-circle-outline",     iconBg: "rgba(239,68,68,0.07)"   },
+              };
+              const { label: statusLabel, color: statusColor, icon: iconName, iconBg } =
+                statusMeta[st] ?? statusMeta.pending;
               const total       = Number(order.totalAmount ?? order.total ?? 0).toFixed(2);
               const ref         = order.orderNumber ? `#BIM-${order.orderNumber}` : `#BIM-${order.id}`;
               return (
@@ -470,7 +763,7 @@ export default function HomeScreen() {
                   activeOpacity={0.85}
                 >
                   <View style={[s.orderIcon, { backgroundColor: iconBg }]}>
-                    <Ionicons name={iconName as any} size={22} color={isDelivered ? C.green : C.primary} />
+                    <Ionicons name={iconName as any} size={22} color={statusColor} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={s.orderRef}>{ref}</Text>
@@ -616,6 +909,26 @@ export default function HomeScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
+      {/* ── PRODUIT DU MOMENT : DÉTAIL / COMMANDER / SUIVRE ─────────────── */}
+      <RandomProductModal
+        visible={!!selectedRandomProduct}
+        product={selectedRandomProduct}
+        onClose={() => setSelectedRandomProduct(null)}
+      />
+
+      {/* ── APERÇU PLEIN ÉCRAN D'UNE BANNIÈRE "NOS OFFRES SPÉCIALES" ────── */}
+      <Modal isVisible={!!previewBanner} style={{ margin: 0 }} onBackdropPress={() => setPreviewBanner(null)}>
+        <View style={{ flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" }}>
+          {previewBanner && (
+            <Image source={{ uri: previewBanner.uri }} style={{ width: "100%", height: "60%" }} contentFit="contain" />
+          )}
+          {!!previewBanner?.title && <Text style={{ fontFamily: "NexaBold", fontSize: 15, color: "#fff", marginTop: 16, paddingHorizontal: 24, textAlign: "center" }}>{previewBanner.title}</Text>}
+          <TouchableOpacity style={s.closeScanner} onPress={() => setPreviewBanner(null)}>
+            <Ionicons name="close" size={28} color={C.white} />
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* ── SCANNER MODAL ──────────────────────────────────────────────── */}
       <Modal isVisible={openScanner} style={{ margin: 0 }} onBackdropPress={() => setOpenScanner(false)}>
         <View style={{ flex: 1, backgroundColor: "#000" }}>
@@ -655,7 +968,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     borderRadius: 36, padding: 28, height: 220,
     backgroundColor: C.heroBg,
     borderWidth: 1, borderColor: C.heroBord,
-    elevation: 3, shadowColor: C.blue,
+    elevation: 3, shadowColor: ios ? C.blue : "#000",
     shadowOpacity: 0.05, shadowRadius: 50, shadowOffset: { width: 0, height: 20 },
     justifyContent: "space-between", overflow: "hidden",
   },
@@ -727,7 +1040,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   glassDeep: {
     backgroundColor: C.heroBg,
     borderWidth: 1, borderColor: C.heroBord,
-    elevation: 3, shadowColor: C.blue,
+    elevation: 3, shadowColor: ios ? C.blue : "#000",
     shadowOpacity: 0.05, shadowRadius: 50, shadowOffset: { width: 0, height: 20 },
   },
   emptyBox:  { alignItems: "center", justifyContent: "center", paddingVertical: 24, gap: 8 },
@@ -742,10 +1055,21 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   checkoutBtn: {
     backgroundColor: C.primary, borderRadius: 18,
     paddingVertical: 14, alignItems: "center",
-    elevation: 4, shadowColor: C.blue,
+    elevation: 4, shadowColor: ios ? C.blue : "#000",
     shadowOpacity: 0.30, shadowRadius: 20, shadowOffset: { width: 0, height: 8 },
   },
   checkoutText: { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+
+  /* Agent banner */
+  agentBanner: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: C.primary, borderRadius: 20, padding: 16,
+    elevation: 3, shadowColor: C.primary, shadowOpacity: 0.30, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+  },
+  agentBannerLeft:  { flexDirection: "row", alignItems: "center", gap: 12 },
+  agentIconWrap:    { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.20)", alignItems: "center", justifyContent: "center" },
+  agentBannerTitle: { fontFamily: "NexaBold", fontSize: 15, color: "#FFFFFF" },
+  agentBannerSub:   { fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 },
 
   /* Transactions */
   txRow:    { flexDirection: "row", alignItems: "center", padding: 18, gap: 14, borderRadius: 26 },
@@ -756,6 +1080,31 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   txDate:   { fontFamily: "NexaLight", fontSize: 10, color: C.textMut, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.6 },
   txAmount: { fontFamily: "NexaBold", fontSize: 15 },
   txStatus: { fontFamily: "NexaLight", fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 2 },
+
+  /* Update banners */
+  updateBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 20, marginTop: 14, borderRadius: 18, padding: 14,
+    elevation: 3, shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+  },
+  updateBannerText: { flex: 1, fontFamily: "NexaBold", fontSize: 12.5, color: "#fff" },
+
+  /* Nos offres spéciales */
+  offerCard: {
+    width: 220, borderRadius: 28, overflow: "hidden",
+    backgroundColor: C.glassBg,
+    borderWidth: 1, borderColor: C.glassBord,
+    elevation: 2, shadowColor: "#000",
+    shadowOpacity: 0.03, shadowRadius: 40, shadowOffset: { width: 0, height: 10 },
+  },
+  offerImgWrap: { height: 110, overflow: "hidden", backgroundColor: C.sectorImgBg, alignItems: "center", justifyContent: "center" },
+  offerTitle:   { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  offerTagline: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginTop: 3, lineHeight: 15 },
+
+  addToCartBtn: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: C.primary, alignItems: "center", justifyContent: "center",
+  },
 
   /* Recommended */
   recCard: {

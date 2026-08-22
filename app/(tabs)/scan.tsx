@@ -42,6 +42,7 @@ const LIGHT = {
   bgAmber:  "#FFFBEB",
   bgGreen:  "#ECFDF5",
   bgBlue:   "#EEF2FF",
+  skeleton: "#E4E8F0",
 };
 const DARK: typeof LIGHT = {
   bg:       "#0B1220",
@@ -61,6 +62,7 @@ const DARK: typeof LIGHT = {
   bgAmber:  "#2D2510",
   bgGreen:  "#0F2D1E",
   bgBlue:   "#0F1E3D",
+  skeleton: "#1A2540",
 };
 
 /* ─── Filters ─────────────────────────────────────────────────────────── */
@@ -143,6 +145,76 @@ function TrxCardBase({ item, index }: { item: any; index: number }) {
   );
 }
 const TrxCard = memo(TrxCardBase);
+
+/* ─── Skeleton helpers ───────────────────────────────────────────────── */
+function SkS({ w, h, r = 6, bg }: { w: number | string; h: number; r?: number; bg: string }) {
+  return <View style={{ width: w as any, height: h, borderRadius: r, backgroundColor: bg }} />;
+}
+
+function ScanSkeleton({ C, insets }: { C: typeof LIGHT; insets: { top: number; bottom: number } }) {
+  const sk = C.skeleton;
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar translucent backgroundColor="transparent" />
+      {/* Fake glass header */}
+      <View style={{
+        paddingTop: insets.top + 14,
+        paddingBottom: 14,
+        paddingHorizontal: 16,
+        backgroundColor: C.card,
+        borderBottomWidth: 1,
+        borderBottomColor: C.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+      }}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: sk }} />
+        <SkS w={120} h={14} r={6} bg={sk} />
+        <View style={{ flex: 1 }} />
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: sk }} />
+      </View>
+      {/* Fake QR card */}
+      <View style={{
+        margin: 16,
+        borderRadius: 20,
+        backgroundColor: C.card,
+        padding: 24,
+        alignItems: "center",
+        gap: 16,
+      }}>
+        <View style={{ width: 160, height: 160, borderRadius: 16, backgroundColor: sk }} />
+        <SkS w={100} h={12} r={5} bg={sk} />
+        <SkS w={160} h={10} r={5} bg={sk} />
+      </View>
+      {/* Fake filter pills */}
+      <View style={{ flexDirection: "row", paddingHorizontal: 16, gap: 8, marginBottom: 12 }}>
+        {[60, 70, 55, 80].map((w, i) => (
+          <View key={i} style={{ width: w, height: 30, borderRadius: 15, backgroundColor: sk }} />
+        ))}
+      </View>
+      {/* Fake transaction rows */}
+      {[0, 1, 2, 3].map(i => (
+        <View key={i} style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginHorizontal: 16,
+          marginBottom: 10,
+          backgroundColor: C.card,
+          borderRadius: 14,
+          padding: 14,
+          gap: 12,
+        }}>
+          <View style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: sk }} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <SkS w="55%" h={12} r={5} bg={sk} />
+            <SkS w="35%" h={9} r={4} bg={sk} />
+          </View>
+          <SkS w={52} h={14} r={5} bg={sk} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 /* ─── Main Screen ──────────────────────────────────────────────────────── */
 export default function ScanScreen() {
@@ -300,13 +372,7 @@ export default function ScanScreen() {
   );
 
   if (isLoading && page === 1) {
-    return (
-      <View style={s.loaderWrap}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
-        <ActivityIndicator size="large" color={C.primary} />
-        <Text style={s.loaderTxt}>Chargement…</Text>
-      </View>
-    );
+    return <ScanSkeleton C={C} insets={insets} />;
   }
 
   return (

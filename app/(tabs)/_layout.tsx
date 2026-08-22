@@ -25,10 +25,9 @@ const TAB_CONFIG = [
   { name: "reseaux", label: "Réseaux", icon: { active: "people",    inactive: "people-outline"    } },
   { name: "scan",    label: "Scan",    icon: { active: "qr-code",   inactive: "qr-code-outline"   }, isCenter: true },
   { name: "stats",   label: "Stats",   icon: { active: "bar-chart", inactive: "bar-chart-outline" } },
-  { name: "params",  label: "Profil",  icon: { active: "settings",  inactive: "settings-outline"  } },
+  { name: "params",  label: "Params",  icon: { active: "settings",  inactive: "settings-outline"  } },
 ] as const;
 
-/* ─── Tab Item ──────────────────────────────────────────────────────── */
 function TabItem({
   config,
   focused,
@@ -40,31 +39,20 @@ function TabItem({
 }) {
   const { isDark } = useAppTheme();
   const dropScale = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  const iconColor = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
-    // Stopper les animations en cours avant d'en lancer de nouvelles
     dropScale.stopAnimation();
-    iconColor.stopAnimation();
+    Animated.spring(dropScale, {
+      toValue: focused ? 1 : 0,
+      friction: 7,
+      tension: 90,
+      useNativeDriver: true,
+    }).start();
+  }, [focused, dropScale]);
 
-    Animated.parallel([
-      Animated.spring(dropScale, {
-        toValue: focused ? 1 : 0,
-        friction: 5, tension: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(iconColor, {
-        toValue: focused ? 1 : 0,
-        duration: 180,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  // dropScale et iconColor sont des refs stables — safe à inclure
-  }, [focused, dropScale, iconColor]);
-
-  if (config.isCenter) {
+  if ("isCenter" in config && config.isCenter) {
     return (
-      <Pressable style={tb.centerWrap} onPress={onPress} hitSlop={8}>
+      <Pressable style={tb.centerWrap} onPress={onPress} hitSlop={10}>
         <View style={[tb.fab, !focused && tb.fabMuted, !focused && isDark && { backgroundColor: "#1A2540" }]}>
           <Ionicons
             name={focused ? "qr-code" : "qr-code-outline"}
@@ -80,14 +68,16 @@ function TabItem({
   const iconName = focused ? config.icon.active : config.icon.inactive;
 
   return (
-    <Pressable style={tb.tabItem} onPress={onPress} hitSlop={8}>
+    <Pressable style={tb.tabItem} onPress={onPress} hitSlop={10}>
       <View style={tb.iconWrap}>
-        <Animated.View style={[tb.liquidDrop, { transform: [{ scale: dropScale }] }]} />
+        <Animated.View
+          pointerEvents="none"
+          style={[tb.liquidDrop, { transform: [{ scale: dropScale }] }]}
+        />
         <Ionicons
           name={iconName as any}
           size={22}
           color={focused ? W.white : W.muted}
-          style={{ zIndex: 10 }}
         />
       </View>
       <Text style={[tb.label, focused && tb.labelActive, focused && isDark && { color: "#4D8DFF" }]}>
@@ -97,14 +87,13 @@ function TabItem({
   );
 }
 
-/* ─── Custom Tab Bar ────────────────────────────────────────────────── */
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const bottomPos = insets.bottom > 0 ? insets.bottom + 8 : 16;
 
   return (
-    <View style={[tb.container, { bottom: bottomPos }]} pointerEvents="box-none">
+    <View style={[tb.container, { bottom: bottomPos }]}>
       <View style={[tb.pill, isDark && { backgroundColor: "rgba(26,37,64,0.95)", borderColor: "rgba(31,42,68,0.80)" }]}>
         {state.routes.map((route, index) => {
           const config = TAB_CONFIG.find(c => c.name === route.name) ?? TAB_CONFIG[index];
@@ -130,23 +119,21 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-/* ─── Layout ────────────────────────────────────────────────────────── */
 export default function TabLayout() {
   return (
     <Tabs
-      screenOptions={{ headerShown: false, lazy: false }}
+      screenOptions={{ headerShown: false, lazy: true }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
-      <Tabs.Screen name="index"   options={{ title: "Accueil", href: "/(tabs)/index"   }} />
-      <Tabs.Screen name="reseaux" options={{ title: "Réseaux", href: "/(tabs)/reseaux" }} />
-      <Tabs.Screen name="scan"    options={{ title: "",        href: "/(tabs)/scan"    }} />
-      <Tabs.Screen name="stats"   options={{ title: "Stats",   href: "/(tabs)/stats"   }} />
-      <Tabs.Screen name="params"  options={{ title: "Params",  href: "/(tabs)/params"  }} />
+      <Tabs.Screen name="index"   options={{ title: "Accueil" }} />
+      <Tabs.Screen name="reseaux" options={{ title: "Réseaux" }} />
+      <Tabs.Screen name="scan"    options={{ title: ""        }} />
+      <Tabs.Screen name="stats"   options={{ title: "Stats"   }} />
+      <Tabs.Screen name="params"  options={{ title: "Params"  }} />
     </Tabs>
   );
 }
 
-/* ─── Styles ────────────────────────────────────────────────────────── */
 const PILL_HEIGHT = 68;
 
 const tb = StyleSheet.create({

@@ -1,5 +1,6 @@
 import axiosInstance from "@/services/axiosInstance";
 import { notificationApi } from "@/services/notificationService";
+import { orderApi } from "@/services/orderService";
 import { connectSocket, disconnectSocket } from "@/services/socketService";
 import { userApi } from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -14,9 +15,10 @@ import { getSocket } from "@/services/socketService";
 /* ─── Configuration du handler de notifications ─────────────────────── */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList:   true,
+    shouldPlaySound:  true,
+    shouldSetBadge:   true,
   }),
 });
 
@@ -93,6 +95,11 @@ export default function SocketProvider({
         dispatch(userApi.util.invalidateTags(["User"]));
       });
 
+      // Mise à jour du statut d'une commande depuis l'admin
+      socket.on("order:status_updated", () => {
+        dispatch(orderApi.util.invalidateTags(["order"]));
+      });
+
       /* Enregistrement push notifications (async, ne bloque plus le socket) */
       registerPushToken(userId);
     }
@@ -129,6 +136,7 @@ export default function SocketProvider({
     return () => {
       mounted = false;
       socketRef.current?.off("notification");
+      socketRef.current?.off("order:status_updated");
       disconnectSocket();
       notifListenerRef.current?.remove();
       appStateSub.remove();

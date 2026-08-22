@@ -6,6 +6,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -21,14 +22,14 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Modal from "react-native-modal";
-import { useVerifyPassMutation } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCreateManualRechargeMutation } from "@/services/tsxService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const _ios = Platform.OS === "ios";
 const LIGHT = {
   primary:  "#0035C5",
   deep:     "#302E99",
@@ -42,10 +43,11 @@ const LIGHT = {
   textSec:  "#434657",
   textMut:  "#747688",
   border:   "rgba(196,197,218,0.40)",
-  topBarBg:        "rgba(255,255,255,0.92)",
+  // Android : tous les fonds semi-transparents → opaques (pas de backdrop blur natif)
+  topBarBg:        _ios ? "rgba(255,255,255,0.92)" : "#FFFFFF",
   topBarBord:      "rgba(196,197,218,0.20)",
-  glassBg:         "rgba(255,255,255,0.75)",
-  glassBord:       "rgba(255,255,255,0.85)",
+  glassBg:         _ios ? "rgba(255,255,255,0.75)" : "#FFFFFF",
+  glassBord:       _ios ? "rgba(255,255,255,0.85)" : "rgba(196,197,218,0.35)",
   cardInfoBg:      "rgba(0,53,197,0.05)",
   cardInfoBord:    "rgba(0,53,197,0.12)",
   recapBord:       "rgba(196,197,218,0.30)",
@@ -56,8 +58,8 @@ const LIGHT = {
   receiptBg:       "#FFFFFF",
   receiptPerfBg:   "#F9F9F9",
   receiptPerfBord: "rgba(196,197,218,0.35)",
-  stepsCardBg:     "rgba(255,255,255,0.80)",
-  stepsCardBord:   "rgba(255,255,255,0.85)",
+  stepsCardBg:     _ios ? "rgba(255,255,255,0.80)" : "#FFFFFF",
+  stepsCardBord:   _ios ? "rgba(255,255,255,0.85)" : "rgba(196,197,218,0.35)",
   infoBannerBg:    "rgba(0,53,197,0.05)",
   infoBannerBord:  "rgba(0,53,197,0.12)",
   stepConnBg:      "rgba(196,197,218,0.40)",
@@ -155,44 +157,6 @@ function MethodCard({ item, selected, onPress }: { item: typeof METHODS[number];
         </View>
       </Animated.View>
     </TouchableOpacity>
-  );
-}
-
-/* ─── PIN DOTS ────────────────────────────────────────────────────────── */
-function PinDots({ value }: { value: string }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  return (
-    <View style={pd.row}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <View key={i} style={[pd.dot, {
-          backgroundColor: i < value.length ? C.primary : "transparent",
-          borderColor:     i < value.length ? C.primary : "rgba(0,53,197,0.22)",
-        }]} />
-      ))}
-    </View>
-  );
-}
-
-/* ─── KEYPAD ──────────────────────────────────────────────────────────── */
-function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-  return (
-    <View style={kp.grid}>
-      {keys.map((k, i) => {
-        if (k === "") return <View key={i} style={kp.empty} />;
-        const isDel = k === "⌫";
-        return (
-          <TouchableOpacity key={i}
-            style={[kp.key, { backgroundColor: isDel ? "rgba(239,68,68,0.07)" : "rgba(0,53,197,0.04)", borderColor: isDel ? "rgba(239,68,68,0.18)" : C.border }]}
-            onPress={() => isDel ? onDelete() : onPress(k)} activeOpacity={0.7}>
-            <Text style={[kp.keyText, { color: isDel ? C.error : C.text }]}>{k}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
   );
 }
 
@@ -323,7 +287,6 @@ export default function RechargeEcoinsScreen() {
   const { isDark } = useAppTheme();
   const C = isDark ? DARK : LIGHT;
   const s = useMemo(() => mkS(C), [isDark]);
-  const pm = useMemo(() => mkPm(C), [isDark]);
   const router = useRouter();
   const { unread: notifCount } = useUnreadNotifications();
 
@@ -341,22 +304,16 @@ export default function RechargeEcoinsScreen() {
   const [phase,       setPhase]       = useState<Phase>("idle");
   const [pendingInfo, setPendingInfo]  = useState({ amount: "", contact: "", method: "" });
 
-  const [showPinModal,  setShowPinModal]  = useState(false);
-  const [pinValue,      setPinValue]      = useState("");
-  const [pinError,      setPinError]      = useState("");
-  const [loadingVerify, setLoadingVerify] = useState(false);
-  const pinShake = useRef(new Animated.Value(0)).current;
-
   const inputFocAmt  = useRef(new Animated.Value(0)).current;
   const inputFocPh   = useRef(new Animated.Value(0)).current;
   const inputFocName = useRef(new Animated.Value(0)).current;
   const inputFocRef  = useRef(new Animated.Value(0)).current;
   const inputFocCont = useRef(new Animated.Value(0)).current;
 
-  const [verifyPass] = useVerifyPassMutation();
-
   const isCard   = selectedMethod === "Card";
   const isMobile = selectedMethod !== null && !isCard;
+
+  const [createManualRecharge, { isLoading: submitting }] = useCreateManualRechargeMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
@@ -368,7 +325,7 @@ export default function RechargeEcoinsScreen() {
 
   const cleanAmount = (v: string) => v.replace(/\s/g, "");
 
-  const handleConfirmPress = () => {
+  const handleConfirmPress = async () => {
     if (!amount || !selectedMethod) {
       Alert.alert("Champs manquants", "Veuillez sélectionner un montant et une méthode."); return;
     }
@@ -381,32 +338,16 @@ export default function RechargeEcoinsScreen() {
     if (!userId) {
       Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
-    setPinValue(""); setPinError(""); setShowPinModal(true);
-  };
-
-  const shakePin = () => Animated.sequence([
-    Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
-  ]).start();
-
-  const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
-  const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
-
-  const handleConfirmPin = async () => {
-    if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
-    if (!userId) return;
     try {
-      setLoadingVerify(true);
-      await verifyPass({ userId, password: pinValue }).unwrap();
-    } catch {
-      shakePin(); setPinError("Mot de passe incorrect. Réessayez.");
-      setPinValue(""); setLoadingVerify(false); return;
+      await createManualRecharge({
+        id:        userId,
+        amount:    parseFloat(amount.replace(",", ".")),
+        telephone: isMobile ? phone : contactPhone,
+        method:    selectedMethod,
+      }).unwrap();
+    } catch (err: any) {
+      Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue. Réessayez."); return;
     }
-    setLoadingVerify(false); setShowPinModal(false);
-
     setPendingInfo({
       amount: `${amount} EC`,
       contact: isMobile ? phone : contactPhone,
@@ -438,7 +379,7 @@ export default function RechargeEcoinsScreen() {
   );
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       {topBar}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -617,16 +558,16 @@ export default function RechargeEcoinsScreen() {
 
           {/* ── CTA ──────────────────────────────────────────────────── */}
           <TouchableOpacity
-            style={s.ctaBtn}
+            style={[s.ctaBtn, { opacity: submitting ? 0.7 : 1 }]}
             onPress={handleConfirmPress}
-            disabled={false}
+            disabled={submitting}
             activeOpacity={0.88}
           >
             <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
-              <>
-                <Ionicons name="send-outline" size={18} color={C.white} />
-                <Text style={s.ctaText}>Envoyer la demande</Text>
-              </>
+              {submitting
+                ? <ActivityIndicator size="small" color={C.white} />
+                : <><Ionicons name="send-outline" size={18} color={C.white} /><Text style={s.ctaText}>Envoyer la demande</Text></>
+              }
             </LinearGradient>
           </TouchableOpacity>
 
@@ -639,53 +580,13 @@ export default function RechargeEcoinsScreen() {
         </ScrollView>
       </TouchableWithoutFeedback>
 
-      {/* ─── PIN MODAL ─────────────────────────────────────────────────── */}
-      <Modal isVisible={showPinModal} onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
-        animationIn="slideInUp" animationOut="slideOutDown" style={pm.slide} avoidKeyboard>
-        <View style={[pm.sheet, { backgroundColor: C.surface }]}>
-          <View style={pm.handle} />
-          <View style={pm.lockWrap}>
-            <Ionicons name="lock-closed" size={28} color={C.primary} />
-          </View>
-          <Text style={pm.title}>Mot de passe requis</Text>
-          <Text style={pm.sub}>Entrez votre code à 6 chiffres pour confirmer l'envoi de la demande</Text>
-          {amount.length > 0 && (
-            <View style={pm.reminder}>
-              <Ionicons name="wallet-outline" size={14} color={C.primary} />
-              <Text style={pm.reminderAmt}>{amount} EC</Text>
-              {selectedMethod && <Text style={pm.reminderMethod}>· {selectedMethod}</Text>}
-            </View>
-          )}
-          <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} />
-          </Animated.View>
-          {pinError.length > 0 && (
-            <View style={pm.errorRow}>
-              <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-              <Text style={pm.errorText}>{pinError}</Text>
-            </View>
-          )}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
-          <TouchableOpacity style={[pm.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
-            onPress={handleConfirmPin} disabled={loadingVerify || pinValue.length < 6} activeOpacity={0.85}>
-            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={pm.confirmGrad}>
-              {loadingVerify
-                ? <ActivityIndicator size="small" color={C.white} />
-                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={pm.confirmText}>Valider</Text></>}
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowPinModal(false)} style={pm.cancelBtn} disabled={loadingVerify}>
-            <Text style={pm.cancelText}>Annuler</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 /* ─── STYLES ──────────────────────────────────────────────────────────── */
 function mkTb(C: typeof LIGHT) { return StyleSheet.create({
-  safe:      { backgroundColor: C.topBarBg, borderBottomWidth: 1, borderBottomColor: C.topBarBord },
+  safe:      { backgroundColor: Platform.OS === "android" ? C.surface : C.topBarBg, borderBottomWidth: 1, borderBottomColor: C.topBarBord },
   bar:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
   iconBtn:   { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   brand:     { fontFamily: "NexaBold", fontSize: 18, color: C.text },
@@ -758,37 +659,6 @@ function mkMs(C: typeof LIGHT) { return StyleSheet.create({
   fee:      { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
   radio:    { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary },
-}); }
-
-const pd = StyleSheet.create({
-  row: { flexDirection: "row", gap: 12, marginBottom: 10 },
-  dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
-});
-
-const kp = StyleSheet.create({
-  grid:    { flexDirection: "row", flexWrap: "wrap", width: 280, gap: 12, justifyContent: "center", marginTop: 10 },
-  key:     { width: 78, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  empty:   { width: 78, height: 56 },
-  keyText: { fontSize: 20, fontFamily: "NexaLight", fontWeight: "600" },
-});
-
-function mkPm(C: typeof LIGHT) { return StyleSheet.create({
-  slide:       { justifyContent: "flex-end", margin: 0 },
-  sheet:       { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, paddingBottom: 36, alignItems: "center", elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.10, shadowRadius: 20 },
-  handle:      { width: 40, height: 4, borderRadius: 2, marginBottom: 20, backgroundColor: C.pmHandle },
-  lockWrap:    { width: 66, height: 66, borderRadius: 33, backgroundColor: C.pmLockBg, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  title:       { fontFamily: "NexaBold", fontSize: 18, color: C.text, marginBottom: 6 },
-  sub:         { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, textAlign: "center", lineHeight: 18, marginBottom: 18, paddingHorizontal: 10 },
-  reminder:    { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 12, borderWidth: 1, backgroundColor: C.pmReminderBg, borderColor: C.pmReminderBord, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 22 },
-  reminderAmt: { fontFamily: "NexaBold", fontSize: 15, color: C.text },
-  reminderMethod: { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
-  errorRow:    { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
-  errorText:   { fontFamily: "NexaLight", fontSize: 12, color: C.error },
-  confirmBtn:  { width: "100%", borderRadius: 24, overflow: "hidden", marginTop: 20 },
-  confirmGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15 },
-  confirmText: { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
-  cancelBtn:   { marginTop: 14, paddingVertical: 8 },
-  cancelText:  { fontFamily: "NexaLight", fontSize: 13, color: C.textSec },
 }); }
 
 function mkPv(C: typeof LIGHT) { return StyleSheet.create({

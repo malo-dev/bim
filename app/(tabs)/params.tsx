@@ -127,6 +127,7 @@ export default function Params() {
     { id: "notifications", icon: "notifications-outline",     label: t("params.notifications"), route: "/notification" },
     { id: "favorites",     icon: "heart-outline",             label: "Mes Favoris",             route: "/favorites"    },
     { id: "history",       icon: "time-outline",              label: t("params.history"),       route: "/history"      },
+    { id: "formation",     icon: "play-circle-outline",       label: "Formation",               route: "/formation"    },
     { id: "support",       icon: "help-circle-outline",       label: t("params.support"),       route: "/support"      },
     { id: "faq",           icon: "help-buoy-outline",         label: t("params.faq"),           route: "/faqs"         },
     { id: "about",         icon: "information-circle-outline",label: t("params.about"),         route: "/apropos"      },

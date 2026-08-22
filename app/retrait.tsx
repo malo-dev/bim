@@ -21,9 +21,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import RNModal from "react-native-modal";
 import { useCreateRetraitMutation } from "@/services/tsxService";
-import { useVerifyPassMutation } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
@@ -93,48 +91,6 @@ const DARK: typeof LIGHT = {
 
 const SHORTCUTS = ["500", "1000", "2500", "5000"];
 
-/* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value }: { value: string }) {
-  return (
-    <View style={pd.row}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <View key={i} style={[pd.dot, {
-          backgroundColor: i < value.length ? C.red : "transparent",
-          borderColor:     i < value.length ? C.red : "rgba(220,3,2,0.22)",
-        }]} />
-      ))}
-    </View>
-  );
-}
-
-/* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-  return (
-    <View style={kp.grid}>
-      {keys.map((k, i) => {
-        if (k === "") return <View key={i} style={kp.empty} />;
-        const isDel = k === "⌫";
-        return (
-          <TouchableOpacity
-            key={i}
-            style={[kp.key, {
-              backgroundColor: C.keyBg,
-              borderColor:     C.border,
-            }]}
-            onPress={() => isDel ? onDelete() : onPress(k)}
-            activeOpacity={0.7}
-          >
-            <Text style={[kp.keyText, { color: C.text }]}>{k}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
 /* ─── SCREEN ─────────────────────────────────────────────────────────── */
 export default function RetraitScreen() {
   const router = useRouter();
@@ -149,12 +105,7 @@ export default function RetraitScreen() {
   const [phone,         setPhone]         = useState("");
   const [userId,        setUserId]        = useState<string | null>(null);
 
-  const [showPinModal,  setShowPinModal]  = useState(false);
-  const [pinValue,      setPinValue]      = useState("");
-  const [pinError,      setPinError]      = useState("");
-  const [loadingVerify, setLoadingVerify] = useState(false);
-  const [loadingPay,    setLoadingPay]    = useState(false);
-  const pinShake = useRef(new Animated.Value(0)).current;
+  const [loadingPay, setLoadingPay] = useState(false);
 
   const [feedback,    setFeedback]    = useState<"success" | "error" | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState("");
@@ -162,7 +113,6 @@ export default function RetraitScreen() {
   const fbOpac  = useRef(new Animated.Value(0)).current;
 
   const [createRetrait] = useCreateRetraitMutation();
-  const [verifyPass]    = useVerifyPassMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
@@ -183,37 +133,13 @@ export default function RetraitScreen() {
     });
   };
 
-  const handleConfirmPress = () => {
+  const handleConfirmPress = async () => {
     if (!amount || !agentSelected || !phone) {
       showFeedback("error", "Veuillez remplir tous les champs."); return;
     }
     if (!userId) {
       showFeedback("error", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
-    setPinValue(""); setPinError(""); setShowPinModal(true);
-  };
-
-  const shakePin = () => Animated.sequence([
-    Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
-    Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
-  ]).start();
-
-  const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
-  const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
-
-  const handleConfirmPin = async () => {
-    if (pinValue.length < 6) { setPinError("Veuillez entrer vos 6 chiffres."); return; }
-    if (!userId) return;
-    try {
-      setLoadingVerify(true);
-      await verifyPass({ userId, password: pinValue }).unwrap();
-    } catch {
-      shakePin(); setPinError("Mot de passe incorrect. Réessayez."); setPinValue(""); setLoadingVerify(false); return;
-    }
-    setLoadingVerify(false); setShowPinModal(false);
     try {
       setLoadingPay(true);
       const res: any = await createRetrait({ amount: normalizeDecimal(amount), accountNumber: phone, id: userId }).unwrap();
@@ -227,7 +153,7 @@ export default function RetraitScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: C.bg }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
@@ -418,65 +344,6 @@ export default function RetraitScreen() {
         </ScrollView>
       </TouchableWithoutFeedback>
 
-      {/* ─── PIN MODAL ──────────────────────────────────────────────────── */}
-      <RNModal
-        isVisible={showPinModal}
-        onBackdropPress={() => { if (!loadingVerify) setShowPinModal(false); }}
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        style={s.modalSlide}
-        avoidKeyboard
-      >
-        <View style={s.pinModal}>
-          <View style={s.dragHandle} />
-          <View style={s.lockIconWrap}>
-            <Ionicons name="lock-closed" size={28} color={C.red} />
-          </View>
-          <Text style={s.pinTitle}>Mot de passe requis</Text>
-          <Text style={s.pinSub}>Entrez votre code à 6 chiffres pour confirmer le retrait</Text>
-          {amount.length > 0 && (
-            <View style={s.amountReminder}>
-              <Ionicons name="arrow-down-circle-outline" size={14} color={C.red} />
-              <Text style={s.amountReminderText}>
-                {Number(normalizeDecimal(amount)).toLocaleString("fr-FR")} EC
-              </Text>
-              <Text style={s.amountReminderMethod}>· AgentBim</Text>
-            </View>
-          )}
-          <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} />
-          </Animated.View>
-          {pinError.length > 0 && (
-            <View style={s.pinErrorRow}>
-              <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-              <Text style={s.pinErrorText}>{pinError}</Text>
-            </View>
-          )}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
-          <TouchableOpacity
-            style={[s.confirmBtn, { opacity: pinValue.length === 6 ? 1 : 0.5 }]}
-            onPress={handleConfirmPin}
-            disabled={loadingVerify || pinValue.length < 6}
-            activeOpacity={0.85}
-          >
-            <LinearGradient
-              colors={[C.blue, C.deep]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={s.confirmGrad}
-            >
-              {loadingVerify
-                ? <ActivityIndicator size="small" color={C.white} />
-                : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.confirmText}>Valider</Text></>
-              }
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowPinModal(false)} style={s.cancelBtn} disabled={loadingVerify}>
-            <Text style={s.cancelText}>Annuler</Text>
-          </TouchableOpacity>
-        </View>
-      </RNModal>
-
       {/* ─── FEEDBACK MODAL ─────────────────────────────────────────────── */}
       <Modal transparent visible={feedback !== null} animationType="none" onRequestClose={hideFeedback}>
         <TouchableOpacity style={fb.overlay} activeOpacity={1} onPress={hideFeedback}>
@@ -508,11 +375,13 @@ export default function RetraitScreen() {
 
 /* ─── STYLES ─────────────────────────────────────────────────────────── */
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
-  safeTop: { backgroundColor: C.topBarBg },
+  safeTop: {
+    backgroundColor: Platform.OS === "android" ? C.surface : C.topBarBg,
+  },
   topBar: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: C.topBarBg,
+    backgroundColor: Platform.OS === "android" ? C.surface : C.topBarBg,
     borderBottomWidth: 1, borderBottomColor: C.topBord,
   },
   iconBtn:     { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },

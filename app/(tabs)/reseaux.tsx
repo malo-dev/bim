@@ -32,6 +32,7 @@ const PALETTE = {
     input:   "#F3F3F4",
     border:  "#E2E2E2",
     primary: "#0047FF",
+    skeleton: "#E4E8F0",
   },
   dark: {
     bg:      "#0F1117",
@@ -41,6 +42,7 @@ const PALETTE = {
     input:   "#1E2235",
     border:  "#2A2D40",
     primary: "#4D7FFF",
+    skeleton: "#1A2540",
   },
 };
 type Theme = typeof PALETTE.light;
@@ -279,6 +281,58 @@ function ReseauxListHeader({
   );
 }
 
+/* ─── Skeleton helpers ───────────────────────────────────────────────── */
+function SkR({ w, h, r = 6, bg }: { w: number | string; h: number; r?: number; bg: string }) {
+  return <View style={{ width: w as any, height: h, borderRadius: r, backgroundColor: bg }} />;
+}
+
+function ReseauxSkeleton({ W, insets }: { W: typeof PALETTE.light; insets: { top: number; bottom: number } }) {
+  const sk = W.skeleton;
+  return (
+    <View style={{ flex: 1, backgroundColor: W.bg }}>
+      <StatusBar translucent backgroundColor="transparent" />
+      {/* Fake header */}
+      <View style={{
+        paddingTop: insets.top + 14,
+        paddingBottom: 14,
+        paddingHorizontal: 16,
+        backgroundColor: W.card,
+        borderBottomWidth: 1,
+        borderBottomColor: W.border,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+      }}>
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: sk }} />
+        <SkR w={140} h={14} r={6} bg={sk} />
+        <View style={{ flex: 1 }} />
+        <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: sk }} />
+      </View>
+      {/* Fake list rows */}
+      {[0, 1, 2, 3, 4, 5].map(i => (
+        <View key={i} style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginHorizontal: 16,
+          marginTop: 12,
+          backgroundColor: W.card,
+          borderRadius: 16,
+          padding: 14,
+          gap: 14,
+        }}>
+          <View style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: sk }} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <SkR w="55%" h={13} r={6} bg={sk} />
+            <SkR w="75%" h={10} r={5} bg={sk} />
+            <SkR w="40%" h={9} r={4} bg={sk} />
+          </View>
+          <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: sk }} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /* ─── Main Screen ────────────────────────────────────────────────────── */
 export default function Reseaux() {
   const router   = useRouter();
@@ -354,13 +408,7 @@ export default function Reseaux() {
   const effectiveH     = HEADER_H + (searchOpen ? SEARCH_BAR_H : 0);
 
   if (isLoading && dataList.length === 0) {
-    return (
-      <View style={[s.loaderWrap, { backgroundColor: W.bg }]}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
-        <ActivityIndicator size="large" color={W.primary} />
-        <Text style={[s.loaderTxt, { color: W.muted }]}>Chargement…</Text>
-      </View>
-    );
+    return <ReseauxSkeleton W={W} insets={insets} />;
   }
 
   return (

@@ -123,7 +123,7 @@ const fr = {
     transfer:     "Transfert",
     scanner:      "Scanner",
     support:      "Support",
-    refresh:      "Actualiser",
+    orders:       "Mes commandes",
   },
 
   /* ── PARAMS ── */

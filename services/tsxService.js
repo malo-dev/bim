@@ -41,6 +41,16 @@ export const transactionApi = createApi({
       }),
       invalidatesTags: ['Recharge'],
     }),
+
+    // Demande de recharge manuelle (sans Maxicash — BIM traite manuellement)
+    createManualRecharge: builder.mutation({
+      query: (payload) => ({
+        url: '/tsx/manual-recharge',
+        method: 'POST',
+        data: payload,
+      }),
+      invalidatesTags: ['Recharge'],
+    }),
     checkRechargeStatus: builder.mutation({
       query: (payload) => ({
         url: '/tsx/recharge/status',
@@ -138,6 +148,7 @@ export const transactionApi = createApi({
 
 export const {
   useCreateRechargeMutation,
+  useCreateManualRechargeMutation,
   useCheckRechargeStatusMutation,
   useRechargeMutation,
   useVerifyPaymentMutation,

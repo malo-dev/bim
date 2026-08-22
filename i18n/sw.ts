@@ -118,7 +118,7 @@ const sw: Translations = {
     transfer:     "Hamisha",
     scanner:      "Changanua",
     support:      "Msaada",
-    refresh:      "Onyesha upya",
+    orders:       "Maagizo yangu",
   },
 
   params: {

@@ -44,15 +44,16 @@ const DARK: typeof LIGHT = {
   border:  "rgba(31,42,68,0.80)",
 };
 
-type StatusFilter = "Tout" | "pending" | "processing" | "delivered" | "cancelled";
+type StatusFilter = "Tout" | "pending" | "processing" | "shipped" | "delivered" | "cancelled";
 type SortType     = "recent" | "ancien" | "montant_desc" | "montant_asc";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "Tout",        label: "Tout"        },
-  { value: "pending",     label: "En attente"  },
-  { value: "processing",  label: "En cours"    },
-  { value: "delivered",   label: "Livré"       },
-  { value: "cancelled",   label: "Annulé"      },
+  { value: "Tout",        label: "Tout"         },
+  { value: "pending",     label: "En attente"   },
+  { value: "processing",  label: "En cours"     },
+  { value: "shipped",     label: "En livraison" },
+  { value: "delivered",   label: "Livré"        },
+  { value: "cancelled",   label: "Annulé"       },
 ];
 
 const SORTS: { value: SortType; label: string }[] = [
@@ -65,11 +66,12 @@ const SORTS: { value: SortType; label: string }[] = [
 function getStatusStyle(status: string, C: typeof LIGHT): { color: string; bg: string; label: string; icon: any } {
   switch ((status ?? "").toLowerCase()) {
     case "delivered":
-    case "completed":  return { color: C.green, bg: "rgba(16,185,129,0.08)", label: "Livré",       icon: "checkmark-circle-outline" };
-    case "pending":    return { color: C.amber, bg: "rgba(245,158,11,0.08)", label: "En attente",  icon: "time-outline"             };
-    case "processing": return { color: C.primary,bg:"rgba(0,53,197,0.07)",  label: "En cours",    icon: "cube-outline"             };
-    case "cancelled":  return { color: C.red,   bg: "rgba(239,68,68,0.07)", label: "Annulé",      icon: "close-circle-outline"     };
-    default:           return { color: C.textMut,bg:"rgba(116,118,136,0.07)",label: status ?? "—", icon: "ellipse-outline"          };
+    case "completed":  return { color: C.green,   bg: "rgba(16,185,129,0.08)",  label: "Livré",         icon: "checkmark-circle-outline" };
+    case "pending":    return { color: C.amber,   bg: "rgba(245,158,11,0.08)",  label: "En attente",    icon: "time-outline"             };
+    case "processing": return { color: C.primary, bg: "rgba(0,53,197,0.07)",    label: "En cours",      icon: "cube-outline"             };
+    case "shipped":    return { color: "#0047FF",  bg: "rgba(0,71,255,0.08)",   label: "En livraison",  icon: "bicycle-outline"          };
+    case "cancelled":  return { color: C.red,     bg: "rgba(239,68,68,0.07)",   label: "Annulé",        icon: "close-circle-outline"     };
+    default:           return { color: C.textMut, bg: "rgba(116,118,136,0.07)", label: status ?? "—",   icon: "ellipse-outline"          };
   }
 }
 

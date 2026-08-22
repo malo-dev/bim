@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,11 +16,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Modal from "react-native-modal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGetproductByIdQuery } from "@/services/productServices";
 import { useCreatePaiementMutation } from "@/services/tsxService";
-import { useVerifyPassMutation } from "@/services/authService";
 import { API_URL_BASE } from "@/constants/api";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
@@ -38,7 +37,7 @@ const LIGHT = {
   error:      "#EF4444",
   gold:       "#F59E0B",
   success:    "#22C55E",
-  navBg:      "rgba(255,255,255,0.96)",
+  navBg:      "#FFFFFF",
   navBord:    "rgba(196,197,218,0.20)",
   iconBtnBg:  "rgba(0,53,197,0.06)",
   cardBg:     "#FFFFFF",
@@ -90,48 +89,6 @@ const DARK: typeof LIGHT = {
   handleBg:   "rgba(255,255,255,0.12)",
 };
 
-/* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value }: { value: string }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  return (
-    <View style={pd.row}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <View key={i} style={[pd.dot, {
-          backgroundColor: i < value.length ? C.primary : "transparent",
-          borderColor:     i < value.length ? C.primary : C.pinBorder,
-        }]} />
-      ))}
-    </View>
-  );
-}
-
-/* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-  return (
-    <View style={kp.grid}>
-      {keys.map((k, i) => {
-        if (k === "") return <View key={i} style={kp.empty} />;
-        const isDel = k === "⌫";
-        return (
-          <TouchableOpacity key={i} activeOpacity={0.7}
-            style={[kp.key, {
-              backgroundColor: isDel ? "rgba(239,68,68,0.08)" : C.pinInputBg,
-              borderColor:     isDel ? "rgba(239,68,68,0.20)" : C.pinKeyBord,
-            }]}
-            onPress={() => isDel ? onDelete() : onPress(k)}
-          >
-            <Text style={[kp.keyText, { color: isDel ? C.error : C.pinText }]}>{k}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
 /* ─── MAIN ───────────────────────────────────────────────────────────── */
 export default function ProductDetail() {
   const { isDark } = useAppTheme();
@@ -145,8 +102,7 @@ export default function ProductDetail() {
   const { unread }                     = useUnreadNotifications();
 
   const { data, isLoading }            = useGetproductByIdQuery(productId, { skip: !productId });
-  const [createPaiement]               = useCreatePaiementMutation();
-  const [verifyPass]                   = useVerifyPassMutation();
+  const [createPaiement] = useCreatePaiementMutation();
 
   const product  = data?.data ?? data;
   const imageUri = product?.imageUrl ? `${API_URL_BASE}${product.imageUrl}` : null;
@@ -156,54 +112,13 @@ export default function ProductDetail() {
   const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
-  const [showPin,       setShowPin]       = useState(false);
-  const [pinValue,      setPinValue]      = useState("");
-  const [pinError,      setPinError]      = useState("");
-  const [loadingVerify, setLoadingVerify] = useState(false);
-  const pinShake = useRef(new Animated.Value(0)).current;
 
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<{ type: "success"|"error"; description: string } | null>(null);
   const [loadingPay, setLoadingPay] = useState(false);
 
-  const openPin = () => {
+  const handlePay = async () => {
     if (!userId) return;
-    setPinValue(""); setPinError("");
-    setShowPin(true);
-  };
-
-  const shakePin = () =>
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
-    ]).start();
-
-  const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
-  const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
-
-  const handleConfirmPin = async () => {
-    if (pinValue.length < 6) { setPinError("Code PIN incomplet"); return; }
-    if (!userId) return;
-
-    try {
-      setLoadingVerify(true);
-      await verifyPass({ userId, password: pinValue }).unwrap();
-    } catch {
-      shakePin();
-      setPinError("Code PIN incorrect");
-      setPinValue("");
-      setLoadingVerify(false);
-      return;
-    }
-
-    setLoadingVerify(false);
-    setShowPin(false);
-
-    await new Promise(r => setTimeout(r, 400));
-
     try {
       setLoadingPay(true);
       await createPaiement({
@@ -215,7 +130,6 @@ export default function ProductDetail() {
         id:              Number(userId),
         productId:       Number(productId),
       }).unwrap();
-
       setResultData({ type: "success", description: `Paiement de ${price} ${currency} effectué avec succès.` });
     } catch (err: any) {
       setResultData({ type: "error", description: err?.data?.message || "Une erreur est survenue lors du paiement." });
@@ -343,7 +257,7 @@ export default function ProductDetail() {
             <Text style={s.payLabel}>Total à payer</Text>
             <Text style={s.payAmount}>{price} <Text style={s.payAmountCur}>{currency}</Text></Text>
           </View>
-          <TouchableOpacity style={s.payBtnWrap} onPress={openPin} activeOpacity={0.88} disabled={loadingPay}>
+          <TouchableOpacity style={s.payBtnWrap} onPress={handlePay} activeOpacity={0.88} disabled={loadingPay}>
             <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payBtn}>
               {loadingPay ? (
                 <ActivityIndicator color={C.white} size="small" />
@@ -357,57 +271,6 @@ export default function ProductDetail() {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* ── MODAL PIN ── */}
-      <Modal
-        isVisible={showPin}
-        onBackdropPress={() => { if (!loadingVerify) setShowPin(false); }}
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        style={m.slide}
-        useNativeDriverForBackdrop
-        avoidKeyboard
-      >
-        <View style={m.sheet}>
-          <View style={m.handle} />
-          <View style={m.lockWrap}>
-            <Ionicons name="lock-closed" size={28} color={C.primary} />
-          </View>
-          <Text style={m.title}>Code PIN requis</Text>
-          <Text style={m.sub}>Entrez votre code pour confirmer le paiement</Text>
-          <View style={m.amountRow}>
-            <Ionicons name="cash-outline" size={14} color={C.primary} />
-            <Text style={m.amountText}>{price} {currency}</Text>
-          </View>
-          <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} />
-          </Animated.View>
-          {pinError.length > 0 && (
-            <View style={m.errRow}>
-              <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-              <Text style={m.errText}>{pinError}</Text>
-            </View>
-          )}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
-          <TouchableOpacity
-            style={[m.confirmBtn, { opacity: pinValue.length === 6 && !loadingVerify ? 1 : 0.5 }]}
-            onPress={handleConfirmPin}
-            disabled={loadingVerify || pinValue.length < 6}
-            activeOpacity={0.85}
-          >
-            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={m.confirmGrad}>
-              {loadingVerify ? (
-                <><ActivityIndicator color={C.white} size="small" /><Text style={m.confirmText}>Vérification...</Text></>
-              ) : (
-                <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={m.confirmText}>Confirmer</Text></>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { if (!loadingVerify) setShowPin(false); }} style={m.cancelBtn}>
-            <Text style={m.cancelText}>Annuler</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ── MODAL RÉSULTAT ── */}
       <Modal

@@ -3,7 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -18,11 +18,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Modal from "react-native-modal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGetproductByIdQuery } from "@/services/productServices";
 import { useCreatePaiementMutation } from "@/services/tsxService";
-import { useVerifyPassMutation } from "@/services/authService";
 import { API_URL_BASE } from "@/constants/api";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
@@ -40,7 +38,7 @@ const LIGHT = {
   border:  "rgba(196,197,218,0.25)",
   error:   "#EF4444",
   green:   "#22C55E",
-  safeBarBg:   "rgba(255,255,255,0.96)",
+  safeBarBg:   "#FFFFFF",
   safeBarBord: "rgba(196,197,218,0.20)",
   contentCard: "#FFFFFF",
   payBarBg:    "#FFFFFF",
@@ -97,48 +95,6 @@ const DARK: typeof LIGHT = {
   amountBord:  "rgba(77,141,255,0.20)",
 };
 
-/* ─── PIN DOTS ───────────────────────────────────────────────────────── */
-function PinDots({ value }: { value: string }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  return (
-    <View style={pd.row}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <View key={i} style={[pd.dot, {
-          backgroundColor: i < value.length ? C.primary : "transparent",
-          borderColor:     i < value.length ? C.primary : C.pinBorder,
-        }]} />
-      ))}
-    </View>
-  );
-}
-
-/* ─── KEYPAD ─────────────────────────────────────────────────────────── */
-function Keypad({ onPress, onDelete }: { onPress: (v: string) => void; onDelete: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-  return (
-    <View style={kp.grid}>
-      {keys.map((k, i) => {
-        if (k === "") return <View key={i} style={kp.empty} />;
-        const isDel = k === "⌫";
-        return (
-          <TouchableOpacity key={i} activeOpacity={0.7}
-            style={[kp.key, {
-              backgroundColor: isDel ? C.delBg  : C.keyBg,
-              borderColor:     isDel ? C.delBord : C.keyBord,
-            }]}
-            onPress={() => isDel ? onDelete() : onPress(k)}
-          >
-            <Text style={[kp.keyText, { color: isDel ? C.error : C.text }]}>{k}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
-
 /* ─── MAIN ───────────────────────────────────────────────────────────── */
 export default function CarburantProductDetail() {
   const router                   = useRouter();
@@ -151,8 +107,7 @@ export default function CarburantProductDetail() {
   const r                        = useMemo(() => mkR(C), [isDark]);
 
   const { data, isLoading }   = useGetproductByIdQuery(productId, { skip: !productId });
-  const [createPaiement]      = useCreatePaiementMutation();
-  const [verifyPass]          = useVerifyPassMutation();
+  const [createPaiement] = useCreatePaiementMutation();
 
   const product   = data?.data ?? data;
   const imageUri  = product?.imageUrl
@@ -163,54 +118,17 @@ export default function CarburantProductDetail() {
 
   const [liters,        setLiters]        = useState("");
   const [userId,        setUserId]        = useState<string | null>(null);
-  const [showPin,       setShowPin]       = useState(false);
-  const [pinValue,      setPinValue]      = useState("");
-  const [pinError,      setPinError]      = useState("");
-  const [loadingVerify, setLoadingVerify] = useState(false);
-  const [loadingPay,    setLoadingPay]    = useState(false);
+  const [loadingPay, setLoadingPay] = useState(false);
   const [showResult,    setShowResult]    = useState(false);
   const [resultData,    setResultData]    = useState<{ type: "success"|"error"; description: string } | null>(null);
 
-  const pinShake   = useRef(new Animated.Value(0)).current;
   const litersNum  = parseFloat(liters.replace(",", ".")) || 0;
   const totalPrice = litersNum > 0 ? litersNum * pricePerL : 0;
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
-  const openPin = () => {
-    if (!userId) return;
-    if (litersNum <= 0) return;
-    setPinValue(""); setPinError(""); setShowPin(true);
-  };
-
-  const shakePin = () =>
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:   8, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  -8, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:   0, duration: 60, useNativeDriver: true }),
-    ]).start();
-
-  const handlePinKey    = (k: string) => { if (pinValue.length >= 6) return; setPinError(""); setPinValue(p => p + k); };
-  const handlePinDelete = () => setPinValue(p => p.slice(0, -1));
-
-  const handleConfirmPin = async () => {
-    if (pinValue.length < 6) { setPinError("Code PIN incomplet"); return; }
-    if (!userId) return;
-    try {
-      setLoadingVerify(true);
-      await verifyPass({ userId, password: pinValue }).unwrap();
-    } catch {
-      shakePin();
-      setPinError("Code PIN incorrect");
-      setPinValue("");
-      setLoadingVerify(false);
-      return;
-    }
-    setLoadingVerify(false);
-    setShowPin(false);
-    await new Promise(res => setTimeout(res, 400));
+  const handlePay = async () => {
+    if (!userId || litersNum <= 0) return;
     try {
       setLoadingPay(true);
       await createPaiement({
@@ -391,7 +309,7 @@ export default function CarburantProductDetail() {
           </View>
           <TouchableOpacity
             style={[s.payBtnWrap, litersNum <= 0 && { opacity: 0.45 }]}
-            onPress={openPin}
+            onPress={handlePay}
             activeOpacity={0.88}
             disabled={loadingPay || litersNum <= 0}
           >
@@ -408,54 +326,6 @@ export default function CarburantProductDetail() {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* ══ MODAL PIN ══ */}
-      <Modal
-        isVisible={showPin}
-        onBackdropPress={() => { if (!loadingVerify) setShowPin(false); }}
-        animationIn="slideInUp" animationOut="slideOutDown"
-        style={m.slide} useNativeDriverForBackdrop avoidKeyboard
-      >
-        <View style={m.sheet}>
-          <View style={m.handle} />
-          <View style={m.lockWrap}>
-            <Ionicons name="lock-closed" size={26} color={C.primary} />
-          </View>
-          <Text style={m.title}>Code PIN requis</Text>
-          <Text style={m.sub}>Confirmez votre identité pour payer</Text>
-          <View style={m.amountRow}>
-            <Ionicons name="water-outline" size={14} color={C.primary} />
-            <Text style={m.amountText}>{litersNum}L · {totalPrice.toFixed(2)} {currency}</Text>
-          </View>
-          <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-            <PinDots value={pinValue} />
-          </Animated.View>
-          {pinError.length > 0 && (
-            <View style={m.errRow}>
-              <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-              <Text style={m.errText}>{pinError}</Text>
-            </View>
-          )}
-          <Keypad onPress={handlePinKey} onDelete={handlePinDelete} />
-          <TouchableOpacity
-            style={[m.confirmBtn, { opacity: pinValue.length === 6 && !loadingVerify ? 1 : 0.45 }]}
-            onPress={handleConfirmPin}
-            disabled={loadingVerify || pinValue.length < 6}
-            activeOpacity={0.85}
-          >
-            <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={m.confirmGrad}>
-              {loadingVerify ? (
-                <><ActivityIndicator color={C.white} size="small" /><Text style={m.confirmText}>Vérification...</Text></>
-              ) : (
-                <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={m.confirmText}>Confirmer</Text></>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => { if (!loadingVerify) setShowPin(false); }} style={m.cancelBtn}>
-            <Text style={m.cancelText}>Annuler</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
 
       {/* ══ MODAL RÉSULTAT ══ */}
       <Modal

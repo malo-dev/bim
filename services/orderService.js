@@ -61,6 +61,16 @@ export const orderApi = createApi({
       invalidatesTags: ["order"],
     }),
 
+    /* Renseigner/confirmer l'adresse de livraison (ex: commande bonus fidélité) */
+    updateOrderShipping: builder.mutation({
+      query: ({ id, shippingAddress, clientPhone }) => ({
+        url: `/order/${id}`,
+        method: "PUT",
+        data: { shippingAddress, clientPhone },
+      }),
+      invalidatesTags: ["order"],
+    }),
+
     /* Payer à la livraison — marque la commande livrée + payée */
     markOrderPaid: builder.mutation({
       query: (orderNumber) => ({
@@ -70,12 +80,11 @@ export const orderApi = createApi({
       invalidatesTags: ["order"],
     }),
 
-    /* Paiement à la livraison avec PIN — split entreprise/livreur */
+    /* Paiement à la livraison — confirmation directe, sans PIN */
     payOrderAtDelivery: builder.mutation({
-      query: ({ orderNumber, pin }) => ({
+      query: ({ orderNumber }) => ({
         url: `/order/pay/${orderNumber}`,
         method: "POST",
-        data: { pin },
       }),
       invalidatesTags: ["order"],
     }),
@@ -94,6 +103,7 @@ export const {
   useGetCompanyOrdersQuery,
   useCreateOrderMutation,
   useUpdateOrderStatusMutation,
+  useUpdateOrderShippingMutation,
   useMarkOrderPaidMutation,
   usePayOrderAtDeliveryMutation,
   useDeleteorderMutation,

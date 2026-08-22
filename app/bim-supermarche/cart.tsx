@@ -19,7 +19,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useVerifyPassMutation } from "@/services/authService";
 import { useCreatePaiementMutation } from "@/services/tsxService";
 import { useCreateOrderMutation } from "@/services/orderService";
 import { useGetAllProductsQuery } from "@/services/productServices";
@@ -35,7 +34,7 @@ const LIGHT = {
   surfLow: "#EEEEEE", text: "#1A1C1C", textSec: "#434657",
   textMut: "#747688", border: "rgba(196,197,218,0.30)",
   green:   "#10B981", amber: "#F59E0B", red: "#EF4444",
-  card:    "#FFFFFF", navBg: "rgba(255,255,255,0.96)",
+  card:    "#FFFFFF",
 };
 const DARK: typeof LIGHT = {
   primary: "#0035C5", blue: "#4D8DFF", deep: "#001257",
@@ -43,7 +42,7 @@ const DARK: typeof LIGHT = {
   surfLow: "#0F1A2E", text: "#EAF0FF", textSec: "#A3B4D0",
   textMut: "#6B7A99", border: "rgba(31,42,68,0.80)",
   green:   "#059669", amber: "#D97706", red: "#DC2626",
-  card:    "#1A2540", navBg: "rgba(11,18,32,0.94)",
+  card:    "#1A2540",
 };
 
 const CART_KEY        = "bim_supermarche_cart";
@@ -55,32 +54,6 @@ const FALLBACK_IMG =
 function getImgUri(imageUrl: string | null | undefined): string {
   if (!imageUrl) return FALLBACK_IMG;
   return imageUrl.startsWith("http") ? imageUrl : `${API_URL_BASE}${imageUrl}`;
-}
-
-/* ─── PIN NUMPAD ─────────────────────────────────────────────────────── */
-function PinPad({
-  value, onChange, onDelete,
-}: { value: string; onChange: (k: string) => void; onDelete: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const pp = useMemo(() => mkPp(C), [isDark]);
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-  return (
-    <View style={pp.grid}>
-      {keys.map((k, i) =>
-        k === "" ? <View key={i} style={pp.key} /> :
-        k === "⌫" ? (
-          <TouchableOpacity key={i} style={pp.key} onPress={onDelete}>
-            <Ionicons name="backspace-outline" size={22} color={C.textMut} />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity key={i} style={pp.key} onPress={() => onChange(k)} disabled={value.length >= 6}>
-            <Text style={pp.keyText}>{k}</Text>
-          </TouchableOpacity>
-        )
-      )}
-    </View>
-  );
 }
 
 /* ─── CART ITEM CARD ─────────────────────────────────────────────────── */
@@ -175,9 +148,6 @@ export default function CartScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [mode,   setMode]   = useState<"idle" | "cash" | "order">("idle");
 
-  const [pin,      setPin]      = useState("");
-  const [pinError, setPinError] = useState("");
-  const pinShake = useRef(new Animated.Value(0)).current;
 
   const [address, setAddress] = useState("");
   const [phone,   setPhone]   = useState("");
@@ -185,8 +155,7 @@ export default function CartScreen() {
 
   const [result, setResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const [verifyPass,     { isLoading: verifying }] = useVerifyPassMutation();
-  const [createPaiement, { isLoading: paying }]    = useCreatePaiementMutation();
+  const [createPaiement, { isLoading: paying }] = useCreatePaiementMutation();
   const [createOrder,    { isLoading: ordering }]  = useCreateOrderMutation();
 
   const { data: upsellData } = useGetAllProductsQuery({ isUpselling: "true", paginate: "false" });
@@ -211,24 +180,8 @@ export default function CartScreen() {
   const totalCommande = subtotal + FRAIS_LIVRAISON;
   const totalCaisse   = subtotal;
 
-  const shakePin = () => {
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue: 10,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: 8,   duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: 0,   duration: 60, useNativeDriver: true }),
-    ]).start();
-  };
-
   const handleCashPay = async () => {
-    if (pin.length < 6) { setPinError("Entrez votre code à 6 chiffres"); return; }
     if (!userId) return;
-    try {
-      await verifyPass({ userId, password: pin }).unwrap();
-    } catch {
-      shakePin(); setPinError("Code incorrect"); setPin(""); return;
-    }
     try {
       await createPaiement({
         amount:          Number(normalizeDecimal(String(totalCaisse.toFixed(2)))),
@@ -314,25 +267,13 @@ export default function CartScreen() {
             <Text style={s.recapAmount}>{totalCaisse.toFixed(2)} EC</Text>
             <Text style={s.recapSub}>{cart.length} article{cart.length > 1 ? "s" : ""} — {companyName}</Text>
           </View>
-          <Text style={s.pinLabel}>Entrez votre code PIN (6 chiffres)</Text>
-          <Animated.View style={[s.pinDots, { transform: [{ translateX: pinShake }] }]}>
-            {[0,1,2,3,4,5].map(i => (
-              <View key={i} style={[s.dot, { borderColor: pinError ? C.red : C.primary }, i < pin.length && { backgroundColor: C.primary }]} />
-            ))}
-          </Animated.View>
-          {pinError ? <Text style={s.pinError}>{pinError}</Text> : null}
-          <PinPad
-            value={pin}
-            onChange={k => { setPinError(""); setPin(p => p.length < 6 ? p + k : p); }}
-            onDelete={() => setPin(p => p.slice(0, -1))}
-          />
           <TouchableOpacity
-            style={[s.confirmBtn, (verifying || paying || pin.length < 6) && { opacity: 0.6 }]}
+            style={[s.confirmBtn, paying && { opacity: 0.6 }]}
             onPress={handleCashPay}
-            disabled={verifying || paying || pin.length < 6}
+            disabled={paying}
           >
             <LinearGradient colors={[C.blue, C.deep]} style={s.gradBtn}>
-              {(verifying || paying)
+              {paying
                 ? <Text style={s.gradBtnText}>Traitement…</Text>
                 : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={s.gradBtnText}>Confirmer le paiement</Text></>
               }
@@ -440,7 +381,7 @@ export default function CartScreen() {
       {cart.length > 0 && (
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         >
           {/* Items */}
           <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 12 }}>
@@ -520,7 +461,7 @@ export default function CartScreen() {
 
             <TouchableOpacity
               style={s.caisseBtn}
-              onPress={() => { setPin(""); setPinError(""); setMode("cash"); }}
+              onPress={() => setMode("cash")}
               activeOpacity={0.9}
             >
               <Ionicons name="qr-code-outline" size={20} color={C.primary} />
@@ -530,26 +471,6 @@ export default function CartScreen() {
         </ScrollView>
       )}
 
-      {/* ── BOTTOM NAV ── */}
-      <View style={[s.bottomNav, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-        <TouchableOpacity style={s.navItem} onPress={() => router.replace("/(tabs)" as any)} activeOpacity={0.7}>
-          <Ionicons name="home-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
-          <Ionicons name="globe-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <View style={s.navCenter}>
-          <TouchableOpacity style={s.navCenterBtn} activeOpacity={0.85}>
-            <Ionicons name="qr-code-outline" size={24} color={C.white} />
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={s.navItem} activeOpacity={0.7}>
-          <Ionicons name="stats-chart-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => router.push("/profile" as any)} activeOpacity={0.7}>
-          <Ionicons name="person-outline" size={22} color={C.textMut} />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -583,12 +504,12 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 3 },
   },
   sumRow:        { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  sumLabel:      { fontFamily: "NexaLight", fontSize: 14, color: C.textSec },
+  sumLabel:      { fontFamily: "NexaBold", fontSize: 14, color: C.textSec },
   sumVal:        { fontFamily: "NexaBold", fontSize: 14, color: C.text },
   sumDivider:    { height: 1, backgroundColor: C.border, marginVertical: 4 },
   sumTotalLabel: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
   sumTotal:      { fontFamily: "NexaBold", fontSize: 20, color: C.primary },
-  sumNote:       { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginTop: 1 },
+  sumNote:       { fontFamily: "NexaBold", fontSize: 12, color: C.textMut, marginTop: 2 },
 
   actionsWrap:   { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
   commanderBtn:  { borderRadius: 56, overflow: "hidden", elevation: 4, shadowColor: C.blue, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
@@ -597,30 +518,26 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   caisseBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 56, borderWidth: 2, borderColor: C.primary, paddingVertical: 16 },
   caisseText:    { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
 
-  bottomNav:     { position: "absolute", bottom: 0, left: 0, right: 0, height: 72, backgroundColor: C.navBg, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center", justifyContent: "space-around", elevation: 12, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: -3 } },
-  navItem:       { flex: 1, alignItems: "center", justifyContent: "center", height: 48 },
-  navCenter:     { flex: 1, alignItems: "center", justifyContent: "center" },
-  navCenterBtn:  { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primary, alignItems: "center", justifyContent: "center", elevation: 8, shadowColor: C.primary, shadowOpacity: 0.38, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, marginBottom: 16 },
 
   subHeader:   { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
   subTopBar:   { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
   subTitle:    { fontFamily: "NexaBold", fontSize: 18, color: C.text, flex: 1, textAlign: "center" },
 
   recapCard:   { backgroundColor: C.card, borderRadius: 24, padding: 24, alignItems: "center", marginBottom: 24, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 3 } },
-  recapLabel:  { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textTransform: "uppercase", letterSpacing: 1 },
-  recapAmount: { fontFamily: "NexaBold", fontSize: 32, color: C.primary, marginVertical: 6 },
-  recapSub:    { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  recapLabel:  { fontFamily: "NexaBold", fontSize: 13, color: C.textMut },
+  recapAmount: { fontFamily: "NexaBold", fontSize: 34, color: C.primary, marginVertical: 8 },
+  recapSub:    { fontFamily: "NexaBold", fontSize: 13, color: C.textMut },
 
-  pinLabel:    { fontFamily: "NexaLight", fontSize: 13, color: C.text, textAlign: "center", marginBottom: 16 },
+  pinLabel:    { fontFamily: "NexaBold", fontSize: 14, color: C.text, textAlign: "center", marginBottom: 16 },
   pinDots:     { flexDirection: "row", justifyContent: "center", gap: 14, marginBottom: 8 },
   dot:         { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
-  pinError:    { fontFamily: "NexaLight", fontSize: 12, color: C.red, textAlign: "center", marginBottom: 12 },
+  pinError:    { fontFamily: "NexaBold", fontSize: 13, color: C.red, textAlign: "center", marginBottom: 12 },
 
   confirmBtn:  { borderRadius: 56, overflow: "hidden", marginTop: 24 },
 
-  fieldLabel:  { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 16 },
-  inputWrap:   { flexDirection: "row", alignItems: "flex-start", borderRadius: 16, borderWidth: 1, borderColor: C.border, backgroundColor: C.card, minHeight: 50, paddingVertical: 10 },
-  input:       { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text, paddingHorizontal: 10, paddingTop: 2 },
+  fieldLabel:  { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 8, marginTop: 18 },
+  inputWrap:   { flexDirection: "row", alignItems: "flex-start", borderRadius: 16, borderWidth: 1.5, borderColor: C.border, backgroundColor: C.card, minHeight: 54, paddingVertical: 12 },
+  input:       { flex: 1, fontFamily: "NexaBold", fontSize: 14, color: C.text, paddingHorizontal: 10, paddingTop: 0, lineHeight: 22 },
 
   gradBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 16 },
   gradBtnText: { fontFamily: "NexaBold", fontSize: 15, color: C.white },

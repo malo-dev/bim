@@ -118,7 +118,7 @@ const ln: Translations = {
     transfer:     "Tinda",
     scanner:      "Scan",
     support:      "Lisalisi",
-    refresh:      "Bobongisi",
+    orders:       "Ba commande na ngai",
   },
 
   params: {

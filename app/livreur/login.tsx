@@ -99,7 +99,7 @@ export default function LivreurLoginScreen() {
         </TouchableOpacity>
       </SafeAreaView>
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           {/* Logo + titre */}
@@ -186,7 +186,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },
 
-  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: Platform.OS === "android" ? 120 : 40 },
 
   logoArea: { alignItems: "center", paddingTop: 24, marginBottom: 28 },
   logoWrap: {

@@ -9,6 +9,7 @@ import { PersistGate } from "redux-persist/integration/react";
 import "react-native-reanimated";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 import { useEffect, useRef, createContext, useContext, useState } from "react";
 import { Animated, AppState, AppStateStatus, Image, StyleSheet, View, ActivityIndicator, Appearance, DeviceEventEmitter } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -19,6 +20,15 @@ import logo from "@/assets/images/logo.jpeg";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import Constants from "expo-constants";
+
+/* ─── Config notifications (foreground + Android channel) ───────────── */
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge:  true,
+  }),
+});
 
 const BASE_URL = Constants.expoConfig?.extra?.API_URL as string;
 
@@ -73,9 +83,10 @@ export default function RootLayout() {
   const followSystemRef = useRef(true);
 
   /* ── Écran de reprise (arrière-plan → premier plan) ── */
-  const [showResume, setShowResume] = useState(false);
-  const resumeOpacity = useRef(new Animated.Value(1)).current;
-  const appStateRef   = useRef<AppStateStatus>(AppState.currentState);
+  const [showResume,   setShowResume]   = useState(false);
+  const resumeOpacity  = useRef(new Animated.Value(1)).current;
+  const appStateRef    = useRef<AppStateStatus>(AppState.currentState);
+  const backgroundedAt = useRef<number | null>(null); // timestamp ms quand l'app passe en background
 
   const pathname    = usePathname();
   const pathnameRef = useRef(pathname);
@@ -85,16 +96,27 @@ export default function RootLayout() {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", async (next: AppStateStatus) => {
+      if (next === "background" || next === "inactive") {
+        // Mémoriser quand l'app part en background
+        if (appStateRef.current === "active") backgroundedAt.current = Date.now();
+      }
+
       if (appStateRef.current === "background" && next === "active") {
-        // Écran de reprise visuel
-        resumeOpacity.setValue(1);
-        setShowResume(true);
-        Animated.timing(resumeOpacity, {
-          toValue: 0,
-          duration: 500,
-          delay: 800,
-          useNativeDriver: true,
-        }).start(() => setShowResume(false));
+        // N'afficher le splash de reprise que si l'app était vraiment en background ≥ 2 s
+        // Évite les faux déclenchements pendant la navigation ou la fermeture du clavier
+        const bgDuration = backgroundedAt.current ? Date.now() - backgroundedAt.current : 0;
+        backgroundedAt.current = null;
+
+        if (bgDuration >= 2000) {
+          resumeOpacity.setValue(1);
+          setShowResume(true);
+          Animated.timing(resumeOpacity, {
+            toValue: 0,
+            duration: 500,
+            delay: 800,
+            useNativeDriver: true,
+          }).start(() => setShowResume(false));
+        }
 
         // Ne pas vérifier le token pendant le flux de récupération de mot de passe
         if (!AUTH_RECOVERY_ROUTES.includes(pathnameRef.current)) {
@@ -183,6 +205,17 @@ export default function RootLayout() {
     if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
+  /* ── Android notification channel (requis pour les push sur Android ≥ 8) ── */
+  useEffect(() => {
+    Notifications.setNotificationChannelAsync("default", {
+      name:             "BIM NEXT",
+      importance:       Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor:       "#0047FF",
+      sound:            "default",
+    });
+  }, []);
+
   /* ── Loading ── */
   if (!fontsLoaded || !themeLoaded) {
     return (
@@ -242,6 +275,8 @@ export default function RootLayout() {
                 <Stack.Screen name="qrcode"           options={{ headerShown: false }} />
                 <Stack.Screen name="livreur"          options={{ headerShown: false }} />
                 <Stack.Screen name="bim-sos"          options={{ headerShown: false }} />
+                <Stack.Screen name="agent-dashboard"  options={{ headerShown: false }} />
+                <Stack.Screen name="formation"        options={{ headerShown: false }} />
                 <Stack.Screen name="favorites"        options={{ headerShown: false }} />
                 <Stack.Screen name="recommended"      options={{ headerShown: false }} />
                 <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />

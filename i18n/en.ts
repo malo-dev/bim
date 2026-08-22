@@ -118,7 +118,7 @@ const en: Translations = {
     transfer:     "Transfer",
     scanner:      "Scan",
     support:      "Support",
-    refresh:      "Refresh",
+    orders:       "My orders",
   },
 
   params: {

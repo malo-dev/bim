@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Animated,
   FlatList,
+  InteractionManager,
   Platform,
   RefreshControl,
   ScrollView,
@@ -24,6 +25,7 @@ import Svg, { Path } from "react-native-svg";
 import { useAppTheme } from "@/app/_layout";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
+const _ios = Platform.OS === "ios";
 const LIGHT = {
   primary:    "#0035C5",
   primaryMd:  "#0047FF",
@@ -39,11 +41,11 @@ const LIGHT = {
   warning:    "#F59E0B",
   neutral:    "#64748B",
   skeleton:   "#F0F1F5",
-  headerBg:   "rgba(255,255,255,0.94)",
+  headerBg:   _ios ? "rgba(255,255,255,0.94)" : "#FFFFFF",  // Android: opaque (no backdrop blur)
   headerBord: "rgba(196,197,218,0.15)",
-  backBtnBg:  "rgba(248,249,252,0.8)",
+  backBtnBg:  _ios ? "rgba(248,249,252,0.8)" : "#F0F4FA",
   avatarBord: "rgba(0,69,255,0.08)",
-  chipBg:     "rgba(248,249,252,0.9)",
+  chipBg:     _ios ? "rgba(248,249,252,0.9)" : "#F0F4FA",
   chipBord:   "rgba(196,197,218,0.3)",
   cardIconBg: "rgba(0,69,255,0.05)",
   emptyBg:    "rgba(0,53,197,0.05)",
@@ -124,7 +126,10 @@ function fmtAmount(n: number): string {
 function Sparkline() {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(anim, { toValue: 1, duration: 1600, useNativeDriver: false }).start();
+    const task = InteractionManager.runAfterInteractions(() => {
+      Animated.timing(anim, { toValue: 1, duration: 1600, useNativeDriver: false }).start();
+    });
+    return () => task.cancel();
   }, []);
   return (
     <Svg width={120} height={24} fill="none">
@@ -485,7 +490,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   heroWrap:  { marginHorizontal: 20, marginBottom: 20 },
   hero: {
     borderRadius: 24, padding: 22, alignItems: "center", overflow: "hidden",
-    shadowColor: C.primary, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 20,
+    shadowColor: Platform.OS === "ios" ? C.primary : "#000", shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 20,
     elevation: 10,
   },
   heroBlobTop:    { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "rgba(255,255,255,0.08)", top: -60, left: -40 },
