@@ -358,7 +358,7 @@ function mkS(C: typeof LIGHT) {
     thumb:            { width: "100%", height: "100%" },
     thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
     playOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: "center", justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.22)",
     },

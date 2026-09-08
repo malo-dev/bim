@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ComponentProps } from "react";
 import { useAppTheme } from "@/app/_layout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -87,7 +86,11 @@ function TabItem({
   );
 }
 
-function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+// Le type exact de `tabBar` vient d'expo-router (pas de @react-navigation/bottom-tabs :
+// depuis le SDK 56, expo-router a son propre type, structurellement proche mais distinct).
+type TabBarProps = NonNullable<ComponentProps<typeof Tabs>["tabBar"]> extends (props: infer P) => any ? P : never;
+
+function CustomTabBar({ state, navigation }: TabBarProps) {
   const { isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const bottomPos = insets.bottom > 0 ? insets.bottom + 8 : 16;

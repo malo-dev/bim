@@ -337,7 +337,7 @@ function mkS(C: typeof LIGHT) {
 
     /* Hero */
     heroCard: { borderRadius: 20, overflow: "hidden", backgroundColor: C.primary, minHeight: 120, justifyContent: "center", marginBottom: 4 },
-    heroBg: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.10)" },
+    heroBg: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.10)" },
     heroContent: { padding: 24 },
     heroLabel: { fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.75)", letterSpacing: 0.5, textTransform: "uppercase" },
     heroBalance: { fontFamily: "NexaBold", fontSize: 34, color: "#FFFFFF", marginTop: 4 },

@@ -437,7 +437,7 @@ const cs = StyleSheet.create({
   imageWrap:     { width: "100%", height: 200, position: "relative" },
   image:         { width: "100%", height: "100%" },
   imageFallback: { flex: 1, alignItems: "center", justifyContent: "center" },
-  imageOverlay:  { ...StyleSheet.absoluteFillObject, top: "40%" },
+  imageOverlay:  { ...StyleSheet.absoluteFill, top: "40%" },
 
   badgePos: { position: "absolute", top: 12, left: 12, elevation: 4, shadowColor: C.deep, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
   tagPos:   { position: "absolute", top: 14, right: 12, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },

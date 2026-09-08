@@ -881,7 +881,7 @@ function mkPr(C: typeof LIGHT) { return StyleSheet.create({
 
 /* ─── PRODUCT SHEET STYLES ───────────────────────────────────────────── */
 function mkSh(C: typeof LIGHT) { return StyleSheet.create({
-  overlay:     { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.42)" },
+  overlay:     { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.42)" },
   sheet:       { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.card, borderTopLeftRadius: 36, borderTopRightRadius: 36, paddingBottom: 32, elevation: 20, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -4 } },
   handle:      { width: 44, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.10)", alignSelf: "center", marginTop: 14 },
   imgArea:     { height: 200, marginHorizontal: 24, marginTop: 16, backgroundColor: C.surfLow, borderRadius: 24, alignItems: "center", justifyContent: "center", padding: 20 },
@@ -913,7 +913,7 @@ function mkSh(C: typeof LIGHT) { return StyleSheet.create({
 
 /* ─── FILTER SHEET STYLES ─────────────────────────────────────────────── */
 function mkFs(C: typeof LIGHT) { return StyleSheet.create({
-  overlay:         { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.42)" },
+  overlay:         { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.42)" },
   sheet:           { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.card, borderTopLeftRadius: 36, borderTopRightRadius: 36, paddingBottom: 32, elevation: 20, shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -4 }, maxHeight: "82%" },
   handle:          { width: 44, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.10)", alignSelf: "center", marginTop: 14, marginBottom: 4 },
   header:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 24, paddingVertical: 16 },

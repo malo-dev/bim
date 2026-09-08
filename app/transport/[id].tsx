@@ -47,7 +47,7 @@ export default function TransportPage() {
               style={StyleSheet.absoluteFill}
             />
 
-            <Ionicons name={item.icon} size={38} color="white" />
+            <Ionicons name={item.icon as any} size={38} color="white" />
             <Text style={styles.cardTitle}>{item.title}</Text>
           </BlurView>
         )}

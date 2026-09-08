@@ -98,15 +98,19 @@
           "microphonePermission": "BIM utilise le microphone pour la navigation vocale.",
           "speechRecognitionPermission": "BIM utilise la reconnaissance vocale pour naviguer dans l'application."
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/68b578a1-d490-4427-848d-a5e0d8ba1280"
     }
   }
 }
-

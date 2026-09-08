@@ -227,7 +227,7 @@ export default function BimGazScreen() {
 
       {/* HERO 16:9 arrondi */}
       <View style={s.hero}>
-        <Image source={{ uri: HERO_IMAGE }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+        <Image source={{ uri: HERO_IMAGE }} style={StyleSheet.absoluteFill} contentFit="cover" />
         <LinearGradient
           colors={["transparent", "rgba(0,0,0,0.40)"]}
           start={{ x: 0, y: 0.35 }} end={{ x: 0, y: 1 }}

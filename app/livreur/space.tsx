@@ -243,7 +243,7 @@ export default function LivreurSpaceScreen() {
 
   async function handleToggleOnline() {
     if (!gpsGranted) { await requestGps(); return; }
-    await toggleOnline();
+    await toggleOnline(undefined);
     refetchProfile();
   }
 
@@ -865,7 +865,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     borderColor: "rgba(34,197,94,0.35)",
   },
   toggleCardGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(34,197,94,0.05)",
   },
   toggleRow:    { flexDirection: "row", alignItems: "center" },

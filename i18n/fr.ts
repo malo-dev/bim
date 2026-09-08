@@ -440,7 +440,10 @@ const fr = {
     sw:      "🇹🇿 Swahili",
     current: "Langue actuelle",
   },
-} as const;
+};
 
 export default fr;
+// Pas de `as const` ici : on veut que Translations décrive la STRUCTURE
+// (mêmes clés, valeurs de type string) pour que en/ln/sw puissent avoir des
+// traductions différentes — pas les mêmes chaînes que le français.
 export type Translations = typeof fr;

@@ -81,7 +81,7 @@ export default function QRPage() {
 
       {/* ===== CARD QR ===== */}
       <BlurView intensity={80} tint="light" style={s.card}>
-        <LinearGradient colors={["#302E99", "#3906C7"]} style={StyleSheet.absoluteFillObject} />
+        <LinearGradient colors={["#302E99", "#3906C7"]} style={StyleSheet.absoluteFill} />
 
         <Ionicons name="qr-code-outline" size={60} color="white" />
 

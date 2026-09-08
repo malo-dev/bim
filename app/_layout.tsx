@@ -25,9 +25,11 @@ import Constants from "expo-constants";
 /* ─── Config notifications (foreground + Android channel) ───────────── */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge:  true,
+    shouldShowAlert:  true,
+    shouldPlaySound:  true,
+    shouldSetBadge:   true,
+    shouldShowBanner: true,
+    shouldShowList:   true,
   }),
 });
 

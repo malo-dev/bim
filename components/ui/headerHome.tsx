@@ -40,7 +40,7 @@ const HeaderOFpage: React.FC<HeaderOFpageProps> = ({
   tokenAbonement,
 }) => {
   const router     = useRouter();
-  const unread     = useUnreadNotifications();
+  const { unread } = useUnreadNotifications();
   const scaleNotif = useRef(new Animated.Value(1)).current;
 
   const press   = () => Animated.spring(scaleNotif, { toValue: 0.88, useNativeDriver: true }).start();

@@ -525,7 +525,7 @@ function mkCd(C: typeof LIGHT) { return StyleSheet.create({
 
 /* ─── DETAIL SHEET STYLES ─────────────────────────────────────────────── */
 function mkDs(C: typeof LIGHT) { return StyleSheet.create({
-  overlay:       { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" },
+  overlay:       { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.45)" },
   sheet:         { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.card, borderTopLeftRadius: 36, borderTopRightRadius: 36, maxHeight: H * 0.90, elevation: 24, shadowColor: "#000", shadowOpacity: 0.20, shadowRadius: 28, shadowOffset: { width: 0, height: -4 } },
   handle:        { width: 44, height: 4, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.10)", alignSelf: "center", marginTop: 14, marginBottom: 0 },
 
