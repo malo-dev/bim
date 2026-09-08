@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import SocketProvider from "@/components/SocketProvider";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import logo from "@/assets/images/logo.jpeg";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
@@ -241,6 +242,7 @@ export default function RootLayout() {
           <SocketProvider>
             <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
               <AuthGuard>
+              <ErrorBoundary>
               <Stack>
                 <Stack.Screen name="onboarding"       options={{ headerShown: false }} />
                 <Stack.Screen name="login"            options={{ headerShown: false }} />
@@ -281,6 +283,7 @@ export default function RootLayout() {
                 <Stack.Screen name="recommended"      options={{ headerShown: false }} />
                 <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />
               </Stack>
+              </ErrorBoundary>
 
               </AuthGuard>
               <StatusBar style={isDark ? "light" : "dark"} />
