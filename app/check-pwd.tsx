@@ -127,7 +127,7 @@ export default function CheckPwd() {
     } catch (err) {
       shake();
       const dataMess = err as any;
-      Alert.alert(dataMess?.data?.error || "Une erreur est survenue");
+      Alert.alert(dataMess?.data?.message || dataMess?.data?.error || "Une erreur est survenue");
     }
   };
 
@@ -141,7 +141,7 @@ export default function CheckPwd() {
       }
     } catch (err) {
       const dataMess = err as any;
-      Alert.alert(dataMess?.data?.error || "Une erreur est survenue");
+      Alert.alert(dataMess?.data?.message || dataMess?.data?.error || "Une erreur est survenue");
     }
   };
 

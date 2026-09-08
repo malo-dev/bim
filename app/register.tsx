@@ -106,7 +106,7 @@ export default function RegisterScreen() {
       if (response) router.push("/verify-code");
     } catch (err) {
       const dataMess = err as any;
-      Alert.alert(dataMess?.data?.error || tr("common.error"));
+      Alert.alert(dataMess?.data?.message || dataMess?.data?.error || tr("common.error"));
     }
   };
 

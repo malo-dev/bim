@@ -134,7 +134,7 @@ export default function ResetPassword() {
     } catch (err) {
       shake();
       const dataMess = err as any;
-      Alert.alert(dataMess?.data?.error || "Une erreur est survenue");
+      Alert.alert(dataMess?.data?.message || dataMess?.data?.error || "Une erreur est survenue");
     }
   };
 

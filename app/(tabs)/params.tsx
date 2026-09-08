@@ -149,7 +149,7 @@ export default function Params() {
               if (email) await AsyncStorage.setItem("email", email);
               router.replace("/login");
             } catch (err: any) {
-              Alert.alert(err?.data?.error || t("common.error"));
+              Alert.alert(err?.data?.message || err?.data?.error || t("common.error"));
             }
           },
         },

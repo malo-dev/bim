@@ -128,7 +128,7 @@ export default function ForgotPasswordScreen() {
     } catch (err) {
       shake();
       const dataMess = err as any;
-      Alert.alert(tr("common.error"), dataMess?.data?.error || tr("common.error"));
+      Alert.alert(tr("common.error"), dataMess?.data?.message || dataMess?.data?.error || tr("common.error"));
     }
   };
 
