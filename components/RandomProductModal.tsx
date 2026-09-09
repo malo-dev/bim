@@ -106,7 +106,7 @@ export default function RandomProductModal({
                   onMomentumScrollEnd={(e) => setImgIndex(Math.round(e.nativeEvent.contentOffset.x / (width - 40)))}
                 >
                   {gallery.map((img, i) => (
-                    <Image key={i} source={{ uri: resolveImg(img)! }} style={{ width: width - 40, height: 240 }} contentFit="contain" transition={250} />
+                    <Image key={i} source={{ uri: resolveImg(img)! }} style={{ width: width - 40, height: 240 }} contentFit="cover" transition={250} />
                   ))}
                 </ScrollView>
               ) : (
