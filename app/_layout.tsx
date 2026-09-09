@@ -1,7 +1,6 @@
 import "@/i18n";
 import React from "react";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
-import { Stack, useRouter, usePathname } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider, Stack, useRouter, usePathname } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Provider } from "react-redux";
 import { store, persistor } from "@/store/store";

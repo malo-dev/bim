@@ -11,13 +11,12 @@ import { setSectors } from "@/services/globalApi";
 import { useGetAllSectorsQuery } from "@/services/sectorsServices";
 import { useGetAllTransactionsQuery } from "@/services/tsxService";
 import { useGetUserByIdQuery } from "@/services/userService";
-import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
