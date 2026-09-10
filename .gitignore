@@ -33,6 +33,13 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Clés de compte de service Google (Play Store submit, FCM) — ne JAMAIS committer,
+# Google désactive automatiquement les clés détectées dans les dépôts publics.
+*-service-account*.json
+eas-submit-key*.json
+google-services.json
+my-project-*.json
+
 # typescript
 *.tsbuildinfo
 

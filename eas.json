@@ -24,7 +24,7 @@
         "track": "production",
         "releaseStatus": "completed",
         "changesNotSentForReview": false,
-        "serviceAccountKeyPath": "./my-project-83113-461520-1879b74be2d1.json"
+        "serviceAccountKeyPath": "./eas-submit-key-new.json"
       },
       "ios": {
         "language": "fr-FR"
