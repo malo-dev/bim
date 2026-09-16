@@ -453,6 +453,13 @@ export default function HomeScreen() {
   };
 
   const handleGoto = (item: any) => {
+    const name = (item?.name ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (name.includes("transport")) {
+      // BIM Transport est un produit unifié (réservation type Uber/Bolt) : on saute
+      // la liste d'entreprises, pas de sens de choisir une "entreprise" de transport.
+      router.push(`/transport/${item.businessId}` as any);
+      return;
+    }
     dispatch(setSectors([item]));
     router.push(`/service/${item.businessId}`);
   };
