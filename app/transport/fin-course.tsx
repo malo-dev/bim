@@ -20,10 +20,12 @@ import { useGetRideByNumberQuery, useRateRideMutation } from "@/services/rideSer
 const LIGHT = {
   bg: "#F8FAFC", primary: "#0062FF", text: "#0F172A", textSub: "#475569", textMut: "#64748B",
   glass: "#FFFFFF", glassBord: "#E2E8F0", green: "#10B981", amber: "#F59E0B", canvas: "#EEF2F8",
+  iconBtnBg: "rgba(0,98,255,0.08)", iconBtnBord: "rgba(0,98,255,0.15)",
 };
 const DARK: typeof LIGHT = {
   bg: "#0B1220", primary: "#3D7DFF", text: "#EAF0FF", textSub: "#A3B4D0", textMut: "#6B7A99",
   glass: "#1A2540", glassBord: "#1F2A44", green: "#34D399", amber: "#FBBF24", canvas: "#0F1A2E",
+  iconBtnBg: "rgba(61,125,255,0.14)", iconBtnBord: "rgba(61,125,255,0.22)",
 };
 
 const COMPLIMENTS = [
@@ -202,7 +204,7 @@ export default function FinCourseScreen() {
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.glass, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.glassBord },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
   title: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
 
   successIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.primary, alignItems: "center", justifyContent: "center", elevation: 4, shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 14 },

@@ -23,6 +23,9 @@ const LIGHT = {
   glass: "rgba(255,255,255,0.85)", glassBord: "rgba(255,255,255,0.7)",
   chipBg: "rgba(255,255,255,0.75)", white: "#FFFFFF",
   success: "#10B981",
+  // Fond des boutons ronds (retour, icônes) sur fond uni — teinté, pas translucide,
+  // pour rester visible même hors de la carte (contrairement à `glass`/`chipBg`).
+  iconBtnBg: "rgba(0,98,255,0.08)", iconBtnBord: "rgba(0,98,255,0.15)",
 };
 const DARK: typeof LIGHT = {
   bg: "#0B1220", canvas: "#0F1A2E",
@@ -31,6 +34,7 @@ const DARK: typeof LIGHT = {
   glass: "rgba(26,37,64,0.85)", glassBord: "rgba(31,42,68,0.9)",
   chipBg: "rgba(26,37,64,0.75)", white: "#FFFFFF",
   success: "#34D399",
+  iconBtnBg: "rgba(61,125,255,0.14)", iconBtnBord: "rgba(61,125,255,0.22)",
 };
 
 const SERVICES = [
@@ -202,8 +206,8 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
 
   topBar: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 12 },
-  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.chipBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.glassBord },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.chipBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.glassBord },
+  backBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
   brand: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
   brandSub: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginTop: 1 },
 

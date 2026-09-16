@@ -22,12 +22,14 @@ const LIGHT = {
   bg: "#F8FAFC", canvas: "#EEF2F8",
   primary: "#0062FF", text: "#0F172A", textSub: "#475569", textMut: "#64748B",
   glass: "rgba(255,255,255,0.92)", glassBord: "rgba(255,255,255,0.7)",
+  iconBtnBg: "rgba(0,98,255,0.08)", iconBtnBord: "rgba(0,98,255,0.15)",
   border: "#E2E8F0", white: "#FFFFFF", green: "#10B981", red: "#EF4444",
 };
 const DARK: typeof LIGHT = {
   bg: "#0B1220", canvas: "#0F1A2E",
   primary: "#3D7DFF", text: "#EAF0FF", textSub: "#A3B4D0", textMut: "#6B7A99",
   glass: "rgba(26,37,64,0.92)", glassBord: "rgba(31,42,68,0.9)",
+  iconBtnBg: "rgba(61,125,255,0.14)", iconBtnBord: "rgba(61,125,255,0.22)",
   border: "#1F2A44", white: "#FFFFFF", green: "#34D399", red: "#F87171",
 };
 
@@ -182,7 +184,7 @@ export default function SuiviCourseScreen() {
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.glass, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.glassBord },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
   title: { fontFamily: "NexaBold", fontSize: 16, color: C.text, flex: 1, textAlign: "center" },
 
   mapWrap: { height: 200, marginHorizontal: 20, borderRadius: 24, overflow: "hidden", backgroundColor: C.canvas },
