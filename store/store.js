@@ -30,6 +30,7 @@ import { agentApi }    from "../services/agentService";
 import { tutorialApi } from "../services/tutorialService";
 import { bannerApi }      from "../services/bannerService";
 import { appVersionApi }  from "../services/appVersionService";
+import { rideApi }        from "../services/rideService";
 
 const persistConfig = {
   key: "global",
@@ -55,6 +56,7 @@ const rootReducer = combineReducers({
   [tutorialApi.reducerPath]: tutorialApi.reducer,
   [bannerApi.reducerPath]:      bannerApi.reducer,
   [appVersionApi.reducerPath]:  appVersionApi.reducer,
+  [rideApi.reducerPath]:        rideApi.reducer,
 
   global: persistReducer(persistConfig, globalReducer),
 });
@@ -84,7 +86,8 @@ export const store = configureStore({
       agentApi.middleware,
       tutorialApi.middleware,
       bannerApi.middleware,
-      appVersionApi.middleware
+      appVersionApi.middleware,
+      rideApi.middleware
     ),
 });
 
