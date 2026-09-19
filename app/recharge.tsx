@@ -23,10 +23,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCreateManualRechargeMutation } from "@/services/tsxService";
+import * as WebBrowser from "expo-web-browser";
+import { useRechargeMutation, useVerifyPaymentMutation } from "@/services/tsxService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
+import { getSocket } from "@/services/socketService";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
 const _ios = Platform.OS === "ios";
@@ -162,8 +164,11 @@ function MethodCard({ item, selected, onPress }: { item: typeof METHODS[number];
 
 /* ─── PENDING SCREEN ──────────────────────────────────────────────────── */
 function PendingScreen({
-  amount, contactPhone, method, onBack,
-}: { amount: string; contactPhone: string; method: string; onBack: () => void }) {
+  amount, contactPhone, method, onBack, success = false, onVerify, verifying = false,
+}: {
+  amount: string; contactPhone: string; method: string; onBack: () => void;
+  success?: boolean; onVerify?: () => void; verifying?: boolean;
+}) {
   const { isDark } = useAppTheme();
   const C = isDark ? DARK : LIGHT;
   const pv = useMemo(() => mkPv(C), [isDark]);
@@ -188,12 +193,16 @@ function PendingScreen({
       {/* ── RECEIPT CARD ─────────────────────────────────────────── */}
       <View style={pv.receipt}>
         {/* Header */}
-        <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={pv.receiptHeader}>
+        <LinearGradient colors={success ? [C.success, "#16A34A"] : [C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={pv.receiptHeader}>
           <View style={pv.receiptCheckCircle}>
-            <Ionicons name="checkmark" size={28} color={C.primary} />
+            {success
+              ? <Ionicons name="checkmark-done" size={28} color={C.success} />
+              : <ActivityIndicator size="small" color={C.primary} />}
           </View>
-          <Text style={pv.receiptTitle}>Demande envoyée</Text>
-          <Text style={pv.receiptSub}>Votre demande de recharge est bien enregistrée</Text>
+          <Text style={pv.receiptTitle}>{success ? "Compte crédité !" : "Paiement en attente"}</Text>
+          <Text style={pv.receiptSub}>
+            {success ? "Votre recharge a été confirmée avec succès" : "Validez la demande de paiement sur votre téléphone"}
+          </Text>
         </LinearGradient>
 
         {/* Perforated edge */}
@@ -235,40 +244,50 @@ function PendingScreen({
         </View>
       </View>
 
-      {/* ── STEPS ────────────────────────────────────────────────── */}
-      <View style={pv.stepsCard}>
-        <Text style={pv.stepsTitle}>Prochaines étapes</Text>
+      {!success && (
+        <>
+          {/* ── STEPS ────────────────────────────────────────────────── */}
+          <View style={pv.stepsCard}>
+            <Text style={pv.stepsTitle}>Comment ça marche</Text>
 
-        <View style={pv.step}>
-          <View style={[pv.stepNum, { backgroundColor: "rgba(0,53,197,0.08)" }]}>
-            <Text style={[pv.stepNumText, { color: C.primary }]}>1</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={pv.stepTitle}>Appel de confirmation</Text>
-            <Text style={pv.stepDesc}>
-              Notre équipe support vous appellera{contactPhone ? ` au +${contactPhone}` : ""} pour confirmer votre recharge.
-            </Text>
-          </View>
-        </View>
+            <View style={pv.step}>
+              <View style={[pv.stepNum, { backgroundColor: "rgba(0,53,197,0.08)" }]}>
+                <Text style={[pv.stepNumText, { color: C.primary }]}>1</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={pv.stepTitle}>Push envoyé{contactPhone ? ` au +${contactPhone}` : ""}</Text>
+                <Text style={pv.stepDesc}>
+                  Ouvrez la notification {method} sur votre téléphone et validez le paiement avec votre code.
+                </Text>
+              </View>
+            </View>
 
-        <View style={pv.stepConnector} />
+            <View style={pv.stepConnector} />
 
-        <View style={pv.step}>
-          <View style={[pv.stepNum, { backgroundColor: "rgba(34,197,94,0.08)" }]}>
-            <Text style={[pv.stepNumText, { color: C.success }]}>2</Text>
+            <View style={pv.step}>
+              <View style={[pv.stepNum, { backgroundColor: "rgba(34,197,94,0.08)" }]}>
+                <Text style={[pv.stepNumText, { color: C.success }]}>2</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={pv.stepTitle}>Compte crédité automatiquement</Text>
+                <Text style={pv.stepDesc}>Dès la validation, votre compte est crédité de {amount} sans attendre — vous êtes notifié ici même.</Text>
+              </View>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={pv.stepTitle}>Compte crédité</Text>
-            <Text style={pv.stepDesc}>Après confirmation, votre compte sera crédité de {amount} et vous recevrez une notification et un email.</Text>
-          </View>
-        </View>
-      </View>
 
-      {/* ── INFO ─────────────────────────────────────────────────── */}
-      <View style={pv.infoBanner}>
-        <Ionicons name="call-outline" size={16} color={C.primary} />
-        <Text style={pv.infoText}>Restez disponible. Notre équipe vous contacte dans les plus brefs délais.</Text>
-      </View>
+          {/* ── INFO ─────────────────────────────────────────────────── */}
+          <View style={pv.infoBanner}>
+            <Ionicons name="time-outline" size={16} color={C.primary} />
+            <Text style={pv.infoText}>Déjà validé le paiement mais rien ne se passe ? Vérifiez le statut manuellement.</Text>
+          </View>
+
+          <TouchableOpacity style={pv.verifyBtn} onPress={onVerify} activeOpacity={0.85} disabled={verifying}>
+            {verifying
+              ? <ActivityIndicator size="small" color={C.primary} />
+              : <><Ionicons name="refresh-outline" size={16} color={C.primary} /><Text style={pv.verifyText}>Vérifier le statut maintenant</Text></>}
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* ── BTN ──────────────────────────────────────────────────── */}
       <TouchableOpacity style={pv.backBtn} onPress={onBack} activeOpacity={0.88}>
@@ -300,9 +319,12 @@ export default function RechargeEcoinsScreen() {
   const [contactPhone,  setContactPhone]  = useState("");
   const [cardRef,       setCardRef]       = useState("");
 
-  type Phase = "idle" | "pending";
+  type Phase = "idle" | "waiting" | "success";
   const [phase,       setPhase]       = useState<Phase>("idle");
   const [pendingInfo, setPendingInfo]  = useState({ amount: "", contact: "", method: "" });
+  const [rechargeRef, setRechargeRef]  = useState<string | null>(null);
+  const [creditedAmount, setCreditedAmount] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   const inputFocAmt  = useRef(new Animated.Value(0)).current;
   const inputFocPh   = useRef(new Animated.Value(0)).current;
@@ -313,9 +335,59 @@ export default function RechargeEcoinsScreen() {
   const isCard   = selectedMethod === "Card";
   const isMobile = selectedMethod !== null && !isCard;
 
-  const [createManualRecharge, { isLoading: submitting }] = useCreateManualRechargeMutation();
+  const [recharge, { isLoading: submitting }] = useRechargeMutation();
+  const [verifyPayment] = useVerifyPaymentMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+
+  /* ── Suivi temps réel du paiement FlexPay (push mobile money / callback carte) ── */
+  useEffect(() => {
+    if (phase !== "waiting" || !rechargeRef) return;
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onSuccess = (payload: any) => {
+      setCreditedAmount(`${Number(payload?.montantCredite ?? 0).toFixed(2)} EC`);
+      setPhase("success");
+    };
+    const onFailed = () => {
+      Alert.alert("Paiement annulé", "Le paiement n'a pas abouti. Vous pouvez réessayer.");
+      setPhase("idle");
+    };
+
+    socket.on("recharge:success", onSuccess);
+    socket.on("recharge:cancelled", onFailed);
+    socket.on("recharge:failed", onFailed);
+    socket.on("recharge:declined", onFailed);
+
+    return () => {
+      socket.off("recharge:success", onSuccess);
+      socket.off("recharge:cancelled", onFailed);
+      socket.off("recharge:failed", onFailed);
+      socket.off("recharge:declined", onFailed);
+    };
+  }, [phase, rechargeRef]);
+
+  const handleVerifyNow = async () => {
+    if (!rechargeRef) return;
+    setVerifying(true);
+    try {
+      const res: any = await verifyPayment({ reference: rechargeRef }).unwrap();
+      if (res.status === "success" || res.status === "already_done") {
+        setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
+        setPhase("success");
+      } else if (res.status === "cancelled") {
+        Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
+        setPhase("idle");
+      } else {
+        Alert.alert("En attente", "Le paiement n'est pas encore confirmé. Validez le push sur votre téléphone puis réessayez.");
+      }
+    } catch (err: any) {
+      Alert.alert("Erreur", err?.data?.message || "Impossible de vérifier le paiement pour le moment.");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const focusAnim = (anim: Animated.Value, v: number) =>
     Animated.timing(anim, { toValue: v, duration: 200, useNativeDriver: false }).start();
@@ -338,22 +410,33 @@ export default function RechargeEcoinsScreen() {
     if (!userId) {
       Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
+    const cleanAmt = parseFloat(cleanAmount(amount).replace(",", "."));
+
     try {
-      await createManualRecharge({
-        id:        userId,
-        amount:    parseFloat(amount.replace(",", ".")),
-        telephone: isMobile ? phone : contactPhone,
-        method:    selectedMethod,
+      const res: any = await recharge({
+        userId,
+        amount:        cleanAmt,
+        telephone:     isMobile ? cleanAmount(phone) : cleanAmount(contactPhone),
+        PayTypeValue:  isCard ? "Card" : selectedMethod,
+        CurrencyValue: "USD",
       }).unwrap();
+
+      setPendingInfo({
+        amount: `${amount} EC`,
+        contact: isMobile ? phone : contactPhone,
+        method:  selectedMethod ?? "",
+      });
+      setRechargeRef(res.reference);
+
+      if (isCard && res.redirectUrl) {
+        // Paiement carte : ouverture de la page FlexPay dans un navigateur intégré.
+        await WebBrowser.openBrowserAsync(res.redirectUrl);
+      }
+      // Mobile money : le push FlexPay part directement sur le téléphone du client.
+      setPhase("waiting");
     } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue. Réessayez."); return;
+      Alert.alert("Erreur", err?.data?.message || err?.data?.details || "Une erreur est survenue. Réessayez.");
     }
-    setPendingInfo({
-      amount: `${amount} EC`,
-      contact: isMobile ? phone : contactPhone,
-      method:  selectedMethod ?? "",
-    });
-    setPhase("pending");
   };
 
   const topBar = (
@@ -364,15 +447,18 @@ export default function RechargeEcoinsScreen() {
     />
   );
 
-  if (phase === "pending") return (
+  if (phase === "waiting" || phase === "success") return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />{topBar}
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <PendingScreen
-          amount={pendingInfo.amount}
+          success={phase === "success"}
+          amount={creditedAmount ?? pendingInfo.amount}
           contactPhone={pendingInfo.contact}
           method={pendingInfo.method}
           onBack={() => router.replace("/(tabs)" as any)}
+          onVerify={handleVerifyNow}
+          verifying={verifying}
         />
       </ScrollView>
     </View>
@@ -566,14 +652,14 @@ export default function RechargeEcoinsScreen() {
             <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
               {submitting
                 ? <ActivityIndicator size="small" color={C.white} />
-                : <><Ionicons name="send-outline" size={18} color={C.white} /><Text style={s.ctaText}>Envoyer la demande</Text></>
+                : <><Ionicons name="flash-outline" size={18} color={C.white} /><Text style={s.ctaText}>Recharger maintenant</Text></>
               }
             </LinearGradient>
           </TouchableOpacity>
 
           <View style={s.secureRow}>
             <Ionicons name="lock-closed-outline" size={12} color={C.textMut} />
-            <Text style={s.secureText}>Demande traitée manuellement par notre équipe BIM</Text>
+            <Text style={s.secureText}>Paiement sécurisé par FlexPay, crédit automatique</Text>
           </View>
 
           <View style={{ height: 60 }} />
@@ -690,8 +776,10 @@ function mkPv(C: typeof LIGHT) { return StyleSheet.create({
   stepTitle:      { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 3, marginTop: 2 },
   stepDesc:       { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
 
-  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, width: "100%", backgroundColor: C.infoBannerBg, borderRadius: 16, padding: 14, marginBottom: 24, borderWidth: 1, borderColor: C.infoBannerBord },
+  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, width: "100%", backgroundColor: C.infoBannerBg, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.infoBannerBord },
   infoText:   { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
+  verifyBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", borderRadius: 16, paddingVertical: 14, marginBottom: 16, borderWidth: 1.5, borderColor: C.primary },
+  verifyText: { fontFamily: "NexaBold", fontSize: 13, color: C.primary },
   backBtn:    { width: "100%", borderRadius: 24, overflow: "hidden" },
   backGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
   backText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
