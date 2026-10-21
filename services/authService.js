@@ -79,6 +79,16 @@ export const authApi = createApi({
       }),
     }),
 
+    // Réaction à l'alerte "nouvelle connexion détectée" — pas d'ancien mot
+    // de passe requis, l'appareil appelant est déjà authentifié.
+    secureMyAccount: builder.mutation({
+      query: (newPassword) => ({
+        url: '/auth/secure-my-account',
+        method: 'POST',
+        data: { newPassword },
+      }),
+    }),
+
     // Code partagé qui révèle les entrées "staff" (Espace Livreur, Espace
     // Chauffeur, Espace Gestion) dans Réglages — géré depuis admin-bim,
     // plus codé en dur côté app.
@@ -163,6 +173,7 @@ export const {
   useRegisterMutation,
   useLoginMutation,
   useLogOutMutation,
+  useSecureMyAccountMutation,
   useAskPasswordResetMutation,
   useResetPasswordMutation,
   useVerifyOtpMutation,

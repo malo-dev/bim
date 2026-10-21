@@ -8,8 +8,9 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import React, { useEffect, useRef } from "react";
-import { AppState, AppStateStatus, DeviceEventEmitter, Platform } from "react-native";
+import { Alert, AppState, AppStateStatus, DeviceEventEmitter, Platform } from "react-native";
 import { useDispatch } from "react-redux";
+import { useRouter } from "expo-router";
 import { getSocket } from "@/services/socketService";
 
 /* ─── Configuration du handler de notifications ─────────────────────── */
@@ -83,6 +84,7 @@ export default function SocketProvider({
   children: React.ReactNode;
 }) {
   const dispatch = useDispatch();
+  const router = useRouter();
   const socketRef   = useRef<ReturnType<typeof connectSocket> | null>(null);
   const notifListenerRef = useRef<Notifications.Subscription | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -120,6 +122,20 @@ export default function SocketProvider({
       socket.on("recharge:success", refreshUser);
       socket.on("recharge:cancelled", refreshUser);
       socket.on("recharge:failed", refreshUser);
+
+      // Connexion détectée depuis un autre appareil avec ce même numéro —
+      // on laisse les deux connexions actives, mais on prévient le
+      // propriétaire pour qu'il puisse réagir si ce n'était pas lui.
+      socket.on("auth:new_device_login", () => {
+        Alert.alert(
+          "Nouvelle connexion détectée",
+          "Votre compte BIM NEXT vient d'être utilisé depuis un autre appareil. Est-ce vous ?",
+          [
+            { text: "Oui, c'est moi", style: "cancel" },
+            { text: "Non, sécuriser mon compte", style: "destructive", onPress: () => router.push("/securiser-compte" as any) },
+          ]
+        );
+      });
 
       /* Enregistrement push notifications (async, ne bloque plus le socket) */
       registerPushToken(userId);

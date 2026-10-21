@@ -219,7 +219,7 @@ function IntroStep({
       <View style={mb.footer}>
         <View style={mb.toggleLabelRow}>
           <PingDot />
-          <Text style={mb.toggleLabel}>Êtes-vous un nouvel utilisateur ?</Text>
+          <Text style={mb.toggleLabel}>Avez-vous déjà un compte BIM NEXT ?</Text>
         </View>
         <View style={mb.segmented}>
           <TouchableOpacity
@@ -227,15 +227,21 @@ function IntroStep({
             onPress={() => setUserType("new")}
             activeOpacity={0.85}
           >
-            <Text style={[mb.segmentText, userType !== "existing" && mb.segmentTextOn]}>Oui, nouveau</Text>
+            <Text style={[mb.segmentText, userType !== "existing" && mb.segmentTextOn]}>Non, nouveau client</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[mb.segmentBtn, userType === "existing" && mb.segmentBtnOn]}
             onPress={() => setUserType("existing")}
             activeOpacity={0.85}
           >
-            <Text style={[mb.segmentText, userType === "existing" && mb.segmentTextOn]}>Déjà client</Text>
+            <Text style={[mb.segmentText, userType === "existing" && mb.segmentTextOn]}>Oui, déjà client</Text>
           </TouchableOpacity>
+        </View>
+        <View style={mb.warningRow}>
+          <Ionicons name="warning" size={13} color="#EF4444" />
+          <Text style={mb.warningText}>
+            Choisissez « Oui, déjà client » si vous avez déjà utilisé ce numéro — sinon votre compte existant ne sera pas retrouvé.
+          </Text>
         </View>
 
         <TouchableOpacity onPress={onNext} activeOpacity={0.9} disabled={submitting}>
@@ -719,7 +725,9 @@ function OnboardingFlow() {
         await AsyncStorage.setItem("firstOrderHintPending", "true");
       }
       DeviceEventEmitter.emit("auth:loggedIn");
-      router.replace("/(tabs)");
+      // Ce numéro appartient déjà à un profil chauffeur — on l'envoie
+      // directement dans l'Espace Chauffeur plutôt que l'accueil classique.
+      router.replace(res.isChauffeur ? "/transport/mode-chauffeur" : "/(tabs)");
     } catch (err: any) {
       Alert.alert("Erreur", err?.data?.message || "Une erreur est survenue. Réessayez.");
     } finally {
@@ -1005,6 +1013,8 @@ function mkMb() { return StyleSheet.create({
   segmentBtnOn: { backgroundColor: "#fff", elevation: 1, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   segmentText: { fontFamily: FONTS.bold, fontSize: 12.5, color: MB.muted },
   segmentTextOn: { color: MB.dark },
+  warningRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 10, paddingHorizontal: 4 },
+  warningText: { flex: 1, fontFamily: FONTS.light, fontSize: 10.5, color: "#EF4444", lineHeight: 15 },
 
   btn: {
     alignItems: "center", justifyContent: "center",
