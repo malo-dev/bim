@@ -144,6 +144,7 @@ export default function ProductDetail() {
         amount:          Number(price),
         companyId:       Number(companyId),
         shippingAddress: address.trim(),
+        clientPhone:     phone.trim(),
         notes:           "Paiement produit santé",
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),

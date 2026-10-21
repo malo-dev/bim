@@ -154,6 +154,7 @@ export default function CarburantProductDetail() {
         amount:          totalPrice,
         companyId:       Number(companyId),
         shippingAddress: address.trim(),
+        clientPhone:     phone.trim(),
         notes:           `Paiement carburant — ${litersNum}L`,
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),

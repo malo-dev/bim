@@ -89,6 +89,13 @@ export default function Payment() {
     type: "success" | "error"; text: string; description?: string;
   } | null>(null);
 
+  // Adresse de livraison + téléphone — demandés juste avant le paiement,
+  // obligatoires : sans ça, la commande créée derrière ce paiement n'a
+  // aucune information exploitable pour la livraison.
+  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [deliveryAddress,   setDeliveryAddress]   = useState("");
+  const [deliveryPhone,     setDeliveryPhone]     = useState("");
+
   /* ── Animations card ── */
   const cardAnim = useRef(new Animated.Value(60)).current;
   const cardOpac = useRef(new Animated.Value(0)).current;
@@ -121,7 +128,7 @@ export default function Payment() {
   };
 
   /* ─── Paiement direct (sans PIN) ─────────────────────────────────── */
-  const handlePayPress = async () => {
+  const handlePayPress = () => {
     const amount = Number(normalizeDecimal(payAmount));
     if (isNaN(amount) || amount <= 0) {
       showResult("error", tr("common.error"), "Veuillez entrer un montant valide.");
@@ -131,12 +138,22 @@ export default function Payment() {
       showResult("error", tr("common.error"), "Veuillez vous reconnecter.");
       return;
     }
+    setShowDeliveryModal(true);
+  };
+
+  const confirmDeliveryAndPay = async () => {
+    if (!deliveryAddress.trim() || !deliveryPhone.trim()) {
+      return;
+    }
+    const amount = Number(normalizeDecimal(payAmount));
     try {
+      setShowDeliveryModal(false);
       setLoadingPayment(true);
       await createPaiement({
         amount:          amount,
         companyId:       Number(companyId),
-        shippingAddress: "Vers BIM, adresse officielle",
+        shippingAddress: deliveryAddress.trim(),
+        clientPhone:     deliveryPhone.trim(),
         notes:           "Paiement produit",
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),
@@ -279,6 +296,70 @@ export default function Payment() {
           </View>
         </Animated.View>
       </ScrollView>
+
+      {/* ════════════════════════════════════════════
+          MODAL — ADRESSE DE LIVRAISON + TÉLÉPHONE
+          Obligatoire avant tout paiement direct.
+      ════════════════════════════════════════════ */}
+      <Modal
+        isVisible={showDeliveryModal}
+        onBackdropPress={() => setShowDeliveryModal(false)}
+        animationIn="zoomIn"
+        animationOut="zoomOut"
+        useNativeDriverForBackdrop
+        avoidKeyboard
+      >
+        <View style={[s.resultModal, {
+          backgroundColor: t.modalBg,
+          borderColor: isDark ? t.border : "transparent",
+          borderWidth: isDark ? 1 : 0,
+          alignItems: "stretch",
+        }]}>
+          <View style={[s.resultIcon, { backgroundColor: "rgba(3,83,204,0.10)", alignSelf: "center" }]}>
+            <Ionicons name="location-outline" size={32} color={C.primary} />
+          </View>
+          <Text style={[s.resultTitle, { color: C.primary, textAlign: "center" }]}>Livraison</Text>
+          <Text style={[s.resultDesc, { color: t.textSecondary, textAlign: "center" }]}>
+            Où et à quel numéro devons-nous vous livrer ?
+          </Text>
+
+          <Text style={[s.label, { color: C.primary, marginTop: 4 }]}>ADRESSE DE LIVRAISON</Text>
+          <View style={[s.inputBox, { borderColor: t.border, backgroundColor: t.inputBg, marginTop: 6 }]}>
+            <Ionicons name="location" size={16} color={t.textSecondary} />
+            <TextInput
+              style={[s.input, { color: t.text, fontSize: 14 }]}
+              placeholder="Quartier, avenue, référence..."
+              placeholderTextColor={t.textSecondary}
+              value={deliveryAddress}
+              onChangeText={setDeliveryAddress}
+            />
+          </View>
+
+          <Text style={[s.label, { color: C.primary, marginTop: 14 }]}>NUMÉRO DE TÉLÉPHONE</Text>
+          <View style={[s.inputBox, { borderColor: t.border, backgroundColor: t.inputBg, marginTop: 6 }]}>
+            <Ionicons name="call" size={16} color={t.textSecondary} />
+            <TextInput
+              style={[s.input, { color: t.text, fontSize: 14 }]}
+              placeholder="Ex: +243 999 999 999"
+              placeholderTextColor={t.textSecondary}
+              keyboardType="phone-pad"
+              value={deliveryPhone}
+              onChangeText={setDeliveryPhone}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[s.resultBtnWrap, { marginTop: 22 }, (!deliveryAddress.trim() || !deliveryPhone.trim()) && { opacity: 0.5 }]}
+            onPress={confirmDeliveryAndPay}
+            disabled={!deliveryAddress.trim() || !deliveryPhone.trim()}
+          >
+            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.resultBtnGrad}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={C.white} />
+              <Text style={s.resultBtnText}>Confirmer et payer</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* ════════════════════════════════════════════
           MODAL 2 — RÉSULTAT (succès ou erreur)

@@ -157,6 +157,7 @@ export default function GazProductDetail() {
         amount:          totalPrice,
         companyId:       Number(companyId),
         shippingAddress: address.trim(),
+        clientPhone:     phone.trim(),
         notes:           `Paiement gaz — ${qty} bouteille${qty > 1 ? "s" : ""}`,
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),

@@ -144,6 +144,7 @@ export default function ProductDetail() {
         amount:          Number(total),
         ...(product.companyId && { companyId: product.companyId }),
         shippingAddress: address.trim(),
+        clientPhone:     phone.trim(),
         notes:           `Paiement direct — ${qty} × ${product.name}`,
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),
