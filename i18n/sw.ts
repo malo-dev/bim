@@ -119,6 +119,7 @@ const sw: Translations = {
     scanner:      "Changanua",
     support:      "Msaada",
     orders:       "Maagizo yangu",
+    allProducts:  "Bidhaa zote",
   },
 
   params: {

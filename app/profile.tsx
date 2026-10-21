@@ -465,60 +465,6 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── ACTIVITÉS ── */}
-        <View style={s.section}>
-          <SLabel title="ACTIVITÉS" sst={sl} />
-          <View style={s.group}>
-            <MenuRow
-              icon="receipt-outline" iconBg={C.primary + "0F"} iconColor={C.primary}
-              title="Mes commandes" sub="Suivre et consulter vos commandes"
-              onPress={() => router.push("/mes-commandes" as any)}
-              C={C} mst={mr}
-            />
-            <View style={s.divider} />
-            <MenuRow
-              icon="cart-outline" iconBg={C.primary + "0F"} iconColor={C.primary}
-              title="Mon panier" sub="Voir et gérer votre panier d'achats"
-              onPress={() => router.push("/bim-supermarche/cart")}
-              C={C} mst={mr}
-            />
-          </View>
-        </View>
-
-        {/* ── SERVICES ── */}
-        <View style={s.section}>
-          <SLabel title="SERVICES" sst={sl} />
-          <View style={s.group}>
-            <MenuRow
-              icon="bicycle" iconBg={C.green + "14"} iconColor={C.green}
-              title="Espace Livreur" sub="Accéder à votre espace de livraison"
-              onPress={() => router.push("/livreur/login")}
-              C={C} mst={mr}
-            />
-            <View style={s.divider} />
-            <MenuRow
-              icon="paper-plane-outline" iconBg={C.amber + "14"} iconColor={C.amber}
-              title="Devenir livreur" sub="Soumettre votre candidature"
-              onPress={() => router.push("/livreur/apply")}
-              C={C} mst={mr}
-            />
-          </View>
-        </View>
-
-        {/* ── ASSISTANCE ── */}
-        <View style={s.section}>
-          <SLabel title="ASSISTANCE" sst={sl} />
-          <View style={s.group}>
-            <MenuRow
-              icon="warning" iconBg={C.error + "1F"} iconColor={C.error}
-              title="BIM SOS" sub="Sécurité · Urgence · Santé — signaler à BIM NEXT"
-              onPress={() => router.push("/bim-sos")}
-              danger
-              C={C} mst={mr}
-            />
-          </View>
-        </View>
-
         <View style={{ height: insets.bottom + 80 }} />
       </ScrollView>
     </KeyboardAvoidingView>

@@ -23,6 +23,7 @@ import { useGetUserOrdersQuery, usePayOrderAtDeliveryMutation, useUpdateOrderShi
 import { useRateLivreurMutation } from "@/services/livreurService";
 import { connectSocket, getSocket } from "@/services/socketService";
 import { useAppTheme } from "@/app/_layout";
+import LiveMap from "@/components/transport/LiveMap";
 
 const SUPPORT_PHONE   = "+243861166469";
 const SUPPORT_DISPLAY = "+243 861 166 469";
@@ -62,7 +63,13 @@ function getStatusMeta(C: typeof LIGHT): Record<OrderStatus, { label: string; ic
   };
 }
 
-/* ─── STATUS TIMELINE ─────────────────────────────────────────────────── */
+/* ─── Libellés courts — uniquement pour le stepper compact ── */
+const SHORT_LABELS: Record<OrderStatus, string> = {
+  pending: "Reçue", confirmed: "Confirmée", processing: "Prépa.",
+  shipped: "En route", delivered: "Livrée", cancelled: "Annulée",
+};
+
+/* ─── STATUS TIMELINE — stepper horizontal compact ─────────────────────── */
 function StatusTimeline({ status }: { status: OrderStatus }) {
   const { isDark } = useAppTheme();
   const C          = isDark ? DARK : LIGHT;
@@ -85,36 +92,30 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
   }
 
   return (
-    <View style={tl.wrap}>
+    <View style={tl.hWrap}>
       {STATUS_STEPS.map((step, idx) => {
         const meta    = STATUS_META[step];
         const done    = idx <= currentIdx;
         const current = idx === currentIdx;
         const isLast  = idx === STATUS_STEPS.length - 1;
         return (
-          <View key={step} style={tl.stepRow}>
-            {/* Vertical line */}
-            {!isLast && (
-              <View style={[tl.line, { backgroundColor: done && idx < currentIdx ? meta.color + "60" : C.border }]} />
-            )}
-            {/* Circle */}
-            <View style={[
-              tl.circle,
-              done  ? { backgroundColor: meta.color, borderColor: meta.color } : { backgroundColor: C.bg, borderColor: C.border },
-              current && { shadowColor: meta.color, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-            ]}>
-              <Ionicons name={meta.icon as any} size={15} color={done ? C.white : C.textMut} />
-            </View>
-            {/* Info */}
-            <View style={tl.stepInfo}>
-              <Text style={[tl.stepLabel, { color: done ? meta.color : C.textMut, fontFamily: current ? "NexaBold" : "NexaLight" }]}>
-                {meta.label}
+          <React.Fragment key={step}>
+            <View style={tl.hStep}>
+              <View style={[
+                tl.circle,
+                done  ? { backgroundColor: meta.color, borderColor: meta.color } : { backgroundColor: C.bg, borderColor: C.border },
+                current && { shadowColor: meta.color, shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+              ]}>
+                <Ionicons name={meta.icon as any} size={14} color={done ? C.white : C.textMut} />
+              </View>
+              <Text numberOfLines={1} style={[tl.hLabel, { color: done ? meta.color : C.textMut, fontFamily: current ? "NexaBold" : "NexaLight" }]}>
+                {SHORT_LABELS[step]}
               </Text>
-              {current && (
-                <Text style={tl.stepDesc}>{meta.desc}</Text>
-              )}
             </View>
-          </View>
+            {!isLast && (
+              <View style={[tl.hLine, { backgroundColor: idx < currentIdx ? meta.color + "60" : C.border }]} />
+            )}
+          </React.Fragment>
         );
       })}
     </View>
@@ -182,6 +183,8 @@ export default function OrderTracking() {
     return () => { socket.off("order:status_updated", handler); };
   }, [orderNumber, refetch]);
 
+  const [livreurPos, setLivreurPos] = useState<{ lat: number; lng: number } | null>(null);
+
   const orders: any[]       = data?.data || [];
   const order               = orders.find((o: any) => o.orderNumber === orderNumber);
   const status: OrderStatus = order?.status ?? "pending";
@@ -191,6 +194,30 @@ export default function OrderTracking() {
   const total               = order?.grandTotal ?? 0;
   const livreur             = order?.livreur ?? null;
   const estimatedMinutes    = order?.estimatedMinutes ?? null;
+
+  const livreurId = livreur?.livreurId;
+  useEffect(() => {
+    if (!livreurId) return;
+    const socket = getSocket();
+    if (!socket) return;
+    const onLocation = (payload: { latitude: number; longitude: number }) => {
+      setLivreurPos({ lat: payload.latitude, lng: payload.longitude });
+    };
+    socket.on(`livreur:location:${livreurId}`, onLocation);
+    return () => { socket.off(`livreur:location:${livreurId}`, onLocation); };
+  }, [livreurId]);
+
+  const [liveEta, setLiveEta] = useState<{ etaMin: number; distanceKm: number } | null>(null);
+  useEffect(() => {
+    if (!orderNumber) return;
+    const socket = getSocket();
+    if (!socket) return;
+    const onEta = (payload: { orderNumber: string; etaMin: number; distanceKm: number }) => {
+      if (payload.orderNumber === orderNumber) setLiveEta({ etaMin: payload.etaMin, distanceKm: payload.distanceKm });
+    };
+    socket.on("order:eta_updated", onEta);
+    return () => { socket.off("order:eta_updated", onEta); };
+  }, [orderNumber]);
 
   const isCancelled = status === "cancelled";
   const isDelivered = status === "delivered";
@@ -323,8 +350,8 @@ export default function OrderTracking() {
           {order?.paymentMethod === "bonus" && !order?.shippingAddress && (
             <View style={s.card}>
               <View style={[s.addrRow, { marginBottom: 10 }]}>
-                <View style={[s.addrIcon, { backgroundColor: C.amber + "10" }]}>
-                  <Ionicons name="gift-outline" size={16} color={C.amber} />
+                <View style={[s.addrIcon, { backgroundColor: C.primary + "10" }]}>
+                  <Ionicons name="gift-outline" size={16} color={C.primary} />
                 </View>
                 <Text style={s.cardTitle}>🎁 Produit offert — où vous livrer ?</Text>
               </View>
@@ -355,7 +382,7 @@ export default function OrderTracking() {
                   }
                 }}
               >
-                <LinearGradient colors={[C.amber, "#D97706"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
+                <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.confirmGrad}>
                   {savingAddress ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.confirmText}>Confirmer la livraison</Text>}
                 </LinearGradient>
               </TouchableOpacity>
@@ -378,12 +405,26 @@ export default function OrderTracking() {
                     <View style={s.onlineDot} />
                     <Text style={s.onlineText}>En ligne</Text>
                   </View>
+                  {!!livreur.telephone && <Text style={s.livreurPhone}>{livreur.telephone}</Text>}
                 </View>
               </View>
-              {estimatedMinutes && (
+              {(liveEta || estimatedMinutes) && (
                 <View style={s.etaRow}>
-                  <Ionicons name="time-outline" size={14} color={C.amber} />
-                  <Text style={s.etaText}>Livraison estimée dans {estimatedMinutes} min</Text>
+                  <Ionicons name="time-outline" size={14} color={C.primary} />
+                  <Text style={s.etaText}>
+                    {liveEta
+                      ? `Livraison estimée dans ${liveEta.etaMin} min (${liveEta.distanceKm} km)`
+                      : `Livraison estimée dans ${estimatedMinutes} min`}
+                  </Text>
+                </View>
+              )}
+              {(livreurPos || (livreur.latitude && livreur.longitude)) && (
+                <View style={s.livreurMapWrap}>
+                  <LiveMap
+                    style={StyleSheet.absoluteFill}
+                    chauffeurLat={livreurPos?.lat ?? Number(livreur.latitude)}
+                    chauffeurLng={livreurPos?.lng ?? Number(livreur.longitude)}
+                  />
                 </View>
               )}
               <View style={s.livreurBtns}>
@@ -422,9 +463,9 @@ export default function OrderTracking() {
           {/* ── Annuler / Remboursement ── */}
           {alreadyPaid ? (
             <View style={s.refundCard}>
-              <Ionicons name="information-circle-outline" size={18} color={C.amber} />
+              <Ionicons name="information-circle-outline" size={18} color={C.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={[s.refundTitle, { color: C.amber }]}>Commande déjà payée</Text>
+                <Text style={[s.refundTitle, { color: C.primary }]}>Commande déjà payée</Text>
                 <Text style={s.refundSub}>Pour un remboursement, contactez BIM NEXT ou l'entreprise.</Text>
                 <TouchableOpacity onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)} style={s.refundCall}>
                   <Ionicons name="call" size={12} color={C.green} />
@@ -593,10 +634,12 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   livreurAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.primary + "10", alignItems: "center", justifyContent: "center" },
   livreurName:   { fontFamily: "NexaBold", fontSize: 15, color: C.text },
   livreurRating: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  livreurPhone:  { fontFamily: "NexaBold", fontSize: 12, color: C.text, marginTop: 2 },
   onlineDot:     { width: 6, height: 6, borderRadius: 3, backgroundColor: C.green },
   onlineText:    { fontFamily: "NexaBold", fontSize: 10, color: C.green },
-  etaRow:        { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.amber + "10", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
-  etaText:       { fontFamily: "NexaBold", fontSize: 12, color: C.amber },
+  etaRow:        { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: C.primary + "10", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12 },
+  etaText:       { fontFamily: "NexaBold", fontSize: 12, color: C.primary },
+  livreurMapWrap:{ height: 160, borderRadius: 16, overflow: "hidden", backgroundColor: C.bg, marginBottom: 12 },
   livreurBtns:   { flexDirection: "row", gap: 10 },
   livreurBtn:    { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10 },
   livreurBtnText:{ fontFamily: "NexaBold", fontSize: 13, color: C.white },
@@ -620,7 +663,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   /* Cancel / Refund */
   cancelBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: C.red + "30", backgroundColor: C.red + "06" },
   cancelText: { fontFamily: "NexaBold", fontSize: 13, color: C.red },
-  refundCard: { flexDirection: "row", alignItems: "flex-start", gap: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.amber + "30", padding: 14 },
+  refundCard: { flexDirection: "row", alignItems: "flex-start", gap: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.primary + "30", padding: 14 },
   refundTitle:{ fontFamily: "NexaBold", fontSize: 13, marginBottom: 4 },
   refundSub:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 17 },
   refundCall: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8 },
@@ -640,13 +683,11 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
 /* ─── TIMELINE STYLES ─────────────────────────────────────────────────── */
 function mkTl(C: typeof LIGHT) { return StyleSheet.create({
-  wrap:         { gap: 0 },
-  stepRow:      { flexDirection: "row", alignItems: "flex-start", paddingBottom: 20 },
-  line:         { position: "absolute", left: 17, top: 36, width: 2, height: "100%", zIndex: -1 },
-  circle:       { width: 36, height: 36, borderRadius: 18, borderWidth: 2, alignItems: "center", justifyContent: "center", marginRight: 12, zIndex: 1 },
-  stepInfo:     { flex: 1, paddingTop: 6 },
-  stepLabel:    { fontSize: 13 },
-  stepDesc:     { fontFamily: "NexaLight", fontSize: 11, color: C.textSec, marginTop: 3, lineHeight: 16 },
+  hWrap:        { flexDirection: "row", alignItems: "flex-start" },
+  hStep:        { alignItems: "center", width: 56 },
+  hLine:        { flex: 1, height: 2, marginTop: 15 },
+  circle:       { width: 32, height: 32, borderRadius: 16, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  hLabel:       { fontSize: 9.5, marginTop: 5, textAlign: "center" },
   cancelledBox: { alignItems: "center", gap: 10, paddingVertical: 8 },
   cancelIcon:   { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
   cancelTitle:  { fontFamily: "NexaBold", fontSize: 16 },

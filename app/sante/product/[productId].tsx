@@ -6,12 +6,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -20,6 +22,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGetproductByIdQuery } from "@/services/productServices";
 import { useCreatePaiementMutation } from "@/services/tsxService";
+import { useCreateOrderMutation } from "@/services/orderService";
+import { useGetUserByIdQuery } from "@/services/userService";
+import { getLastKnownLocation } from "@/hooks/useEnsureLocation";
 import { API_URL_BASE } from "@/constants/api";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
@@ -104,6 +109,7 @@ export default function ProductDetail() {
 
   const { data, isLoading }            = useGetproductByIdQuery(productId, { skip: !productId });
   const [createPaiement] = useCreatePaiementMutation();
+  const [createOrder, { isLoading: ordering }] = useCreateOrderMutation();
 
   const product  = data?.data ?? data;
   const imageUri = product?.imageUrl ? `${API_URL_BASE}${product.imageUrl}` : null;
@@ -113,6 +119,14 @@ export default function ProductDetail() {
   const [userId, setUserId] = useState<string | null>(null);
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
+  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
+  const [address,     setAddress]     = useState("");
+  const [phone,       setPhone]       = useState("");
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  useEffect(() => {
+    setAddress(user?.adresse || "");
+    setPhone(user?.telephone || "");
+  }, [user?.adresse, user?.telephone]);
 
   const [showResult, setShowResult] = useState(false);
   const [resultData, setResultData] = useState<{ type: "success"|"error"; description: string } | null>(null);
@@ -120,12 +134,16 @@ export default function ProductDetail() {
 
   const handlePay = async () => {
     if (!userId) return;
+    if (!address.trim() || !phone.trim()) {
+      Alert.alert("Informations manquantes", "Veuillez compléter votre adresse et votre numéro de téléphone.");
+      return;
+    }
     try {
       setLoadingPay(true);
       await createPaiement({
         amount:          Number(price),
         companyId:       Number(companyId),
-        shippingAddress: "Vers BIM, adresse officielle",
+        shippingAddress: address.trim(),
         notes:           "Paiement produit santé",
         paymentMethod:   "BIM NEXT APP",
         id:              Number(userId),
@@ -138,6 +156,45 @@ export default function ProductDetail() {
       setLoadingPay(false);
       setShowResult(true);
     }
+  };
+
+  /* ── Commander — paiement à la livraison, suivi via order-tracking ── */
+  const commanderDirectement = () => {
+    if (!userId) return;
+    if (!address.trim()) { Alert.alert("Adresse requise", "Veuillez saisir une adresse de livraison."); return; }
+    if (!phone.trim())   { Alert.alert("Téléphone requis", "Veuillez saisir votre numéro de téléphone."); return; }
+    Alert.alert(
+      "Confirmer la commande",
+      `Commander ${product.name} pour ${price} ${currency} ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Commander",
+          onPress: async () => {
+            try {
+              const destination = await getLastKnownLocation();
+              const res: any = await createOrder({
+                items: [{ productId: Number(productId), qty: 1, unitPrice: Number(price) }],
+                paymentMethod: "delivery",
+                shippingAddress: address.trim(),
+                clientPhone: phone.trim(),
+                destinationLat: destination?.lat,
+                destinationLng: destination?.lng,
+                ...(companyId && { companyId: Number(companyId) }),
+              }).unwrap();
+              setOrderNumber(res.orderNumber);
+            } catch (err: any) {
+              Alert.alert("Erreur", err?.data?.message || "La commande n'a pas pu être envoyée, réessayez.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const suivreLaCommande = () => {
+    if (!orderNumber) return;
+    router.replace({ pathname: "/bim-supermarche/order-tracking", params: { orderNumber } } as any);
   };
 
   return (
@@ -247,25 +304,75 @@ export default function ProductDetail() {
                 <Text style={[s.tagText, { color: C.tagGrayTxt }]}>{currency}</Text>
               </View>
             </View>
+
+            {/* ── Livraison (nécessaire pour "Commander") ── */}
+            <View style={s.divider} />
+            <Text style={s.sectionLabel}>Livraison (si vous commandez)</Text>
+            <View style={s.deliveryField}>
+              <Ionicons name="location-outline" size={16} color={C.textMut} />
+              <TextInput
+                style={s.deliveryInput}
+                placeholder="Adresse de livraison"
+                placeholderTextColor={C.textMut}
+                value={address}
+                onChangeText={setAddress}
+              />
+            </View>
+            <View style={s.deliveryField}>
+              <Ionicons name="call-outline" size={16} color={C.textMut} />
+              <TextInput
+                style={s.deliveryInput}
+                placeholder="Numéro de téléphone"
+                placeholderTextColor={C.textMut}
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+              />
+            </View>
+
+            {/* ── Confirmation de commande ── */}
+            {orderNumber && (
+              <View style={s.orderConfirm}>
+                <Ionicons name="checkmark-circle" size={28} color={C.success} />
+                <Text style={s.orderConfirmTitle}>Commande envoyée</Text>
+                <Text style={s.orderConfirmSub}>Réf. {orderNumber}</Text>
+                <TouchableOpacity style={s.orderTrackBtn} onPress={suivreLaCommande} activeOpacity={0.88}>
+                  <Text style={s.orderTrackBtnText}>Suivre la commande</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </ScrollView>
       )}
 
-      {/* ── BOUTON PAYER FIXE EN BAS ── */}
-      {!isLoading && product && (
+      {/* ── BOUTONS D'ACTION FIXES EN BAS ── */}
+      {!isLoading && product && !orderNumber && (
         <View style={s.payBar}>
           <View style={s.payInfo}>
-            <Text style={s.payLabel}>Total à payer</Text>
+            <Text style={s.payLabel}>Total</Text>
             <Text style={s.payAmount}>{price} <Text style={s.payAmountCur}>{currency}</Text></Text>
           </View>
+
+          <TouchableOpacity style={s.orderBtnWrap} onPress={commanderDirectement} activeOpacity={0.88} disabled={ordering}>
+            {ordering ? (
+              <ActivityIndicator color={C.primary} size="small" />
+            ) : (
+              <>
+                <Ionicons name="bag-handle-outline" size={16} color={C.primary} />
+                <Text style={s.orderBtnText}>Commander</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity style={s.payBtnWrap} onPress={handlePay} activeOpacity={0.88} disabled={loadingPay}>
             <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payBtn}>
               {loadingPay ? (
                 <ActivityIndicator color={C.white} size="small" />
               ) : (
                 <>
-                  <Ionicons name="card-outline" size={20} color={C.white} />
-                  <Text style={s.payBtnText}>Payer maintenant</Text>
+                  <Ionicons name="card-outline" size={16} color={C.white} />
+                  <Text style={s.payBtnText}>Payer</Text>
                 </>
               )}
             </LinearGradient>
@@ -359,14 +466,26 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   tagGray: { backgroundColor: C.tagGrayBg },
   tagText: { fontFamily: "NexaBold", fontSize: 10, color: C.primary, letterSpacing: 0.5 },
 
-  payBar:      { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.payBarBg, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center", gap: 16, elevation: 12, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: -4 } },
+  payBar:      { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: C.payBarBg, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, borderTopWidth: 1, borderTopColor: C.border, flexDirection: "row", alignItems: "center", gap: 10, elevation: 12, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: -4 } },
   payInfo:     { flex: 1 },
   payLabel:    { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textTransform: "uppercase", letterSpacing: 0.8 },
-  payAmount:   { fontFamily: "NexaBold", fontSize: 22, color: C.text, marginTop: 2 },
+  payAmount:   { fontFamily: "NexaBold", fontSize: 20, color: C.text, marginTop: 2 },
   payAmountCur:{ fontFamily: "NexaLight", fontSize: 14, color: C.textSec },
-  payBtnWrap:  { flex: 2, borderRadius: 18, overflow: "hidden", elevation: 6, shadowColor: C.blue, shadowOpacity: 0.30, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
-  payBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  payBtnText:  { fontFamily: "NexaBold", fontSize: 15, color: C.white },
+  payBtnWrap:  { flex: 1.3, borderRadius: 16, overflow: "hidden", elevation: 6, shadowColor: C.blue, shadowOpacity: 0.30, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
+  payBtn:      { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 14 },
+  payBtnText:  { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+
+  orderBtnWrap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 16, paddingVertical: 14, borderWidth: 1.5, borderColor: C.primary },
+  orderBtnText: { fontFamily: "NexaBold", fontSize: 13, color: C.primary },
+
+  deliveryField: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.pinInputBg, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, height: 46, marginBottom: 10 },
+  deliveryInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+
+  orderConfirm:      { alignItems: "center", gap: 4, marginTop: 20, paddingVertical: 20, backgroundColor: C.tagBg, borderRadius: 20, borderWidth: 1, borderColor: C.border },
+  orderConfirmTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text, marginTop: 4 },
+  orderConfirmSub:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  orderTrackBtn:     { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.success, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 20, marginTop: 10 },
+  orderTrackBtnText: { fontFamily: "NexaBold", fontSize: 13, color: "#fff" },
 }); }
 
 function mkM(C: typeof LIGHT) { return StyleSheet.create({

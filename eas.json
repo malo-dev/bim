@@ -27,7 +27,8 @@
         "serviceAccountKeyPath": "./eas-submit-key-new.json"
       },
       "ios": {
-        "language": "fr-FR"
+        "language": "fr-FR",
+        "ascAppId": "6761423848"
       }
     }
   }

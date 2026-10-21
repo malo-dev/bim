@@ -3,22 +3,22 @@ export const slides = [
     id: 1,
     title: "Bienvenue sur BIM NEXT",
     description: "Gérez vos finances et accédez à tout un réseau d’entreprises avec une simplicité absolue.",
-    type: "image",
-    source: { uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuBBqDKmz322_2dkP87aaIJKv2rQ-5VCfQwv_TP2LaK6Wj8ruMYLYW9oSNEfvCFkHfAruWnh2nsdBeSBrCmvCcl2z2OCQFrQiET0eGmYTin58s_TQ86IohNBjlqI3YGfNCTHFshz5sQyZXP9fFrzdd2LPvkS4Y7VZ9xMOORdkSDJulBGJ2uTES9kEfpN2vuK-8Kc3VkBbpe8sSPBVuF8Fchhk8YOobp5qmy1MlFFDjord4fZGjR_vID2e83GIDb4GSr83EtTMWN46sw" },
+    type: "icon",
+    icon: "wallet-outline",
   },
   {
     id: 2,
     title: "Paiements Instantanés",
     description: "Envoyez et recevez de l’argent en un clin d’œil, sans frais cachés.",
-    type: "image",
-    source: { uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDoMZnrBAlqDKV4cePZtYWh74gBCWZ90uu7KTAAh7Ih4GbnT0qT1uDi2xMybBsomrHGVIwEuV7ybbCGnvHjkxx1N95OBYR6XW3kTeGjEpxrod6kPjxDVxdzSZuLCtpQb5S0Q7vJBMDbkt7D9FZt_LvZ080J7DxAJTOe5wZp7m22uroJsbSFbrRiMfROAcw9mU_8S4LPO26JdFc7NtjXTDM0pdwsapcNgUGMJs4WLDSYGtU4pYoS8VTw7FLiX7TK0IhksbPKchBUTc8" },
+    type: "icon",
+    icon: "flash-outline",
   },
   {
     id: 3,
     title: "Sécurité Maximale",
     description: "Vos fonds et vos données sont protégés par les technologies les plus avancées.",
-    type: "image",
-    source: { uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUE1LSrG8UGxC-IagguqUe8qQp6AS96mPf5vt4kTFMXUMg7WE9hcf6LI2RNp59IpnJDY1XICEVVjuaGvgNVdqwhcDEhMjMNZExHHikYAgw11pzdMLzyPRmR_N-xypZQxc92AXZWUZjcY0d02YMRm9-h2WWdcqZ6HuOfdYHBxQ5kCYEpfO7tORsTdX_OaVWmAPW3Q_O0KxSW5vVITPPAddJWmOdPiDWqQ_xYAIXepd90yxmiYvycUwwWjblvdD3n44FHXLfax9EcoY" },
+    type: "icon",
+    icon: "shield-checkmark-outline",
   },
 ];
 

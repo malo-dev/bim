@@ -1,5 +1,6 @@
 // services/authService.js
 import { createApi } from '@reduxjs/toolkit/query/react';
+import * as Device from 'expo-device';
 import axiosInstance from './axiosInstance';
 
 // ✅ BaseQuery utilisant l'instance partagée (avec intercepteur token)
@@ -32,6 +33,36 @@ export const authApi = createApi({
       }),
     }),
 
+    // Compte créé silencieusement à la fin de l'onboarding, sans email ni
+    // mot de passe. Si `telephone` correspond à un compte existant, on le
+    // retrouve au lieu d'en créer un nouveau. On remonte aussi le modèle et
+    // la marque de l'appareil : le téléphone seul n'étant pas vérifié par
+    // SMS, c'est un deuxième signal pour repérer les comptes "rapides"
+    // multiples créés depuis le même appareil.
+    quickAccess: builder.mutation({
+      // `arg` est soit un numéro de téléphone (compatibilité avec les appels
+      // existants), soit { telephone, password, mustExist }. `mustExist`
+      // sert à l'écran "Déjà client" : si vrai, le serveur renvoie une
+      // erreur 404 au lieu de créer un nouveau compte quand le numéro est
+      // introuvable (évite de créer un compte fantôme sur une faute de frappe).
+      query: (arg) => {
+        const telephone = arg && typeof arg === 'object' ? arg.telephone : arg;
+        const password = arg && typeof arg === 'object' ? arg.password : undefined;
+        const mustExist = arg && typeof arg === 'object' ? arg.mustExist : undefined;
+        return {
+          url: '/auth/quick-access',
+          method: 'POST',
+          data: {
+            telephone: telephone || undefined,
+            password: password || undefined,
+            mustExist: mustExist || undefined,
+            deviceModel: Device.modelName || undefined,
+            deviceBrand: Device.brand || undefined,
+          },
+        };
+      },
+    }),
+
     login: builder.mutation({
       query: (userData) => ({
         url: '/auth/login',
@@ -45,6 +76,17 @@ export const authApi = createApi({
         url: '/auth/logOut',
         method: 'POST',
         data: userData,
+      }),
+    }),
+
+    // Code partagé qui révèle les entrées "staff" (Espace Livreur, Espace
+    // Chauffeur, Espace Gestion) dans Réglages — géré depuis admin-bim,
+    // plus codé en dur côté app.
+    verifyAccessCode: builder.mutation({
+      query: (code) => ({
+        url: '/access-code/verify',
+        method: 'POST',
+        data: { code },
       }),
     }),
 
@@ -92,7 +134,7 @@ export const authApi = createApi({
       query: ({ userId, expoPushToken }) => ({
         url: `/auth/users/${userId}/expoPushToken`,
         method: 'POST',
-        data: { expoPushToken },
+        data: { tokenPush: expoPushToken },
       }),
     }),
 
@@ -101,6 +143,16 @@ export const authApi = createApi({
         url: '/auth/sos',
         method: 'POST',
         data: { category, type, subType, caseLocation, contactPhone, latitude, longitude },
+      }),
+    }),
+
+    // Mot de passe de transaction (code à 6 chiffres envoyé par email à
+    // l'activation du compte, distinct du mot de passe de connexion) —
+    // permet à l'utilisateur de le retrouver s'il l'a oublié.
+    getMyTransactionPassword: builder.mutation({
+      query: (userId) => ({
+        url: `/auth/users/${userId}/transaction-password`,
+        method: 'GET',
       }),
     }),
   }),
@@ -118,4 +170,7 @@ export const {
   useRefreshMutation,
   useStoreExpoPushTokenMutation,
   useSendUserSOSMutation,
+  useGetMyTransactionPasswordMutation,
+  useQuickAccessMutation,
+  useVerifyAccessCodeMutation,
 } = authApi;

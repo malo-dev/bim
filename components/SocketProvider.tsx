@@ -54,17 +54,25 @@ async function registerPushToken(userId: string) {
     });
 
     const savedToken = await AsyncStorage.getItem("expoPushToken");
-    if (token !== savedToken) {
-      await AsyncStorage.setItem("expoPushToken", token);
+    const synced     = await AsyncStorage.getItem("expoPushTokenSynced");
+    // `synced` protège aussi les installations déjà affectées par l'ancien bug
+    // (mauvais champ envoyé au serveur) : ces appareils ont déjà un token en
+    // cache identique à l'actuel, donc `token !== savedToken` seul ne suffit
+    // pas à déclencher un nouveau essai — `expoPushTokenSynced` force la
+    // resynchronisation tant qu'aucune confirmation serveur n'a été reçue.
+    if (token !== savedToken || synced !== "1") {
       const authToken = await AsyncStorage.getItem("token");
       if (authToken) {
+        // Le backend attend `tokenPush` (voir auth.controller.js storeExpoPushToken).
         await axiosInstance.post(`/auth/users/${userId}/expoPushToken`, {
-          expoPushToken: token,
+          tokenPush: token,
         });
+        await AsyncStorage.setItem("expoPushToken", token);
+        await AsyncStorage.setItem("expoPushTokenSynced", "1");
       }
     }
   } catch (e) {
-    // console.warn("Expo push token error:", e);
+    console.warn("Expo push token error:", e);
   }
 }
 
@@ -85,6 +93,9 @@ export default function SocketProvider({
     async function setup() {
       const userId = await AsyncStorage.getItem("userId");
       if (!userId || !mounted) return;
+      // Déjà connecté pour cet utilisateur (ex. appel déclenché par
+      // "auth:loggedIn" juste après un setup initial réussi) — rien à refaire.
+      if (socketRef.current?.connected) return;
 
       /* Connecter le socket en premier (avant registerPushToken qui est lent) */
       const socket = connectSocket(userId);
@@ -100,11 +111,31 @@ export default function SocketProvider({
         dispatch(orderApi.util.invalidateTags(["order"]));
       });
 
+      // Recharge FlexPay confirmée (ou annulée) — contrairement aux paiements
+      // et transferts, ces événements ne passent pas par "notification", donc
+      // le solde affiché (accueil, page Solde...) ne se rafraîchissait que si
+      // l'utilisateur était resté sur l'écran de recharge. On invalide ici
+      // globalement, pour que le solde se mette à jour partout tout seul.
+      const refreshUser = () => dispatch(userApi.util.invalidateTags(["User"]));
+      socket.on("recharge:success", refreshUser);
+      socket.on("recharge:cancelled", refreshUser);
+      socket.on("recharge:failed", refreshUser);
+
       /* Enregistrement push notifications (async, ne bloque plus le socket) */
       registerPushToken(userId);
     }
 
     setup();
+
+    /* ── Connexion/reconnexion juste après une connexion réussie (onboarding,
+       Espace Gestion…) — au premier montage du provider, aucun `userId`
+       n'existe encore dans AsyncStorage tant que l'utilisateur ne s'est pas
+       connecté, donc `setup()` ci-dessus ressort sans rien faire. Sans cet
+       écouteur, le socket ne se connecterait jamais avant un redémarrage
+       complet de l'app. ── */
+    const loginSub = DeviceEventEmitter.addListener("auth:loggedIn", () => {
+      setup();
+    });
 
     /* ── AppState : reconnexion socket quand l'app revient au premier plan ── */
     const appStateSub = AppState.addEventListener("change", (nextState) => {
@@ -137,10 +168,14 @@ export default function SocketProvider({
       mounted = false;
       socketRef.current?.off("notification");
       socketRef.current?.off("order:status_updated");
+      socketRef.current?.off("recharge:success");
+      socketRef.current?.off("recharge:cancelled");
+      socketRef.current?.off("recharge:failed");
       disconnectSocket();
       notifListenerRef.current?.remove();
       appStateSub.remove();
       logoutSub.remove();
+      loginSub.remove();
     };
   }, [dispatch]);
 

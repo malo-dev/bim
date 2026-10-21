@@ -29,16 +29,26 @@ export default function Index() {
 
   useEffect(() => {
     (async () => {
-      const [[, token], [, onboardingDone], [, lastActivity]] =
-        await AsyncStorage.multiGet(["token", "onboardingDone", "lastActivity"]);
+      const [[, token], [, onboardingDone], [, lastActivity], [, accountType]] =
+        await AsyncStorage.multiGet(["token", "onboardingDone", "lastActivity", "accountType"]);
 
       if (token) {
         const now = Date.now();
+
+        // Comptes "rapides" (créés sans email/mot de passe à la fin de
+        // l'onboarding) : jamais de déconnexion forcée pour inactivité —
+        // n'existe pas pour les comptes traditionnels (clé jamais écrite).
+        if (accountType === "quick") {
+          await AsyncStorage.setItem("lastActivity", String(now));
+          setTarget("/(tabs)");
+          return;
+        }
+
         const inactive = lastActivity && (now - Number(lastActivity)) > SEVEN_DAYS;
 
         if (inactive) {
           // 7 jours sans ouvrir l'app → déconnexion automatique
-          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "lastActivity"]);
+          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "lastActivity", "accountType"]);
         } else {
           // Session active → mettre à jour lastActivity et aller à l'accueil
           await AsyncStorage.setItem("lastActivity", String(now));
@@ -47,7 +57,7 @@ export default function Index() {
         }
       }
 
-      setTarget(onboardingDone ? "/login" : "/onboarding");
+      setTarget("/onboarding");
     })();
   }, []);
 

@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCreateRetraitMutation } from "@/services/tsxService";
+import axiosInstance from "@/services/axiosInstance";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
@@ -104,6 +105,8 @@ export default function RetraitScreen() {
   const [agentSelected, setAgentSelected] = useState(false);
   const [phone,         setPhone]         = useState("");
   const [userId,        setUserId]        = useState<string | null>(null);
+  const [currency,      setCurrency]      = useState<"USD" | "CDF">("USD");
+  const [cdfRate,       setCdfRate]       = useState<number | null>(null);
 
   const [loadingPay, setLoadingPay] = useState(false);
 
@@ -115,6 +118,22 @@ export default function RetraitScreen() {
   const [createRetrait] = useCreateRetraitMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+
+  // Taux EC→CDF, juste pour afficher le montant équivalent en espèces
+  // à retirer chez l'agent — aucun impact sur le solde, qui reste en EC.
+  useEffect(() => {
+    axiosInstance.get("/currency").then(({ data }) => {
+      const list = data?.data || [];
+      const cdf = list.find((c: any) => c.code === "CDF");
+      if (cdf?.rate) setCdfRate(Number(cdf.rate));
+    }).catch(() => {});
+  }, []);
+
+  const convertedAmount = useMemo(() => {
+    const n = Number(normalizeDecimal(amount || "0"));
+    if (currency !== "CDF" || !cdfRate || !n) return null;
+    return n * cdfRate;
+  }, [amount, currency, cdfRate]);
 
   const showFeedback = (type: "success" | "error", msg: string) => {
     setFeedbackMsg(msg); setFeedback(type);
@@ -129,7 +148,7 @@ export default function RetraitScreen() {
     const wasSuccess = feedback === "success";
     Animated.timing(fbOpac, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
       setFeedback(null);
-      if (wasSuccess) { setAmount(""); setPhone(""); setAgentSelected(false); }
+      if (wasSuccess) { setAmount(""); setPhone(""); setAgentSelected(false); setCurrency("USD"); }
     });
   };
 
@@ -140,11 +159,19 @@ export default function RetraitScreen() {
     if (!userId) {
       showFeedback("error", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
     }
+    if (currency === "CDF" && !cdfRate) {
+      showFeedback("error", "Taux de change CDF indisponible pour le moment. Réessayez en USD."); return;
+    }
     try {
       setLoadingPay(true);
-      const res: any = await createRetrait({ amount: normalizeDecimal(amount), accountNumber: phone, id: userId }).unwrap();
-      if (res) showFeedback("success", `Retrait de ${amount} EC effectué avec succès !`);
-      else     showFeedback("error", "Retrait échoué, veuillez réessayer.");
+      const res: any = await createRetrait({ amount: normalizeDecimal(amount), accountNumber: phone, id: userId, currency }).unwrap();
+      if (res) {
+        const msg = res.currency === "CDF" && res.convertedAmount
+          ? `Retrait de ${amount} EC effectué avec succès ! Remettez ${Number(res.convertedAmount).toLocaleString("fr-FR")} FC à l'agent.`
+          : `Retrait de ${amount} EC effectué avec succès !`;
+        showFeedback("success", msg);
+      }
+      else showFeedback("error", "Retrait échoué, veuillez réessayer.");
     } catch (err: any) {
       showFeedback("error", err?.data?.message || "Une erreur est survenue lors du retrait.");
     } finally { setLoadingPay(false); }
@@ -237,6 +264,34 @@ export default function RetraitScreen() {
               })}
             </View>
 
+            {/* Currency section */}
+            <View style={[s.sectionHead, { marginTop: 6 }]}>
+              <Ionicons name="swap-horizontal-outline" size={17} color={C.primary} />
+              <Text style={s.sectionLabel}>DEVISE À RETIRER</Text>
+            </View>
+            <View style={[s.shortcuts, { marginBottom: amount && currency === "CDF" ? 6 : 20 }]}>
+              {(["USD", "CDF"] as const).map((cur) => {
+                const active = currency === cur;
+                return (
+                  <TouchableOpacity
+                    key={cur}
+                    style={[s.currChip, active && s.chipActive]}
+                    onPress={() => setCurrency(cur)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[s.chipText, active && s.chipTextActive]}>
+                      {cur === "USD" ? "Dollar (USD)" : "Franc (CDF)"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {amount && currency === "CDF" && (
+              <Text style={s.convertedHint}>
+                ≈ {convertedAmount != null ? convertedAmount.toLocaleString("fr-FR") : "…"} FC à remettre par l'agent (taux indicatif)
+              </Text>
+            )}
+
             {/* Method section */}
             <View style={[s.sectionHead, { marginTop: 6 }]}>
               <Ionicons name="person-circle-outline" size={17} color={C.primary} />
@@ -303,10 +358,18 @@ export default function RetraitScreen() {
                   <Text style={s.recapLabel}>Via</Text>
                   <Text style={s.recapVal}>AgentBim</Text>
                 </View>
-                <View style={s.recapRow}>
+                <View style={[s.recapRow, currency === "CDF" && { borderBottomWidth: 1, borderBottomColor: C.border }]}>
                   <Text style={s.recapLabel}>Montant</Text>
                   <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>{amount} EC</Text>
                 </View>
+                {currency === "CDF" && (
+                  <View style={s.recapRow}>
+                    <Text style={s.recapLabel}>À remettre en espèces</Text>
+                    <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>
+                      {convertedAmount != null ? convertedAmount.toLocaleString("fr-FR") : "…"} FC
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -430,9 +493,11 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   shortcuts:      { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
   chip:           { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: C.chipBg, borderWidth: 1, borderColor: C.border },
+  currChip:       { flex: 1, alignItems: "center", paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, backgroundColor: C.chipBg, borderWidth: 1, borderColor: C.border },
   chipActive:     { backgroundColor: C.primary, borderColor: C.primary },
   chipText:       { fontFamily: "NexaBold", fontSize: 12, color: C.textSec },
   chipTextActive: { color: "#FFFFFF" },
+  convertedHint:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginBottom: 20, marginTop: -2 },
 
   agentCard: {
     flexDirection: "row", alignItems: "center", gap: 14,

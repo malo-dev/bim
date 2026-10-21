@@ -1,6 +1,6 @@
 import "@/i18n";
 import React from "react";
-import { DarkTheme, DefaultTheme, ThemeProvider, Stack, useRouter, usePathname } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider, Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Provider } from "react-redux";
 import { store, persistor } from "@/store/store";
@@ -65,8 +65,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener("auth:forceLogout", async () => {
-      await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
-      router.replace("/login");
+      await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
+      router.replace("/onboarding");
     });
     return () => sub.remove();
   }, [router]);
@@ -77,8 +77,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 /* ─── ROOT LAYOUT ────────────────────────────────────────────────────── */
 export default function RootLayout() {
   /* ── Theme state ── */
-  const [isDark,       setIsDark]       = useState<boolean>(Appearance.getColorScheme() === "dark");
-  const [followSystem, setFollowSystemState] = useState<boolean>(true);
+  // Mode clair actif par défaut (pas le thème système) tant que l'utilisateur
+  // n'a pas explicitement choisi un mode dans les paramètres.
+  const [isDark,       setIsDark]       = useState<boolean>(false);
+  const [followSystem, setFollowSystemState] = useState<boolean>(false);
   const [themeLoaded,  setThemeLoaded]  = useState(false);
 
   /* ── Ref synchrone pour éviter closure périmée dans le listener ── */
@@ -89,12 +91,6 @@ export default function RootLayout() {
   const resumeOpacity  = useRef(new Animated.Value(1)).current;
   const appStateRef    = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAt = useRef<number | null>(null); // timestamp ms quand l'app passe en background
-
-  const pathname    = usePathname();
-  const pathnameRef = useRef(pathname);
-  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
-
-  const AUTH_RECOVERY_ROUTES = ["/forgot-password", "/check-pwd", "/reset-password"];
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", async (next: AppStateStatus) => {
@@ -120,25 +116,28 @@ export default function RootLayout() {
           }).start(() => setShowResume(false));
         }
 
-        // Ne pas vérifier le token pendant le flux de récupération de mot de passe
-        if (!AUTH_RECOVERY_ROUTES.includes(pathnameRef.current)) {
-          try {
-            const [[, token], [, refreshToken]] = await AsyncStorage.multiGet(["token", "refreshToken"]);
-            if (!token || !refreshToken) {
-              appStateRef.current = next;
-              return;
-            }
+        try {
+          const [[, token], [, refreshToken]] = await AsyncStorage.multiGet(["token", "refreshToken"]);
+          if (!token || !refreshToken) {
+            appStateRef.current = next;
+            return;
+          }
 
-            const decoded = jwtDecode<{ exp: number }>(token);
-            const isExpiredOrSoon = decoded.exp * 1000 < Date.now() + 5 * 60 * 1000;
+          const decoded = jwtDecode<{ exp: number }>(token);
+          const isExpiredOrSoon = decoded.exp * 1000 < Date.now() + 5 * 60 * 1000;
 
-            if (isExpiredOrSoon) {
-              const { data } = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
-              await AsyncStorage.setItem("token", data.token);
-            }
-          } catch {
-            // refresh échoué → déconnexion propre
-            await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+          if (isExpiredOrSoon) {
+            const { data } = await axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken });
+            await AsyncStorage.setItem("token", data.token);
+          }
+        } catch {
+          // Comptes "rapides" (téléphone) : ne jamais déconnecter de force sur
+          // un simple échec réseau/serveur passager — leur token est valable
+          // 180 jours, donc on retente juste au prochain retour au premier
+          // plan au lieu de couper la session en arrière-plan.
+          const accountTypeNow = await AsyncStorage.getItem("accountType");
+          if (accountTypeNow !== "quick") {
+            await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
             DeviceEventEmitter.emit("auth:forceLogout");
           }
         }
@@ -170,9 +169,11 @@ export default function RootLayout() {
         setFollowSystemState(false);
         setIsDark(false);
       } else {
-        followSystemRef.current = true;
-        setFollowSystemState(true);
-        setIsDark(Appearance.getColorScheme() === "dark");
+        // Aucune préférence enregistrée (première ouverture) → clair par
+        // défaut, on ne suit plus le thème système automatiquement.
+        followSystemRef.current = false;
+        setFollowSystemState(false);
+        setIsDark(false);
       }
       setThemeLoaded(true);
     });
@@ -246,8 +247,6 @@ export default function RootLayout() {
               <ErrorBoundary>
               <Stack>
                 <Stack.Screen name="onboarding"       options={{ headerShown: false }} />
-                <Stack.Screen name="login"            options={{ headerShown: false }} />
-                <Stack.Screen name="forgot-password"  options={{ headerShown: false }} />
                 <Stack.Screen name="retrait"          options={{ headerShown: false }} />
                 <Stack.Screen name="history"          options={{ headerShown: false }} />
                 <Stack.Screen name="bim-carburant"    options={{ headerShown: false }} />
@@ -263,11 +262,7 @@ export default function RootLayout() {
                 <Stack.Screen name="support"          options={{ headerShown: false }} />
                 <Stack.Screen name="faqs"             options={{ headerShown: false }} />
                 <Stack.Screen name="recharge"         options={{ headerShown: false }} />
-                <Stack.Screen name="check-pwd"        options={{ headerShown: false }} />
-                <Stack.Screen name="reset-password"   options={{ headerShown: false }} />
                 <Stack.Screen name="mes-commandes"    options={{ headerShown: false }} />
-                <Stack.Screen name="verify-code"      options={{ headerShown: false }} />
-                <Stack.Screen name="register"         options={{ headerShown: false }} />
                 <Stack.Screen name="transport"        options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)"           options={{ headerShown: false }} />
                 <Stack.Screen name="receive"          options={{ headerShown: false }} />
@@ -277,11 +272,15 @@ export default function RootLayout() {
                 <Stack.Screen name="payment"          options={{ headerShown: false }} />
                 <Stack.Screen name="qrcode"           options={{ headerShown: false }} />
                 <Stack.Screen name="livreur"          options={{ headerShown: false }} />
+                <Stack.Screen name="gestion"          options={{ headerShown: false }} />
                 <Stack.Screen name="bim-sos"          options={{ headerShown: false }} />
                 <Stack.Screen name="agent-dashboard"  options={{ headerShown: false }} />
                 <Stack.Screen name="formation"        options={{ headerShown: false }} />
                 <Stack.Screen name="favorites"        options={{ headerShown: false }} />
                 <Stack.Screen name="recommended"      options={{ headerShown: false }} />
+                <Stack.Screen name="products"         options={{ headerShown: false }} />
+                <Stack.Screen name="product"           options={{ headerShown: false }} />
+                <Stack.Screen name="solde"            options={{ headerShown: false }} />
                 <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />
               </Stack>
               </ErrorBoundary>

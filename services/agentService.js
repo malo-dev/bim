@@ -23,7 +23,7 @@ const axiosBaseQuery =
 export const agentApi = createApi({
   reducerPath: 'agentApi',
   baseQuery:   axiosBaseQuery({ baseUrl: BASE_URL }),
-  tagTypes:    ['AgentStats', 'AgentRetraits'],
+  tagTypes:    ['AgentStats', 'AgentRetraits', 'AdminAgents'],
   endpoints:   (builder) => ({
 
     // Stats du dashboard agent (solde, totaux)
@@ -37,10 +37,24 @@ export const agentApi = createApi({
       query: (params) => ({ url: '/agent/my-retraits', method: 'GET', params }),
       providesTags: ['AgentRetraits'],
     }),
+
+    // Admin (Espace Gestion) : liste des agents cash-out BIM NEXT
+    adminListAgents: builder.query({
+      query: (params) => ({ url: '/agent/admin/list', method: 'GET', params }),
+      providesTags: ['AdminAgents'],
+    }),
+
+    // Admin : bloquer / débloquer / retirer le statut d'agent
+    adminToggleAgent: builder.mutation({
+      query: ({ id, action }) => ({ url: `/agent/admin/${id}/toggle`, method: 'PUT', data: { action } }),
+      invalidatesTags: ['AdminAgents'],
+    }),
   }),
 });
 
 export const {
   useGetAgentStatsQuery,
   useGetAgentRetraitsQuery,
+  useAdminListAgentsQuery,
+  useAdminToggleAgentMutation,
 } = agentApi;

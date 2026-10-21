@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Linking,
@@ -15,8 +15,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "@/app/_layout";
 import { API_URL_BASE } from "@/constants/api";
-import { useGetRideByNumberQuery, useCancelRideMutation } from "@/services/rideService";
+import { useGetRideByNumberQuery, useCancelRideMutation, useStartRideMutation } from "@/services/rideService";
 import { getSocket } from "@/services/socketService";
+import LiveMap from "@/components/transport/LiveMap";
 
 const LIGHT = {
   bg: "#F8FAFC", canvas: "#EEF2F8",
@@ -36,7 +37,7 @@ const DARK: typeof LIGHT = {
 const STATUS_LABEL: Record<string, string> = {
   searching: "Recherche d'un chauffeur…",
   accepted: "Chauffeur en route vers vous",
-  arriving: "Chauffeur en route vers vous",
+  arriving: "Votre chauffeur est arrivé",
   in_progress: "En route vers votre destination",
 };
 
@@ -49,7 +50,21 @@ export default function SuiviCourseScreen() {
 
   const { data, refetch } = useGetRideByNumberQuery(rideNumber, { skip: !rideNumber, pollingInterval: 6000 });
   const [cancelRide, { isLoading: cancelling }] = useCancelRideMutation();
+  const [startRide, { isLoading: starting }] = useStartRideMutation();
   const ride = data?.data;
+
+  const handleStart = async () => {
+    try {
+      await startRide(rideNumber).unwrap();
+    } catch (e: any) {
+      Alert.alert("Erreur", e?.data?.message || "Impossible de démarrer la course.");
+    }
+  };
+
+  const [chauffeurPos, setChauffeurPos] = useState<{ lat: number; lng: number } | null>(null);
+  // Compteur kilométrique/prix en direct, affiché dès que le chauffeur a
+  // démarré la course (voir chauffeur.controller.updateLocation côté serveur).
+  const [liveTrip, setLiveTrip] = useState<{ distanceKm: number; fare: number } | null>(null);
 
   useEffect(() => {
     if (!rideNumber) return;
@@ -57,8 +72,18 @@ export default function SuiviCourseScreen() {
     if (!socket) return;
     socket.emit("track_ride", rideNumber);
     const handler = () => refetch();
+    const onLocation = (payload: { latitude: number; longitude: number; distanceKm?: number; liveFare?: number }) => {
+      setChauffeurPos({ lat: payload.latitude, lng: payload.longitude });
+      if (payload.distanceKm != null && payload.liveFare != null) {
+        setLiveTrip({ distanceKm: payload.distanceKm, fare: payload.liveFare });
+      }
+    };
     socket.on("ride:status_updated", handler);
-    return () => { socket.off("ride:status_updated", handler); };
+    socket.on("ride:chauffeur_location", onLocation);
+    return () => {
+      socket.off("ride:status_updated", handler);
+      socket.off("ride:chauffeur_location", onLocation);
+    };
   }, [rideNumber]);
 
   useEffect(() => {
@@ -96,17 +121,22 @@ export default function SuiviCourseScreen() {
         </View>
       </SafeAreaView>
 
-      {/* ── Carte illustrative ── */}
+      {/* ── Carte en direct ── */}
       <View style={s.mapWrap}>
-        <Image
-          source={{ uri: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=900&q=70" }}
+        <LiveMap
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          pickupLat={ride?.pickupLat ? Number(ride.pickupLat) : null}
+          pickupLng={ride?.pickupLng ? Number(ride.pickupLng) : null}
+          destLat={ride?.destinationLat ? Number(ride.destinationLat) : null}
+          destLng={ride?.destinationLng ? Number(ride.destinationLng) : null}
+          chauffeurLat={chauffeurPos?.lat}
+          chauffeurLng={chauffeurPos?.lng}
         />
-        <View style={s.mapOverlay} />
-        <View style={s.etaChip}>
+        <View style={s.etaChip} pointerEvents="none">
           <Ionicons name="navigate" size={13} color="#fff" />
-          <Text style={s.etaChipText}>{ride?.durationMin ?? "…"} min ({ride?.distanceKm ?? "…"} km)</Text>
+          <Text style={s.etaChipText}>
+            {ride?.durationMin ?? "…"} min ({(liveTrip?.distanceKm ?? ride?.distanceKm) ?? "…"} km)
+          </Text>
         </View>
       </View>
 
@@ -117,6 +147,15 @@ export default function SuiviCourseScreen() {
             <Text style={s.statusText}>{STATUS_LABEL[ride?.status] ?? "Chargement…"}</Text>
             <View style={s.verifiedChip}><Text style={s.verifiedText}>VÉRIFIÉ</Text></View>
           </View>
+
+          {liveTrip && (
+            <View style={s.liveFareRow}>
+              <Ionicons name="speedometer-outline" size={14} color={C.primary} />
+              <Text style={s.liveFareText}>
+                Compteur en cours · {liveTrip.distanceKm.toFixed(2)} km · {liveTrip.fare.toFixed(2)} EC
+              </Text>
+            </View>
+          )}
 
           {chauffeur ? (
             <View style={s.driverCard}>
@@ -169,6 +208,13 @@ export default function SuiviCourseScreen() {
             <Text style={s.addrText} numberOfLines={1}>{ride?.pickupAddress}</Text>
           </View>
 
+          {ride?.status === "arriving" && (
+            <TouchableOpacity style={s.startBtn} onPress={handleStart} disabled={starting} activeOpacity={0.88}>
+              <Ionicons name="play-circle" size={18} color="#fff" />
+              <Text style={s.startBtnText}>{starting ? "Démarrage…" : "Commencer la course"}</Text>
+            </TouchableOpacity>
+          )}
+
           {ride?.status !== "in_progress" && (
             <TouchableOpacity style={s.sosBtn} onPress={doCancel} disabled={cancelling}>
               <Ionicons name="close-circle-outline" size={16} color={C.red} />
@@ -195,6 +241,8 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   sheet: { padding: 20, gap: 16 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   statusText: { fontFamily: "NexaBold", fontSize: 15, color: C.text, flex: 1 },
+  liveFareRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  liveFareText: { fontFamily: "NexaBold", fontSize: 12, color: C.primary },
   verifiedChip: { backgroundColor: "rgba(0,98,255,0.1)", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
   verifiedText: { fontFamily: "NexaBold", fontSize: 9, color: C.primary },
 
@@ -224,4 +272,6 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   sosBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 18, paddingVertical: 14 },
   sosText: { fontFamily: "NexaBold", fontSize: 13, color: C.red },
+  startBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.green, borderRadius: 18, paddingVertical: 15 },
+  startBtnText: { fontFamily: "NexaBold", fontSize: 14, color: "#fff" },
 }); }

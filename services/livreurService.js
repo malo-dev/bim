@@ -68,6 +68,12 @@ export const livreurApi = createApi({
       providesTags: ["livreur"],
     }),
 
+    // Tous les livreurs, toutes entreprises (BIM super admin — Espace Gestion)
+    adminGetAllLivreurs: builder.query({
+      query: (params) => ({ url: "/livreur/admin/all", method: "GET", params }),
+      providesTags: ["livreur"],
+    }),
+
     // Changer statut livreur (admin)
     updateLivreurStatus: builder.mutation({
       query: ({ id, status }) => ({ url: `/livreur/${id}/status`, method: "PUT", data: { status } }),
@@ -139,6 +145,7 @@ export const {
   useUpdateLivreurLocationMutation,
   useGetLivreurPublicProfileQuery,
   useGetCompanyLivreursQuery,
+  useAdminGetAllLivreursQuery,
   useUpdateLivreurStatusMutation,
   useRateLivreurMutation,
   useGetAvailableOrdersQuery,

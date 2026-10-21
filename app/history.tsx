@@ -26,6 +26,7 @@ const LIGHT = {
   textMut: "#747688",
   bg:      "#F9F9F9",
   white:   "#FFFFFF",
+  surface: "#FFFFFF",
   green:   "#10B981",
   red:     "#EF4444",
   amber:   "#F59E0B",
@@ -38,6 +39,7 @@ const DARK: typeof LIGHT = {
   textMut: "#9FB0D0",
   bg:      "#0B1220",
   white:   "#FFFFFF",
+  surface: "#1A2540",
   green:   "#22C55E",
   red:     "#FF5A5A",
   amber:   "#F59E0B",
@@ -251,7 +253,7 @@ export default function HistoryScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── TOP BAR ──────────────────────────────────────────────────── */}
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: "rgba(255,255,255,0.90)" }}>
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: C.bg }}>
         <View style={s.topBar}>
           <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color={C.text} />
@@ -342,9 +344,9 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   txCard: {
     flexDirection: "row", alignItems: "center", gap: 14,
-    backgroundColor: "rgba(255,255,255,0.70)",
+    backgroundColor: C.surface,
     borderRadius: 22, padding: 16,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.80)",
+    borderWidth: 1, borderColor: C.border,
     elevation: 2, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
   },
   txIcon:   { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },

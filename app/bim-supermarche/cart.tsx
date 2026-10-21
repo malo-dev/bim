@@ -26,6 +26,7 @@ import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { API_URL_BASE } from "@/constants/api";
 import type { CartItem } from "./[id]";
 import { useAppTheme } from "@/app/_layout";
+import { getLastKnownLocation } from "@/hooks/useEnsureLocation";
 
 /* ─── PALETTE ────────────────────────────────────────────────────────── */
 const LIGHT = {
@@ -204,10 +205,13 @@ export default function CartScreen() {
     if (!address.trim()) { Alert.alert("Adresse requise", "Veuillez saisir une adresse de livraison."); return; }
     if (!phone.trim())   { Alert.alert("Téléphone requis", "Veuillez saisir votre numéro de téléphone."); return; }
     try {
+      const destination = await getLastKnownLocation();
       const res = await createOrder({
         items:           cart.map(c => ({ productId: c.productId, qty: c.qty, unitPrice: c.unitPrice })),
         companyId:       Number(companyId),
         shippingAddress: address.trim(),
+        destinationLat:  destination?.lat,
+        destinationLng:  destination?.lng,
         notes:           notes.trim() || undefined,
         paymentMethod:   "delivery",
         clientPhone:     phone.trim(),
@@ -341,7 +345,7 @@ export default function CartScreen() {
   /* ── IDLE MODE ── */
   return (
     <View style={[s.flex, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── HEADER ── */}
       <SafeAreaView style={s.header} edges={["top"]}>
@@ -356,7 +360,12 @@ export default function CartScreen() {
             </Text>
           </View>
           <View style={s.avatar}>
-            <Text style={s.avatarText}>BN</Text>
+            <Ionicons name="bag-handle-outline" size={18} color={C.white} />
+            {cart.length > 0 && (
+              <View style={s.avatarBadge}>
+                <Text style={s.avatarBadgeText}>{cart.length}</Text>
+              </View>
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -454,8 +463,11 @@ export default function CartScreen() {
               activeOpacity={0.9}
             >
               <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.commanderGrad}>
-                <Ionicons name="bicycle-outline" size={20} color={C.white} />
-                <Text style={s.commanderText}>Commander</Text>
+                <View style={s.btnLabelRow}>
+                  <Ionicons name="bicycle-outline" size={20} color={C.white} />
+                  <Text style={s.commanderText}>Commander — livraison</Text>
+                </View>
+                <Text style={s.btnPrice}>{totalCommande.toFixed(2)} EC</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -464,8 +476,11 @@ export default function CartScreen() {
               onPress={() => setMode("cash")}
               activeOpacity={0.9}
             >
-              <Ionicons name="qr-code-outline" size={20} color={C.primary} />
-              <Text style={s.caisseText}>Payer en caisse</Text>
+              <View style={s.btnLabelRow}>
+                <Ionicons name="qr-code-outline" size={20} color={C.primary} />
+                <Text style={s.caisseText}>Payer en caisse</Text>
+              </View>
+              <Text style={[s.btnPrice, { color: C.primary }]}>{totalCaisse.toFixed(2)} EC</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -487,6 +502,8 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   headerSub:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 2 },
   avatar:      { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
   avatarText:  { fontFamily: "NexaBold", fontSize: 14, color: C.white },
+  avatarBadge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: C.red, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 2, borderColor: C.card },
+  avatarBadgeText: { fontFamily: "NexaBold", fontSize: 10, color: C.white },
 
   emptyWrap:   { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
   emptyIcon:   { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(0,53,197,0.07)", alignItems: "center", justifyContent: "center", marginBottom: 8 },
@@ -513,10 +530,12 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   actionsWrap:   { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
   commanderBtn:  { borderRadius: 56, overflow: "hidden", elevation: 4, shadowColor: C.blue, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } },
-  commanderGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 18 },
-  commanderText: { fontFamily: "NexaBold", fontSize: 16, color: C.white },
-  caisseBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 56, borderWidth: 2, borderColor: C.primary, paddingVertical: 16 },
-  caisseText:    { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
+  commanderGrad: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 18, paddingHorizontal: 22 },
+  commanderText: { fontFamily: "NexaBold", fontSize: 15, color: C.white },
+  caisseBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 56, borderWidth: 2, borderColor: C.primary, paddingVertical: 16, paddingHorizontal: 22 },
+  caisseText:    { fontFamily: "NexaBold", fontSize: 15, color: C.primary },
+  btnLabelRow:   { flexDirection: "row", alignItems: "center", gap: 10 },
+  btnPrice:      { fontFamily: "NexaBold", fontSize: 15, color: C.white },
 
 
   subHeader:   { backgroundColor: C.card, borderBottomWidth: 1, borderBottomColor: C.border, elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },

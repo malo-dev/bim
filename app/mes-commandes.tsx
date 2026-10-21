@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ const LIGHT = {
   textMut: "#747688",
   bg:      "#F9F9F9",
   white:   "#FFFFFF",
+  surface: "#FFFFFF",
   green:   "#10B981",
   amber:   "#F59E0B",
   red:     "#EF4444",
@@ -38,6 +40,7 @@ const DARK: typeof LIGHT = {
   textMut: "#6B7A99",
   bg:      "#0B1220",
   white:   "#FFFFFF",
+  surface: "#1A2540",
   green:   "#10B981",
   amber:   "#F59E0B",
   red:     "#EF4444",
@@ -93,28 +96,31 @@ function OrderCard({ order, onPress }: { order: any; onPress: () => void }) {
 
   return (
     <TouchableOpacity style={s.orderCard} onPress={onPress} activeOpacity={0.85}>
-      {/* left icon */}
-      <View style={[s.orderIcon, { backgroundColor: st.bg }]}>
-        <Ionicons name={st.icon} size={22} color={st.color} />
-      </View>
-
-      {/* content */}
-      <View style={s.orderBody}>
-        <View style={s.orderTopRow}>
+      <View style={s.orderTopRow}>
+        <View style={[s.orderIcon, { backgroundColor: st.bg }]}>
+          <Ionicons name={st.icon} size={24} color={st.color} />
+        </View>
+        <View style={s.orderBody}>
           <Text style={s.orderRef}>{ref}</Text>
-          <Text style={[s.statusPill, { backgroundColor: st.bg, color: st.color }]}>{st.label}</Text>
+          <Text style={s.orderCompany} numberOfLines={1}>{company}</Text>
         </View>
-        <Text style={s.orderCompany} numberOfLines={1}>{company}</Text>
-        <View style={s.orderMeta}>
-          <Text style={s.orderDate}>{date}</Text>
-          {items > 0 && <Text style={s.orderDate}> · {items} article{items > 1 ? "s" : ""}</Text>}
+        <View style={[s.statusBadge, { backgroundColor: st.bg }]}>
+          <View style={[s.statusDot, { backgroundColor: st.color }]} />
+          <Text style={[s.statusBadgeText, { color: st.color }]}>{st.label}</Text>
         </View>
       </View>
 
-      {/* amount + chevron */}
-      <View style={{ alignItems: "flex-end", gap: 4 }}>
-        <Text style={s.orderTotal}>{total} EC</Text>
-        <Ionicons name="chevron-forward" size={16} color={C.textMut} />
+      <View style={s.orderDivider} />
+
+      <View style={s.orderBottomRow}>
+        <View>
+          <Text style={s.orderDate}>{date}{items > 0 ? ` · ${items} article${items > 1 ? "s" : ""}` : ""}</Text>
+          <Text style={s.orderTotal}>{total} EC</Text>
+        </View>
+        <View style={s.trackBtn}>
+          <Text style={s.trackBtnText}>Suivre</Text>
+          <Ionicons name="chevron-forward" size={14} color={C.primary} />
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -131,6 +137,7 @@ export default function MesCommandesScreen() {
   const [sort,         setSort]         = useState<SortType>("recent");
   const [search,       setSearch]       = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [refreshing,   setRefreshing]   = useState(false);
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
 
@@ -138,6 +145,8 @@ export default function MesCommandesScreen() {
     { page: 1, pageSize: 100 },
     { skip: !userId }
   );
+
+  const onRefresh = async () => { setRefreshing(true); await refetch(); setRefreshing(false); };
 
   const allOrders: any[] = data?.data || data || [];
 
@@ -181,7 +190,7 @@ export default function MesCommandesScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── TOP BAR ──────────────────────────────────────────────────── */}
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: "rgba(255,255,255,0.90)" }}>
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: C.bg }}>
         <View style={s.topBar}>
           <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={22} color={C.text} />
@@ -265,10 +274,13 @@ export default function MesCommandesScreen() {
           contentContainerStyle={s.list}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListEmptyComponent={
             <View style={s.center}>
-              <Ionicons name="bag-outline" size={40} color={C.textMut} />
+              <View style={s.emptyIcon}>
+                <Ionicons name="bag-outline" size={40} color={C.primary} />
+              </View>
               <Text style={s.emptyText}>Aucune commande trouvée</Text>
             </View>
           }
@@ -304,7 +316,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   searchWrap: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 14 },
   searchBox: {
     flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: C.white, borderRadius: 14,
+    backgroundColor: C.surface, borderRadius: 14,
     borderWidth: 1, borderColor: C.border,
     paddingHorizontal: 12, height: 44,
     elevation: 2, shadowColor: "#0035C5", shadowOpacity: 0.03, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
@@ -320,7 +332,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   sortMenu: {
     marginHorizontal: 16, marginTop: 6,
-    backgroundColor: C.white, borderRadius: 16,
+    backgroundColor: C.surface, borderRadius: 16,
     borderWidth: 1, borderColor: C.border, overflow: "hidden",
     elevation: 8, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 4 },
   },
@@ -333,7 +345,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   sortOptionText:   { fontFamily: "NexaBold", fontSize: 13, color: C.text },
 
   pillsWrap: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, gap: 8 },
-  pill:      { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: C.white, borderWidth: 1.5, borderColor: "rgba(100,110,180,0.35)" },
+  pill:      { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: C.surface, borderWidth: 1.5, borderColor: "rgba(100,110,180,0.35)" },
   pillActive:     { backgroundColor: C.primary, borderColor: C.primary },
   pillText:       { fontFamily: "NexaBold", fontSize: 12, color: C.textSec },
   pillTextActive: { color: C.white },
@@ -341,22 +353,27 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   list: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 4 },
 
   orderCard: {
-    flexDirection: "row", alignItems: "center", gap: 14,
-    backgroundColor: "rgba(255,255,255,0.70)",
+    backgroundColor: C.surface,
     borderRadius: 22, padding: 16,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.80)",
+    borderWidth: 1, borderColor: C.border,
     elevation: 2, shadowColor: "#000", shadowOpacity: 0.03, shadowRadius: 20, shadowOffset: { width: 0, height: 6 },
   },
   orderIcon:   { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  orderBody:   { flex: 1, gap: 3 },
-  orderTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  orderRef:    { fontFamily: "NexaBold", fontSize: 13, color: C.text },
-  statusPill:  { fontFamily: "NexaBold", fontSize: 9, letterSpacing: 0.8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  orderCompany:{ fontFamily: "NexaLight", fontSize: 12, color: C.textSec },
-  orderMeta:   { flexDirection: "row" },
-  orderDate:   { fontFamily: "NexaLight", fontSize: 10, color: C.textMut, textTransform: "uppercase", letterSpacing: 0.5 },
-  orderTotal:  { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  orderBody:   { flex: 1, gap: 3, marginLeft: 12 },
+  orderTopRow: { flexDirection: "row", alignItems: "center" },
+  orderRef:    { fontFamily: "NexaBold", fontSize: 14, color: C.text },
+  orderCompany:{ fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginTop: 1 },
+  statusBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  statusDot:   { width: 6, height: 6, borderRadius: 3 },
+  statusBadgeText: { fontFamily: "NexaBold", fontSize: 10, letterSpacing: 0.3 },
+  orderDivider: { height: 1, backgroundColor: C.border, marginVertical: 12 },
+  orderBottomRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  orderDate:   { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
+  orderTotal:  { fontFamily: "NexaBold", fontSize: 17, color: C.text, marginTop: 3 },
+  trackBtn:    { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "rgba(0,53,197,0.06)", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 7 },
+  trackBtnText:{ fontFamily: "NexaBold", fontSize: 12, color: C.primary },
 
   center:    { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 60, gap: 12 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: "rgba(0,53,197,0.07)", alignItems: "center", justifyContent: "center" },
   emptyText: { fontFamily: "NexaLight", fontSize: 14, color: C.textMut },
 }); }

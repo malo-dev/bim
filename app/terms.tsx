@@ -71,7 +71,7 @@ function TermItem({
       <View style={[
         ti.wrap,
         !isLast && { borderBottomWidth: 1, borderBottomColor: W.border },
-        active && { backgroundColor: "#EEF4FF" },
+        active && { backgroundColor: `${W.primary}14` },
       ]}>
         <View style={ti.row}>
           <View style={[ti.iconWrap, { backgroundColor: active ? "#0047FF18" : W.input }]}>

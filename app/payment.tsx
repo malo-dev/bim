@@ -157,7 +157,7 @@ export default function Payment() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={[s.root, { backgroundColor: t.bg }]}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <ScrollView
         contentContainerStyle={[s.scrollContent, { backgroundColor: t.bg }]}
         keyboardShouldPersistTaps="handled"
@@ -352,7 +352,7 @@ export default function Payment() {
                 style={[s.resultBtnErr, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "#6B7280" }]}
                 onPress={() => setShowResultModal(false)}
               >
-                <Text style={s.resultBtnErrText}>{tr("payment.errorMsg")}</Text>
+                <Text style={s.resultBtnErrText}>{tr("common.retry")}</Text>
               </TouchableOpacity>
             </View>
           )}

@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,7 +15,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import axios from "axios";
 import { useAppTheme } from "@/app/_layout";
+import { API_URL_BASE } from "@/constants/api";
+import LiveMap from "@/components/transport/LiveMap";
+import { useGetTiersQuery, useEstimateRideMutation } from "@/services/rideService";
 
 /* ─── Palette "Luminous Precision Ride" adaptée au thème BIM NEXT ───────── */
 const LIGHT = {
@@ -37,12 +43,15 @@ const DARK: typeof LIGHT = {
   iconBtnBg: "rgba(61,125,255,0.14)", iconBtnBord: "rgba(61,125,255,0.22)",
 };
 
-const SERVICES = [
-  { tier: "eco", title: "Bim Ride", sub: "Électrique • 4 pl.", badge: "5 min", price: "12,40 EC", img: "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400&q=80" },
-  { tier: "confort", title: "Bim Berline", sub: "Haut de gamme • 4 pl.", badge: "7 min", price: "18,90 EC", img: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400&q=80" },
-  { tier: "moto", title: "Moto Express", sub: "Anti-bouchons • 1 pl.", badge: "3 min", price: "15,00 EC", img: "https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400&q=80" },
-  { tier: "van", title: "Bim Van", sub: "Jusqu'à 6 pl.", badge: "8 min", price: "26,00 EC", img: "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?w=400&q=80" },
-];
+// Visuels uniquement (le backend ne stocke pas d'image par gamme) — le reste
+// (nom, prix de base, places, ETA) vient de /ride-tiers, éditable en admin.
+const TIER_IMG: Record<string, string> = {
+  eco:     "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400&q=80",
+  confort: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400&q=80",
+  green:   "https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=400&q=80",
+  van:     "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?w=400&q=80",
+  moto:    "https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400&q=80",
+};
 
 const QUICK_DESTS = [
   { label: "Maison", icon: "home-outline", value: "Domicile" },
@@ -58,13 +67,151 @@ export default function TransportBookingScreen() {
 
   const [destination, setDestination] = useState("");
   const [selectedTier, setSelectedTier] = useState("eco");
+  const [requestedSeats, setRequestedSeats] = useState(1);
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [destCoords, setDestCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ placeId: string; description: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const skipNextGeocode = useRef(false);
+  const destInputRef = useRef<TextInput>(null);
+  const { data: tiersData, isLoading: loadingTiers, isError: tiersError, refetch: refetchTiers } = useGetTiersQuery(undefined);
+  const allServices = tiersData?.data ?? [];
+  const [estimateRide] = useEstimateRideMutation();
+  const [tierPrices, setTierPrices] = useState<Record<string, number>>({});
+  // Seuls les véhicules ayant assez de places pour le nombre demandé sont
+  // proposés — le prix affiché correspond donc déjà automatiquement au
+  // nombre de places choisi (chaque gamme a son propre tarif en base).
+  const services = allServices.filter((svc: any) => (svc.seats ?? 4) >= requestedSeats);
 
-  const goToTiers = () => {
+  useEffect(() => {
+    if (services.length > 0 && !services.some((svc: any) => svc.tierKey === selectedTier)) {
+      setSelectedTier(services[0].tierKey);
+    }
+  }, [requestedSeats, allServices.length]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+        const pos = await Location.getCurrentPositionAsync({});
+        setPickupCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      } catch {}
+    })();
+  }, []);
+
+  // Suggestions d'adresses pendant la saisie — l'utilisateur peut choisir
+  // dans la liste proposée, ou continuer à taper librement si son adresse
+  // n'y figure pas (le géocodage ci-dessous prend alors le relais).
+  useEffect(() => {
+    if (destination.trim().length < 3) { setSuggestions([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await axios.get(`${API_URL_BASE}/transport/autocomplete`, {
+          params: { input: destination.trim() },
+        });
+        setSuggestions(res.data?.data || []);
+      } catch {
+        setSuggestions([]);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [destination]);
+
+  const handleSelectSuggestion = async (s: { placeId: string; description: string }) => {
+    skipNextGeocode.current = true;
+    setDestination(s.description);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setGeocoding(true);
+    try {
+      const res = await axios.get(`${API_URL_BASE}/transport/place-details`, {
+        params: { placeId: s.placeId },
+      });
+      setDestCoords({ lat: res.data.data.lat, lng: res.data.data.lng });
+    } catch {
+      setDestCoords(null);
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  // Géocodage de la destination tapée librement (sans passer par une
+  // suggestion) — sans ça, le pin destination (et donc la vraie distance) ne
+  // peut jamais apparaître sur la carte. Debounce pour ne pas spammer l'API
+  // à chaque lettre. Sauté juste après le choix d'une suggestion : on a déjà
+  // les coordonnées exactes via /place-details, pas besoin de re-géocoder.
+  useEffect(() => {
+    if (skipNextGeocode.current) { skipNextGeocode.current = false; return; }
+    if (destination.trim().length < 3) { setDestCoords(null); return; }
+    const timer = setTimeout(async () => {
+      setGeocoding(true);
+      try {
+        const res = await axios.get(`${API_URL_BASE}/transport/geocode`, {
+          params: { address: destination.trim() },
+        });
+        setDestCoords({ lat: res.data.data.lat, lng: res.data.data.lng });
+      } catch {
+        setDestCoords(null);
+      } finally {
+        setGeocoding(false);
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [destination]);
+
+  // Prix réel par gamme dès qu'une destination est saisie — remplace
+  // l'ancien affichage statique du tarif de base (supprimé, voir migration
+  // 20261021000001 : il n'y a plus de frais fixe, seulement un prix/km).
+  useEffect(() => {
+    if (destination.trim().length < 3) { setTierPrices({}); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res: any = await estimateRide({
+          pickupAddress: "Votre position actuelle",
+          destinationAddress: destination.trim(),
+          pickupLat: pickupCoords?.lat, pickupLng: pickupCoords?.lng,
+          destinationLat: destCoords?.lat, destinationLng: destCoords?.lng,
+        }).unwrap();
+        const map: Record<string, number> = {};
+        for (const t of res.data?.tiers ?? []) map[t.tier] = t.price;
+        setTierPrices(map);
+      } catch {
+        setTierPrices({});
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [destination, pickupCoords, destCoords]);
+
+  const goToTiersWith = (tierKey: string) => {
     if (!destination.trim()) return;
     router.push({
       pathname: "/transport/choix-gamme",
-      params: { pickup: "Votre position actuelle", destination: destination.trim(), tier: selectedTier },
+      params: {
+        pickup: "Votre position actuelle",
+        destLat: destCoords ? String(destCoords.lat) : undefined,
+        destLng: destCoords ? String(destCoords.lng) : undefined,
+        pickupLat: pickupCoords ? String(pickupCoords.lat) : undefined,
+        pickupLng: pickupCoords ? String(pickupCoords.lng) : undefined,
+        destination: destination.trim(),
+        tier: tierKey,
+      },
     } as any);
+  };
+  const goToTiers = () => goToTiersWith(selectedTier);
+
+  // Tap sur un véhicule de la liste : le sélectionne, et si l'adresse est déjà
+  // écrite, enchaîne directement sur sa fiche (estimation + présentation +
+  // commande) au lieu de se contenter de le surligner. Sinon, on ramène le
+  // focus sur le champ adresse pour guider l'étape suivante.
+  const handleTierPress = (tierKey: string) => {
+    setSelectedTier(tierKey);
+    if (destination.trim()) {
+      goToTiersWith(tierKey);
+    } else {
+      destInputRef.current?.focus();
+    }
   };
 
   return (
@@ -86,14 +233,24 @@ export default function TransportBookingScreen() {
       </SafeAreaView>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-        {/* ── Carte illustrative (pas de carte interactive réelle) ── */}
+        {/* ── Carte en direct (position GPS réelle si autorisée) ── */}
         <View style={s.mapWrap}>
-          <Image
-            source={{ uri: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=900&q=70" }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-          />
-          <View style={s.mapOverlay} />
+          {pickupCoords ? (
+            <LiveMap
+              style={StyleSheet.absoluteFill}
+              pickupLat={pickupCoords.lat}
+              pickupLng={pickupCoords.lng}
+              destLat={destCoords?.lat}
+              destLng={destCoords?.lng}
+            />
+          ) : (
+            <Image
+              source={{ uri: "https://images.unsplash.com/photo-1524661135-423995f22d0b?w=900&q=70" }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          )}
+          <View style={s.mapOverlay} pointerEvents="none" />
           <BlurView intensity={40} tint={isDark ? "dark" : "light"} style={s.youAreHere}>
             <View style={s.youAreHereDot} />
             <Text style={s.youAreHereText}>Vous êtes ici</Text>
@@ -115,19 +272,43 @@ export default function TransportBookingScreen() {
           <Text style={s.greetingSub}>Prêt pour votre prochain trajet urbain ?</Text>
 
           {/* ── Recherche destination ── */}
-          <View style={s.searchRow}>
-            <View style={s.searchIconWrap}>
-              <Ionicons name="search" size={16} color="#fff" />
+          <View>
+            <View style={s.searchRow}>
+              <View style={s.searchIconWrap}>
+                <Ionicons name="search" size={16} color="#fff" />
+              </View>
+              <TextInput
+                ref={destInputRef}
+                style={s.searchInput}
+                placeholder="Où allez-vous ?"
+                placeholderTextColor={C.textMut}
+                value={destination}
+                onChangeText={setDestination}
+                onFocus={() => setShowSuggestions(true)}
+                returnKeyType="search"
+                onSubmitEditing={() => { setShowSuggestions(false); goToTiers(); }}
+              />
+              {geocoding && <ActivityIndicator size="small" color={C.primary} style={{ marginRight: 14 }} />}
+              {!geocoding && destCoords && (
+                <Ionicons name="checkmark-circle" size={18} color={C.success} style={{ marginRight: 14 }} />
+              )}
             </View>
-            <TextInput
-              style={s.searchInput}
-              placeholder="Où allez-vous ?"
-              placeholderTextColor={C.textMut}
-              value={destination}
-              onChangeText={setDestination}
-              returnKeyType="search"
-              onSubmitEditing={goToTiers}
-            />
+
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={s.suggestBox}>
+                {suggestions.map((sug) => (
+                  <TouchableOpacity
+                    key={sug.placeId}
+                    style={s.suggestRow}
+                    onPress={() => handleSelectSuggestion(sug)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="location-outline" size={15} color={C.textMut} />
+                    <Text style={s.suggestText} numberOfLines={1}>{sug.description}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 14 }}>
@@ -138,6 +319,34 @@ export default function TransportBookingScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {/* ── Nombre de places — filtre les véhicules proposés et donc le prix affiché ── */}
+          <View style={s.seatsRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name="people-outline" size={16} color={C.textSub} />
+              <Text style={s.seatsLabel}>Nombre de places</Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+              <TouchableOpacity
+                style={s.seatsBtn}
+                onPress={() => setRequestedSeats((n) => Math.max(1, n - 1))}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="remove" size={16} color={C.primary} />
+              </TouchableOpacity>
+              <Text style={s.seatsValue}>{requestedSeats}</Text>
+              <TouchableOpacity
+                style={s.seatsBtn}
+                onPress={() => setRequestedSeats((n) => Math.min(7, n + 1))}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add" size={16} color={C.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {services.length === 0 && (
+            <Text style={s.seatsWarning}>Aucun véhicule disponible pour {requestedSeats} place{requestedSeats > 1 ? "s" : ""}.</Text>
+          )}
 
           {/* ── Bannière BIM PASS ── */}
           <View style={s.promoBanner}>
@@ -153,32 +362,57 @@ export default function TransportBookingScreen() {
           {/* ── Services ── */}
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Services Bim</Text>
-            <Text style={s.sectionMeta}>{SERVICES.length} options instantanées</Text>
+            <Text style={s.sectionMeta}>{services.length} options instantanées</Text>
           </View>
 
-          <View style={s.servicesGrid}>
-            {SERVICES.map((svc) => {
-              const active = selectedTier === svc.tier;
-              return (
-                <TouchableOpacity
-                  key={svc.tier}
-                  style={[s.serviceCard, active && s.serviceCardActive]}
-                  onPress={() => setSelectedTier(svc.tier)}
-                  activeOpacity={0.9}
-                >
-                  <View style={s.serviceImgWrap}>
-                    <Image source={{ uri: svc.img }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                    <View style={s.serviceBadge}><Text style={s.serviceBadgeText}>{svc.badge}</Text></View>
-                  </View>
-                  <View style={{ padding: 12 }}>
-                    <Text style={s.serviceTitle} numberOfLines={1}>{svc.title}</Text>
-                    <Text style={s.serviceSub} numberOfLines={1}>{svc.sub}</Text>
-                    <Text style={s.servicePrice}>{svc.price}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {loadingTiers ? (
+            <View style={s.tiersStateBox}>
+              <ActivityIndicator size="small" color={C.primary} />
+            </View>
+          ) : tiersError || services.length === 0 ? (
+            <View style={s.tiersStateBox}>
+              <Ionicons name="alert-circle-outline" size={22} color={C.textMut} />
+              <Text style={s.tiersStateText}>
+                {tiersError ? "Impossible de charger les véhicules." : "Aucun véhicule disponible pour le moment."}
+              </Text>
+              <TouchableOpacity style={s.tiersRetryBtn} onPress={() => refetchTiers()} activeOpacity={0.85}>
+                <Ionicons name="refresh" size={14} color={C.primary} />
+                <Text style={s.tiersRetryText}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.servicesGrid}>
+              {services.map((svc: any) => {
+                const active = selectedTier === svc.tierKey;
+                return (
+                  <TouchableOpacity
+                    key={svc.tierKey}
+                    style={[s.serviceCard, active && s.serviceCardActive]}
+                    onPress={() => handleTierPress(svc.tierKey)}
+                    activeOpacity={0.9}
+                  >
+                    <View style={s.serviceImgWrap}>
+                      <Image
+                        source={{ uri: svc.imageUrl ? `${API_URL_BASE}${svc.imageUrl}` : (TIER_IMG[svc.tierKey] ?? TIER_IMG.eco) }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                      />
+                      <View style={s.serviceBadge}><Text style={s.serviceBadgeText}>{svc.etaMin} min</Text></View>
+                    </View>
+                    <View style={{ padding: 12 }}>
+                      <Text style={s.serviceTitle} numberOfLines={1}>{svc.label}</Text>
+                      <Text style={s.serviceSub} numberOfLines={1}>{svc.seats} place{svc.seats > 1 ? "s" : ""}</Text>
+                      <Text style={s.servicePrice}>
+                        {tierPrices[svc.tierKey] != null
+                          ? `${tierPrices[svc.tierKey].toFixed(2)} EC`
+                          : `${Number(svc.perKm).toFixed(2)} EC/km`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           <View style={s.infoRow}>
             <View style={s.infoIconWrap}>
@@ -195,7 +429,7 @@ export default function TransportBookingScreen() {
       <View style={s.ctaWrap}>
         <TouchableOpacity style={[s.ctaBtn, !destination.trim() && { opacity: 0.5 }]} onPress={goToTiers} activeOpacity={0.88} disabled={!destination.trim()}>
           <Ionicons name="navigate" size={18} color="#fff" />
-          <Text style={s.ctaText}>Commander un {SERVICES.find(s2 => s2.tier === selectedTier)?.title}</Text>
+          <Text style={s.ctaText}>Commander un {services.find((s2: any) => s2.tierKey === selectedTier)?.label ?? "véhicule"}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -238,6 +472,9 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   },
   searchIconWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primary, alignItems: "center", justifyContent: "center" },
   searchInput: { flex: 1, fontFamily: "NexaBold", fontSize: 14, color: C.text, paddingVertical: 10 },
+  suggestBox: { marginTop: 6, backgroundColor: C.glass, borderRadius: 16, borderWidth: 1, borderColor: C.glassBord, overflow: "hidden" },
+  suggestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.glassBord },
+  suggestText: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
 
   quickChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -245,6 +482,11 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     backgroundColor: C.chipBg, borderWidth: 1, borderColor: C.glassBord,
   },
   quickChipText: { fontFamily: "NexaBold", fontSize: 12, color: C.text },
+  seatsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: C.glass, borderRadius: 16, borderWidth: 1, borderColor: C.glassBord, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12 },
+  seatsLabel: { fontFamily: "NexaBold", fontSize: 13, color: C.text },
+  seatsBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.iconBtnBg, borderWidth: 1, borderColor: C.iconBtnBord, alignItems: "center", justifyContent: "center" },
+  seatsValue: { fontFamily: "NexaBold", fontSize: 14, color: C.text, minWidth: 16, textAlign: "center" },
+  seatsWarning: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginBottom: 12, marginTop: -6 },
 
   promoBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,
@@ -261,6 +503,10 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   sectionMeta: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
 
   servicesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tiersStateBox: { alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 28 },
+  tiersStateText: { fontFamily: "NexaLight", fontSize: 13, color: C.textMut, textAlign: "center" },
+  tiersRetryBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: C.primary, marginTop: 4 },
+  tiersRetryText: { fontFamily: "NexaBold", fontSize: 12, color: C.primary },
   serviceCard: {
     width: "48%", borderRadius: 22, overflow: "hidden",
     backgroundColor: C.glass, borderWidth: 1.5, borderColor: "transparent",

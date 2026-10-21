@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import { useGetUserByIdQuery } from "@/services/userService";
 import { useAppTheme } from "@/app/_layout";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
@@ -50,15 +52,14 @@ export default function QRPage() {
   const C = isDark ? DARK : LIGHT;
   const s = useMemo(() => mkS(C), [isDark]);
 
-  const user = {
-    id: "USER12345",
-    bimAccount: "BIM-908776",
-  };
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
 
-  const qrValue = JSON.stringify({
-    userId: user.id,
-    bimAccount: user.bimAccount,
-  });
+  // Même format que le scanner (/qrcode) : { userId, accountNumber }.
+  const qrValue = user
+    ? JSON.stringify({ userId: user.id, accountNumber: user.accountNumber })
+    : "";
 
   return (
     <View style={s.container}>
@@ -86,7 +87,9 @@ export default function QRPage() {
         <Ionicons name="qr-code-outline" size={60} color="white" />
 
         <View style={s.qrContainer}>
-          <QRCode value={qrValue} size={220} />
+          {user
+            ? <QRCode value={qrValue} size={220} />
+            : <ActivityIndicator size="large" color="#fff" />}
         </View>
       </BlurView>
     </View>

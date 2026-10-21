@@ -119,6 +119,7 @@ const ln: Translations = {
     scanner:      "Scan",
     support:      "Lisalisi",
     orders:       "Ba commande na ngai",
+    allProducts:  "Biloko na biso nyonso",
   },
 
   params: {

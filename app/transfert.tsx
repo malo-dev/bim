@@ -22,7 +22,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCreateTransfertMutation } from "@/services/tsxService";
-import { useGetAllUsersQuery } from "@/services/userService";
+import { useGetAllUsersQuery, useGetUserByIdQuery } from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
@@ -36,6 +36,7 @@ const LIGHT = {
   white:        "#FFFFFF",
   error:        "#EF4444",
   success:      "#22C55E",
+  amber:        "#F59E0B",
   bg:           "#F9F9F9",
   text:         "#1A1C1C",
   textSec:      "#434657",
@@ -66,6 +67,7 @@ const DARK: typeof LIGHT = {
   white:        "#FFFFFF",
   error:        "#FF5A5A",
   success:      "#22C55E",
+  amber:        "#F59E0B",
   bg:           "#0B1220",
   text:         "#EAF0FF",
   textSec:      "#C5D0E8",
@@ -92,7 +94,7 @@ const DARK: typeof LIGHT = {
 
 const SHORTCUTS = ["500", "1000", "2500", "5000"];
 
-type User = { id: string | number; username: string; phone?: string };
+type User = { id: string | number; username: string; phone?: string; email?: string };
 
 /* ─── SCREEN ─────────────────────────────────────────────────────────── */
 export default function TransfertScreen() {
@@ -108,7 +110,7 @@ export default function TransfertScreen() {
   const [userId,       setUserId]       = useState<string | null>(null);
   const [searchQuery,  setSearchQuery]  = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [recipientModalVisible, setRecipientModalVisible] = useState(false);
 
   const [loadingPay, setLoadingPay] = useState(false);
 
@@ -121,15 +123,25 @@ export default function TransfertScreen() {
   const cardOpac = useRef(new Animated.Value(0)).current;
 
   const [createTransfert] = useCreateTransfertMutation();
-  const { data: usersData } = useGetAllUsersQuery({});
+
+  // Recherche côté serveur (et non plus seulement sur la 1ère page du client) —
+  // sinon un utilisateur hors de cette page ne pouvait jamais être trouvé,
+  // quel que soit ce qu'on tapait dans la recherche.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const { data: usersData } = useGetAllUsersQuery({
+    paginate: false,
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+  });
+  const { data: meData } = useGetUserByIdQuery(userId as string, { skip: !userId });
+  const hasActiveSubscription = meData?.hasActiveSubscription ?? true; // true tant que non chargé, pour ne pas bloquer à tort
 
   const allUsers: User[] = usersData?.data ?? usersData ?? [];
-  const filteredUsers = searchQuery.length > 1
-    ? allUsers.filter((u: User) => {
-        const q = searchQuery.toLowerCase();
-        return u.username?.toLowerCase().includes(q) || String(u.phone ?? "").includes(q);
-      }).slice(0, 6)
-    : [];
+  const filteredUsers = allUsers;
 
   useEffect(() => {
     AsyncStorage.getItem("userId").then(setUserId);
@@ -157,15 +169,23 @@ export default function TransfertScreen() {
   };
 
   const handleSelectUser = (user: User) => {
-    setSelectedUser(user); setSearchQuery(user.username); setShowDropdown(false); Keyboard.dismiss();
+    setSelectedUser(user);
+    setSearchQuery("");
+    setRecipientModalVisible(false);
   };
 
   const handleConfirmPress = async () => {
     if (!amount || !selectedUser) { showFeedback("error", "Veuillez remplir tous les champs."); return; }
     if (!userId) { showFeedback("error", "Utilisateur introuvable. Veuillez vous reconnecter."); return; }
+    if (!hasActiveSubscription) {
+      showFeedback("error", "Faites une recharge pour activer votre abonnement avant de pouvoir transférer.");
+      return;
+    }
     try {
       setLoadingPay(true);
-      const res: any = await createTransfert({ amount: normalizeDecimal(amount), receiverId: selectedUser.id, senderId: userId }).unwrap();
+      // Le backend attend `id` (émetteur) et `targetId` (destinataire) —
+      // voir transaction.controller.js createTransfert.
+      const res: any = await createTransfert({ amount: normalizeDecimal(amount), targetId: selectedUser.id, id: userId }).unwrap();
       if (res) showFeedback("success", `Transfert de ${amount} EC à ${selectedUser.username} réussi !`);
       else     showFeedback("error", "Transfert échoué, veuillez réessayer.");
     } catch (err: any) {
@@ -193,7 +213,7 @@ export default function TransfertScreen() {
         </View>
       </SafeAreaView>
 
-      <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowDropdown(false); }}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           {/* ── HERO SECTION ─────────────────────────────────────────── */}
@@ -209,6 +229,21 @@ export default function TransfertScreen() {
             <Ionicons name="information-circle-outline" size={18} color={C.primary} />
             <Text style={s.infoText}>Les transferts entre membres BIM sont instantanés et sans frais</Text>
           </View>
+
+          {/* ── ABONNEMENT REQUIS ───────────────────────────────────────
+              Le transfert nécessite un abonnement actif (activé automatiquement
+              à la première recharge), indépendamment du solde EC disponible —
+              prévenir ici évite la surprise d'un échec en fin de formulaire. */}
+          {!hasActiveSubscription && (
+            <TouchableOpacity style={s.warnBanner} onPress={() => router.push("/recharge" as any)} activeOpacity={0.85}>
+              <Ionicons name="alert-circle-outline" size={18} color={C.amber} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.warnTitle}>Abonnement requis</Text>
+                <Text style={s.warnText}>Faites une recharge pour activer votre abonnement avant de pouvoir transférer.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={C.amber} />
+            </TouchableOpacity>
+          )}
 
           {/* ── FORM CARD ────────────────────────────────────────────── */}
           <Animated.View style={[s.card, { opacity: cardOpac, transform: [{ translateY: cardAnim }] }]}>
@@ -267,6 +302,7 @@ export default function TransfertScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.selectedName}>{selectedUser.username}</Text>
+                  {selectedUser.email && <Text style={s.selectedPhone}>{selectedUser.email}</Text>}
                   {selectedUser.phone && <Text style={s.selectedPhone}>{selectedUser.phone}</Text>}
                 </View>
                 <TouchableOpacity onPress={() => { setSelectedUser(null); setSearchQuery(""); }}>
@@ -274,51 +310,17 @@ export default function TransfertScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View>
-                <View style={s.searchBox}>
-                  <Ionicons name="search-outline" size={16} color={C.textMut} />
-                  <TextInput
-                    placeholder="Rechercher un membre BIM..."
-                    placeholderTextColor={C.textMut}
-                    style={s.searchInput}
-                    value={searchQuery}
-                    onChangeText={(t) => { setSearchQuery(t); setShowDropdown(t.length > 1); }}
-                    onFocus={() => { if (searchQuery.length > 1) setShowDropdown(true); }}
-                    returnKeyType="search"
-                  />
-                  {searchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => { setSearchQuery(""); setShowDropdown(false); }}>
-                      <Ionicons name="close-circle" size={16} color={C.textMut} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {showDropdown && filteredUsers.length > 0 && (
-                  <View style={s.dropdown}>
-                    {filteredUsers.map((item) => (
-                      <TouchableOpacity key={String(item.id)} style={s.dropdownItem} onPress={() => handleSelectUser(item)} activeOpacity={0.7}>
-                        <View style={[s.userAvatar, { width: 34, height: 34, borderRadius: 17 }]}>
-                          <Text style={[s.avatarText, { fontSize: 14 }]}>{item.username?.charAt(0).toUpperCase()}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.dropdownName}>{item.username}</Text>
-                          {item.phone && <Text style={s.dropdownPhone}>{item.phone}</Text>}
-                        </View>
-                        <Ionicons name="chevron-forward" size={14} color={C.textMut} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {showDropdown && filteredUsers.length === 0 && searchQuery.length > 1 && (
-                  <View style={s.dropdown}>
-                    <View style={s.emptyDrop}>
-                      <Ionicons name="person-outline" size={24} color={C.textMut} />
-                      <Text style={s.emptyDropText}>Aucun membre trouvé</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
+              <TouchableOpacity
+                style={s.searchBox}
+                onPress={() => setRecipientModalVisible(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="search-outline" size={16} color={C.textMut} />
+                <Text style={[s.searchInput, { color: C.textMut }]}>
+                  Rechercher un membre BIM…
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={C.textMut} />
+              </TouchableOpacity>
             )}
 
             {/* Recap */}
@@ -337,9 +339,9 @@ export default function TransfertScreen() {
 
             {/* CTA */}
             <TouchableOpacity
-              style={[s.ctaBtn, { opacity: loadingPay ? 0.7 : 1 }]}
+              style={[s.ctaBtn, { opacity: (loadingPay || !hasActiveSubscription) ? 0.6 : 1 }]}
               onPress={handleConfirmPress}
-              disabled={loadingPay}
+              disabled={loadingPay || !hasActiveSubscription}
               activeOpacity={0.85}
             >
               <LinearGradient colors={[C.blue, C.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
@@ -397,6 +399,73 @@ export default function TransfertScreen() {
           </Animated.View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── CHOIX DU DESTINATAIRE (liste + recherche) ──────────────────── */}
+      <Modal
+        transparent
+        visible={recipientModalVisible}
+        animationType="slide"
+        onRequestClose={() => setRecipientModalVisible(false)}
+      >
+        <View style={s.recipientOverlay}>
+          <View style={s.recipientSheet}>
+            <View style={s.recipientHandle} />
+
+            <View style={s.recipientHeaderRow}>
+              <Text style={s.recipientTitle}>Choisir un destinataire</Text>
+              <TouchableOpacity onPress={() => setRecipientModalVisible(false)}>
+                <Ionicons name="close" size={22} color={C.textMut} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={s.searchBox}>
+              <Ionicons name="search-outline" size={16} color={C.textMut} />
+              <TextInput
+                placeholder="Rechercher par nom ou téléphone…"
+                placeholderTextColor={C.textMut}
+                style={s.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                autoFocus
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <Ionicons name="close-circle" size={16} color={C.textMut} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <FlatList
+              data={filteredUsers}
+              keyExtractor={(item) => String(item.id)}
+              keyboardShouldPersistTaps="handled"
+              style={{ marginTop: 8 }}
+              ListEmptyComponent={
+                <View style={s.emptyDrop}>
+                  <Ionicons name="person-outline" size={24} color={C.textMut} />
+                  <Text style={s.emptyDropText}>Aucun membre trouvé</Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity style={s.dropdownItem} onPress={() => handleSelectUser(item)} activeOpacity={0.7}>
+                  <View style={[s.userAvatar, { width: 34, height: 34, borderRadius: 17 }]}>
+                    <Text style={[s.avatarText, { fontSize: 14 }]}>{item.username?.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.dropdownName}>{item.username}</Text>
+                    {/* Plusieurs comptes peuvent partager le même nom — on affiche
+                       email et téléphone pour que l'utilisateur sache qui il choisit. */}
+                    {item.email && <Text style={s.dropdownPhone}>{item.email}</Text>}
+                    {item.phone && <Text style={s.dropdownPhone}>{item.phone}</Text>}
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={C.textMut} />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -426,6 +495,16 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     borderRadius: 16, padding: 14,
   },
   infoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, lineHeight: 18, color: C.text },
+
+  warnBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 16, marginTop: 12,
+    backgroundColor: `${C.amber}14`,
+    borderWidth: 1, borderColor: `${C.amber}33`,
+    borderRadius: 16, padding: 14,
+  },
+  warnTitle: { fontFamily: "NexaBold", fontSize: 12.5, color: C.text },
+  warnText:  { fontFamily: "NexaLight", fontSize: 11.5, color: C.textSec, marginTop: 2, lineHeight: 16 },
 
   card: {
     marginHorizontal: 16, marginTop: 16,
@@ -474,14 +553,16 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 13, fontFamily: "NexaLight", color: C.text },
 
-  dropdown: {
-    marginTop: 6,
-    borderRadius: 16, borderWidth: 1, borderColor: C.border,
-    backgroundColor: C.surface,
-    elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12,
-    overflow: "hidden",
+  recipientOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  recipientSheet: {
+    backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 20, paddingBottom: 36, height: "80%",
   },
-  dropdownItem:  { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  recipientHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 14 },
+  recipientHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  recipientTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+
+  dropdownItem:  { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 4, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
   dropdownName:  { fontFamily: "NexaBold", fontSize: 13, color: C.text },
   dropdownPhone: { fontFamily: "NexaLight", fontSize: 11, color: C.textSec },
   emptyDrop:     { padding: 20, alignItems: "center", gap: 6 },

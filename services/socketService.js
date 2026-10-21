@@ -16,21 +16,26 @@ export const connectSocket = (userId) => {
     return socket;
   }
 
-  socket = io(SOCKET_URL, {
+  // Capturé dans une constante locale (pas la variable de module `socket`) :
+  // si disconnectSocket() remet `socket` à null pendant que la connexion est
+  // encore en cours, le callback 'connect' tardif ne doit pas planter sur
+  // `null.emit(...)` — il garde sa propre référence valide vers CETTE instance.
+  const sock = io(SOCKET_URL, {
     transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 2000,
     reconnectionAttempts: 10,
   });
 
-  socket.on('connect', () => {
-    if (userId) socket.emit('join', String(userId));
+  sock.on('connect', () => {
+    if (userId) sock.emit('join', String(userId));
   });
 
-  socket.on('disconnect', () => {});
+  sock.on('disconnect', () => {});
 
-  socket.on('connect_error', () => {});
+  sock.on('connect_error', () => {});
 
+  socket = sock;
   return socket;
 };
 

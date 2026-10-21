@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import {
   Alert,
   Animated,
@@ -19,12 +19,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLogOutMutation } from "@/services/authService";
-import { useDeleteAccountMutation } from "@/services/userService";
+import { useLogOutMutation, useVerifyAccessCodeMutation } from "@/services/authService";
+import BlinkingCursor from "@/components/ui/BlinkingCursor";
+import { useDeleteAccountMutation, useGetUserByIdQuery, useUpdateUserMutation } from "@/services/userService";
 import { useAppTheme } from "@/app/_layout";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useTranslation } from "react-i18next";
 import { changeLanguage } from "@/i18n";
+import { StaffRole } from "@/constants/accessCodes";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
 const LIGHT = {
@@ -112,12 +114,60 @@ export default function Params() {
   const dm = useMemo(() => mkDm(C), [isDark]);
 
   const [logOut,        { isLoading }]           = useLogOutMutation();
+  const [verifyAccessCode] = useVerifyAccessCodeMutation();
   const [deleteAccount, { isLoading: isDeleting }] = useDeleteAccountMutation();
+  const [updateUser,    { isLoading: isSavingEmail }] = useUpdateUserMutation();
 
   const [langModal,   setLangModal]   = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
   const [deletePwd,   setDeletePwd]   = useState("");
   const [showPwd,     setShowPwd]     = useState(false);
+
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
+
+  const [notificationEmail, setNotificationEmail] = useState("");
+  useEffect(() => {
+    if (user?.notificationEmail) setNotificationEmail(user.notificationEmail);
+  }, [user?.notificationEmail]);
+
+  const [accessCode, setAccessCode] = useState("");
+  const accessCodeInputRef = useRef<TextInput>(null);
+  const [accessCodeFocused, setAccessCodeFocused] = useState(false);
+  const [revealedRoles, setRevealedRoles] = useState<StaffRole[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem("revealedStaffRoles").then(v => setRevealedRoles(v ? JSON.parse(v) : []));
+  }, []);
+
+  const handleAccessCode = async () => {
+    try {
+      const res: any = await verifyAccessCode(accessCode.trim()).unwrap();
+      const role = res.role as StaffRole;
+      const next = revealedRoles.includes(role) ? revealedRoles : [...revealedRoles, role];
+      setRevealedRoles(next);
+      await AsyncStorage.setItem("revealedStaffRoles", JSON.stringify(next));
+      setAccessCode("");
+    } catch {
+      Alert.alert(t("common.error"), "Code invalide.");
+    }
+  };
+
+  const handleSaveNotificationEmail = async () => {
+    if (!userId) return;
+    if (notificationEmail.trim() && !notificationEmail.includes("@")) {
+      Alert.alert(t("common.error"), "Adresse email invalide.");
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("notificationEmail", notificationEmail.trim());
+      await updateUser({ id: userId, formData: fd }).unwrap();
+      Alert.alert("✅", "E-mail de notification enregistré.");
+    } catch (err: any) {
+      Alert.alert(t("common.error"), err?.data?.message || "Impossible d'enregistrer.");
+    }
+  };
 
   const currentLang = i18n.language ?? "fr";
   const currentLangLabel = LANGUAGES.find(l => l.code === currentLang)?.label ?? "🇫🇷 Français";
@@ -129,14 +179,20 @@ export default function Params() {
     { id: "history",       icon: "time-outline",              label: t("params.history"),       route: "/history"      },
     { id: "formation",     icon: "play-circle-outline",       label: "Formation",               route: "/formation"    },
     { id: "support",       icon: "help-circle-outline",       label: t("params.support"),       route: "/support"      },
+    { id: "bim-sos",       icon: "warning-outline",           label: "BIM SOS",                 route: "/bim-sos"      },
     { id: "faq",           icon: "help-buoy-outline",         label: t("params.faq"),           route: "/faqs"         },
     { id: "about",         icon: "information-circle-outline",label: t("params.about"),         route: "/apropos"      },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const accountType = await AsyncStorage.getItem("accountType");
+    const isQuick = accountType === "quick";
+
     Alert.alert(
       t("params.logoutTitle"),
-      t("params.logoutMsg"),
+      isQuick
+        ? "Vous n'avez pas de mot de passe. Si vous vous déconnectez, vous risquez de ne plus jamais pouvoir accéder à ce compte (et à votre solde), sauf si vous avez enregistré votre numéro de téléphone."
+        : t("params.logoutMsg"),
       [
         { text: t("common.cancel"), style: "cancel" },
         {
@@ -144,10 +200,12 @@ export default function Params() {
           onPress: async () => {
             try {
               const email = await AsyncStorage.getItem("email");
+              const privacyAcceptedAt = await AsyncStorage.getItem("privacyAcceptedAt");
               await logOut({ email: String(email) });
               await AsyncStorage.clear();
               if (email) await AsyncStorage.setItem("email", email);
-              router.replace("/login");
+              if (privacyAcceptedAt) await AsyncStorage.setItem("privacyAcceptedAt", privacyAcceptedAt);
+              router.replace({ pathname: "/onboarding", params: { step: "phone" } });
             } catch (err: any) {
               Alert.alert(err?.data?.message || err?.data?.error || t("common.error"));
             }
@@ -167,7 +225,7 @@ export default function Params() {
       setDeleteModal(false);
       setDeletePwd("");
       await AsyncStorage.clear();
-      router.replace("/login");
+      router.replace("/onboarding");
     } catch (err: any) {
       Alert.alert(t("common.error"), err?.data?.message || t("common.error"));
     }
@@ -352,6 +410,42 @@ export default function Params() {
                 ios_backgroundColor={C.container}
               />
             </View>
+
+            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
+
+            {/* E-mail de notification (optionnel) */}
+            <View style={{ paddingVertical: 14, gap: 10 }}>
+              <View style={s.prefLeft}>
+                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
+                  <Ionicons name="mail-outline" size={20} color={C.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.prefLabel, { color: C.onSurface }]}>E-mail pour les notifications (optionnel)</Text>
+                  <Text style={[s.prefSub, { color: C.outline }]}>Reçois aussi tes notifications de commande par e-mail</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TextInput
+                  style={{
+                    flex: 1, borderWidth: 1, borderColor: C.outlineVar, borderRadius: 12,
+                    paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: C.onSurface,
+                  }}
+                  placeholder="votre@email.com"
+                  placeholderTextColor={C.outline}
+                  value={notificationEmail}
+                  onChangeText={setNotificationEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", opacity: isSavingEmail ? 0.6 : 1 }}
+                  onPress={handleSaveNotificationEmail}
+                  disabled={isSavingEmail}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Enregistrer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -390,6 +484,77 @@ export default function Params() {
             <View style={s.dangerChevron}>
               <Ionicons name="chevron-forward" size={17} color={C.error} />
             </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── ESPACES STAFF (révélés par code) ── */}
+        {revealedRoles.includes("LIVREUR") && (
+          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/livreur/login" as any)} activeOpacity={0.85}>
+            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
+              <Ionicons name="bicycle-outline" size={20} color="#fff" />
+              <Text style={s.logoutText}>Espace Livreur</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        {revealedRoles.includes("CHAUFFEUR") && (
+          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/transport/mode-chauffeur" as any)} activeOpacity={0.85}>
+            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
+              <Ionicons name="car-outline" size={20} color="#fff" />
+              <Text style={s.logoutText}>Espace Chauffeur</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        {revealedRoles.includes("BIM") && (
+          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/gestion/login" as any)} activeOpacity={0.85}>
+            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#fff" />
+              <Text style={s.logoutText}>Espace Gestion</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* ── Code d'accès (discret) ──
+             `secureTextEntry` + `keyboardType="number-pad"` ne masque pas de
+             façon fiable sur certains claviers Android (le champ affichait
+             les chiffres en clair malgré secureTextEntry). On masque donc
+             nous-mêmes avec des points, sur le même principe que le pavé PIN
+             déjà utilisé ailleurs dans l'app — un TextInput invisible capte
+             la saisie, des points pleins/vides l'affichent. ── */}
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
+          <TouchableOpacity
+            style={{
+              flex: 1, flexDirection: "row", justifyContent: "flex-start", alignItems: "center", gap: 8,
+              borderWidth: 1, borderColor: C.outlineVar, borderRadius: 12,
+              paddingHorizontal: 12, paddingVertical: 10, minHeight: 42,
+            }}
+            activeOpacity={1}
+            onPress={() => accessCodeInputRef.current?.focus()}
+          >
+            {accessCode.length === 0 && !accessCodeFocused && (
+              <Text style={{ color: C.outline, fontSize: 13 }}>Code d'accès</Text>
+            )}
+            {accessCode.length > 0 && (
+              Array.from({ length: accessCode.length }).map((_, i) => (
+                <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.onSurface }} />
+              ))
+            )}
+            {accessCodeFocused && <BlinkingCursor color={C.onSurface} height={16} />}
+            <TextInput
+              ref={accessCodeInputRef}
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0 }}
+              value={accessCode}
+              onChangeText={(v) => setAccessCode(v.replace(/[^0-9]/g, ""))}
+              onFocus={() => setAccessCodeFocused(true)}
+              onBlur={() => setAccessCodeFocused(false)}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ backgroundColor: C.secondary, borderRadius: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" }}
+            onPress={handleAccessCode}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Valider</Text>
           </TouchableOpacity>
         </View>
 

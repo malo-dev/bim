@@ -49,10 +49,30 @@ instance.interceptors.request.use(
 
 /* ---------------- RESPONSE INTERCEPTOR ---------------- */
 
+// Message convivial pour toute erreur réseau (pas de connexion, serveur
+// injoignable, timeout) — remplace le jargon technique brut ("Network
+// Error", "timeout of 15000ms exceeded") qui remontait tel quel jusqu'à
+// l'utilisateur. S'applique automatiquement partout où axiosInstance est
+// utilisé, sans toucher chaque écran individuellement.
+const NETWORK_ERROR_MESSAGE =
+  "Impossible de contacter le serveur. Vérifiez votre connexion internet (Wifi ou données mobiles) et réessayez. " +
+  "Si le problème persiste, contactez le support BIM NEXT.";
+
 instance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    if (!error.response) {
+      error.response = { data: {} };
+      error.isNetworkError = true;
+    }
+    if (!error.response.data || typeof error.response.data !== "object") {
+      error.response.data = {};
+    }
+    if (error.isNetworkError && !error.response.data.message) {
+      error.response.data.message = NETWORK_ERROR_MESSAGE;
+    }
 
     const isTokenExpired =
       error.response?.status === 401 &&
@@ -68,7 +88,7 @@ instance.interceptors.response.use(
       const refreshToken = await AsyncStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+        await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
         DeviceEventEmitter.emit("auth:forceLogout");
         return Promise.reject(error);
       }
@@ -86,7 +106,7 @@ instance.interceptors.response.use(
 
           onRefreshed(data.token);
         } catch (err) {
-          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email"]);
+          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
           onRefreshFailed(err);
           isRefreshing = false;
           DeviceEventEmitter.emit("auth:forceLogout");

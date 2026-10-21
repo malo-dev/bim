@@ -119,6 +119,7 @@ const en: Translations = {
     scanner:      "Scan",
     support:      "Support",
     orders:       "My orders",
+    allProducts:  "All products",
   },
 
   params: {

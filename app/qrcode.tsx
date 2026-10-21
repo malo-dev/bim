@@ -22,7 +22,6 @@ import {
 import Modal from "react-native-modal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCreateTransfertMutation } from "@/services/tsxService";
-import { useVerifyPassMutation } from "@/services/authService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -48,12 +47,6 @@ const TH = {
     inputBg:    "rgba(3,83,204,0.06)",
     inputFocBg: "rgba(3,83,204,0.11)",
     recapBg:    "rgba(3,83,204,0.05)",
-    pinBorder:  "rgba(3,83,204,0.22)",
-    pinFilled:  C.primary,
-    lockBg:     "rgba(3,83,204,0.08)",
-    keyBg:      "rgba(3,83,204,0.06)",
-    keyDelBg:   "rgba(239,68,68,0.08)",
-    keyDelBord: "rgba(239,68,68,0.20)",
     handle:     "rgba(0,0,0,0.10)",
     chipBg:     "rgba(3,83,204,0.06)",
     topBorder:  "transparent",
@@ -66,12 +59,6 @@ const TH = {
     inputBg:    "rgba(77,150,255,0.07)",
     inputFocBg: "rgba(77,150,255,0.13)",
     recapBg:    "rgba(77,150,255,0.06)",
-    pinBorder:  "rgba(77,150,255,0.24)",
-    pinFilled:  C.accent,
-    lockBg:     "rgba(3,83,204,0.22)",
-    keyBg:      "rgba(77,150,255,0.09)",
-    keyDelBg:   "rgba(239,68,68,0.14)",
-    keyDelBord: "rgba(239,68,68,0.28)",
     handle:     "rgba(255,255,255,0.12)",
     chipBg:     "rgba(77,150,255,0.09)",
     topBorder:  "rgba(77,150,255,0.18)",
@@ -86,64 +73,6 @@ function useTheme() {
 /* ═══════════════════════════════════════════════════════════════════════
    SOUS-COMPOSANTS
 ═══════════════════════════════════════════════════════════════════════ */
-
-/* ── PIN DOTS ── */
-function PinDots({ value, t }: { value: string; t: typeof TH.light }) {
-  return (
-    <View style={pd.row}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <View
-          key={i}
-          style={[pd.dot, {
-            backgroundColor: i < value.length ? t.pinFilled : "transparent",
-            borderColor:     i < value.length ? t.pinFilled : t.pinBorder,
-          }]}
-        />
-      ))}
-    </View>
-  );
-}
-
-/* ── KEYPAD — rendu statique, aucune dépendance qui change ── */
-const KEYS = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
-
-function Keypad({
-  onPress,
-  onDelete,
-  t,
-  disabled,
-}: {
-  onPress:  (v: string) => void;
-  onDelete: () => void;
-  t:        typeof TH.light;
-  disabled: boolean;
-}) {
-  return (
-    <View style={kp.grid}>
-      {KEYS.map((k, i) => {
-        if (k === "") return <View key={i} style={kp.empty} />;
-        const isDel = k === "⌫";
-        return (
-          <TouchableOpacity
-            key={i}
-            activeOpacity={0.6}
-            disabled={disabled}
-            style={[kp.key, {
-              backgroundColor: isDel ? t.keyDelBg : t.keyBg,
-              borderColor:     isDel ? t.keyDelBord : t.border,
-              opacity: disabled ? 0.35 : 1,
-            }]}
-            onPress={() => { isDel ? onDelete() : onPress(k); }}
-          >
-            <Text style={[kp.keyText, { color: isDel ? C.error : t.text }]}>
-              {k}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-}
 
 /* ── SCAN FRAME ── */
 function ScanFrame({ pulse }: { pulse: Animated.Value }) {
@@ -180,15 +109,11 @@ export default function ScannerPage() {
   const [amount, setAmount] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
 
-  /* ── 4 modals TOTALEMENT INDÉPENDANTS ── */
+  /* ── 3 modals TOTALEMENT INDÉPENDANTS ── */
   const [showAmount,  setShowAmount]  = useState(false);
-  const [showPin,     setShowPin]     = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError,   setShowError]   = useState(false);
 
-  /* ── PIN ── */
-  const [pin,         setPin]         = useState("");
-  const [pinError,    setPinError]    = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [txError,     setTxError]     = useState("");
 
@@ -196,22 +121,18 @@ export default function ScannerPage() {
   const amountRef = useRef("");
   const userIdRef = useRef<string | null>(null);
   const qrRef     = useRef<typeof qrData>(null);
-  const pinRef    = useRef("");
 
   /* Sync des refs à chaque render */
   amountRef.current = amount;
   userIdRef.current = userId;
   qrRef.current     = qrData;
-  pinRef.current    = pin;
 
   /* ── Animations ── */
-  const pinShake    = useRef(new Animated.Value(0)).current;
   const inputFoc    = useRef(new Animated.Value(0)).current;
   const successAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim   = useRef(new Animated.Value(1)).current;
 
   const [createTransfert] = useCreateTransfertMutation();
-  const [verifyPass]      = useVerifyPassMutation();
 
   /* ── Init ── */
   useEffect(() => {
@@ -255,87 +176,25 @@ export default function ScannerPage() {
     }
   };
 
-  /* ── Shake PIN ── */
-  const shakePin = () =>
-    Animated.sequence([
-      Animated.timing(pinShake, { toValue:  10, duration: 55, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -10, duration: 55, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  8,  duration: 55, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue: -8,  duration: 55, useNativeDriver: true }),
-      Animated.timing(pinShake, { toValue:  0,  duration: 55, useNativeDriver: true }),
-    ]).start();
-
-  /* ── Montant → PIN ── */
-  const handleContinue = () => {
+  /* ── Montant → Paiement direct (pas de PIN ici, comme retrait/transfert) ── */
+  const handleContinue = async () => {
     const amt = Number(normalizeDecimal(amountRef.current));
     if (!amt || amt <= 0) {
       Alert.alert("Montant invalide", "Entrez un montant supérieur à 0.");
       return;
     }
-    if (!userIdRef.current || !qrRef.current?.userId) {
+    const currentUserId = userIdRef.current;
+    const currentQr     = qrRef.current;
+    if (!currentUserId || !currentQr?.userId) {
       Alert.alert("Erreur", "Données manquantes. Scannez à nouveau.");
       return;
     }
     Keyboard.dismiss();
-    setPin("");
-    setPinError("");
-    /* Ferme MODAL 1, attend fin animation, ouvre MODAL 2 */
-    setShowAmount(false);
-    setTimeout(() => setShowPin(true), 380);
-  };
-
-  /* ── PIN → Montant ── */
-  const handlePinBack = () => {
-    if (isVerifying) return;
-    setShowPin(false);
-    setTimeout(() => setShowAmount(true), 380);
-  };
-
-  /* ── PIN keypad handlers ── */
-  const handlePinKey = (k: string) => {
-    if (isVerifying || pin.length >= 6) return;
-    setPinError("");
-    setPin(p => p + k);
-  };
-  const handlePinDel = () => {
-    if (isVerifying) return;
-    setPin(p => p.slice(0, -1));
-  };
-
-  /* ── Confirmer PIN ── */
-  const handleConfirmPin = async () => {
-    const currentPin    = pinRef.current;
-    const currentUserId = userIdRef.current;
-    const currentQr     = qrRef.current;
-    const currentAmount = amountRef.current.replace(/\s/g, "");
-
-    if (currentPin.length < 6) {
-      setPinError("Veuillez entrer vos 6 chiffres.");
-      return;
-    }
-    if (!currentUserId || !currentQr?.userId) {
-      setPinError("Données manquantes. Recommencez.");
-      return;
-    }
-
     setIsVerifying(true);
 
-    /* ÉTAPE 1 — Vérifier le mot de passe */
-    try {
-      await verifyPass({ userId: currentUserId, password: currentPin }).unwrap();
-    } catch {
-      shakePin();
-      Vibration.vibrate(180);
-      setPinError("Mot de passe incorrect. Réessayez.");
-      setPin("");
-      setIsVerifying(false);
-      return;                       // ← reste sur modal PIN
-    }
-
-    /* ÉTAPE 2 — Transférer */
     try {
       await createTransfert({
-        amount:   normalizeDecimal(currentAmount),
+        amount:   normalizeDecimal(amountRef.current.replace(/\s/g, "")),
         targetId: currentQr.userId,
         id:       currentUserId,
       }).unwrap();
@@ -343,36 +202,33 @@ export default function ScannerPage() {
       setIsVerifying(false);
       Vibration.vibrate([0, 80, 40, 80]);
 
-      /* Ferme MODAL 2, ouvre MODAL 3 */
-      setShowPin(false);
+      /* Ferme MODAL 1, ouvre MODAL 2 (succès) */
+      setShowAmount(false);
       successAnim.setValue(0);
       setTimeout(() => {
         setShowSuccess(true);
         Animated.spring(successAnim, {
           toValue: 1, tension: 50, friction: 7, useNativeDriver: true,
         }).start();
-      }, 420);
+      }, 380);
 
     } catch (err: any) {
       setIsVerifying(false);
-      setTxError(err?.data?.message || err?.message || "Transfert échoué. Réessayez.");
-      /* Ferme MODAL 2, ouvre MODAL 4 */
-      setShowPin(false);
-      setTimeout(() => setShowError(true), 420);
+      setTxError(err?.data?.message || err?.message || "Paiement échoué. Réessayez.");
+      /* Ferme MODAL 1, ouvre MODAL 3 (erreur) */
+      setShowAmount(false);
+      setTimeout(() => setShowError(true), 380);
     }
   };
 
   /* ── Reset total ── */
   const handleReset = () => {
     setShowAmount(false);
-    setShowPin(false);
     setShowSuccess(false);
     setShowError(false);
     setScanned(false);
     setQrData(null);
     setAmount("");
-    setPin("");
-    setPinError("");
     setTxError("");
     setIsVerifying(false);
     successAnim.setValue(0);
@@ -439,7 +295,7 @@ export default function ScannerPage() {
             <Ionicons name="qr-code-outline" size={16} color={C.gold} />
             <Text style={g.hintText}>Placez le QR code dans le cadre</Text>
           </View>
-          {scanned && !showAmount && !showPin && !showSuccess && !showError && (
+          {scanned && !showAmount && !showSuccess && !showError && (
             <TouchableOpacity style={g.retryBtn} onPress={handleReset}>
               <Text style={g.retryText}>Réessayer</Text>
             </TouchableOpacity>
@@ -532,124 +388,29 @@ export default function ScannerPage() {
             </View>
 
             {/* CTA */}
-            <TouchableOpacity style={g.payBtn} onPress={handleContinue} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[g.payBtn, { opacity: isVerifying ? 0.75 : 1 }]}
+              onPress={handleContinue}
+              disabled={isVerifying}
+              activeOpacity={0.85}
+            >
               <LinearGradient
                 colors={[C.deep, C.primary]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={g.payGrad}
               >
-                <Ionicons name="lock-closed-outline" size={18} color={C.white} />
-                <Text style={g.payText}>Continuer vers la confirmation</Text>
+                {isVerifying
+                  ? <ActivityIndicator size="small" color={C.white} />
+                  : <><Ionicons name="checkmark-circle-outline" size={18} color={C.white} /><Text style={g.payText}>Payer</Text></>
+                }
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={g.cancelRow} onPress={handleReset}>
+            <TouchableOpacity style={g.cancelRow} onPress={handleReset} disabled={isVerifying}>
               <Text style={[g.cancelText, { color: t.textSub }]}>Annuler</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ════════════════════════════════════════════
-          MODAL 2 — PIN
-      ════════════════════════════════════════════ */}
-      <Modal
-        isVisible={showPin}
-        animationIn="slideInUp"
-        animationOut="slideOutDown"
-        animationInTiming={340}
-        animationOutTiming={280}
-        backdropOpacity={0.65}
-        style={g.modal}
-        onBackdropPress={isVerifying ? undefined : handlePinBack}
-        useNativeDriver
-        useNativeDriverForBackdrop
-      >
-        <View style={[g.pinSheet, {
-          backgroundColor: t.modalBg,
-          borderTopColor:  t.topBorder,
-          borderTopWidth:  isDark ? 1 : 0,
-        }]}>
-          <View style={[g.handle, { backgroundColor: t.handle }]} />
-
-          {isVerifying ? (
-            /* Loading spinner pendant vérif + transfert */
-            <View style={g.processingBox}>
-              <View style={[g.lockWrap, { backgroundColor: t.lockBg }]}>
-                <ActivityIndicator size="large" color={C.primary} />
-              </View>
-              <Text style={[g.passTitle, { color: t.text }]}>Traitement en cours…</Text>
-              <Text style={[g.passSub, { color: t.textSub }]}>
-                Vérification et transfert en cours,{"\n"}ne quittez pas l'application.
-              </Text>
-            </View>
-          ) : (
-            <>
-              {/* Icône cadenas */}
-              <View style={[g.lockWrap, { backgroundColor: t.lockBg }]}>
-                <Ionicons name="lock-closed" size={28} color={C.primary} />
-              </View>
-
-              <Text style={[g.passTitle, { color: t.text }]}>Mot de passe requis</Text>
-              <Text style={[g.passSub, { color: t.textSub }]}>
-                Entrez votre code à 6 chiffres{"\n"}pour confirmer le transfert
-              </Text>
-
-              {/* Récap */}
-              {amount.length > 0 && (
-                <View style={[g.amtReminder, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-                  <Ionicons name="cash-outline" size={14} color={C.primary} />
-                  <Text style={[g.amtReminderAmt, { color: t.text }]}>{amount} EC</Text>
-                  <Ionicons name="arrow-forward" size={12} color={t.textSub} />
-                  <Text style={[g.amtReminderDest, { color: t.textSub }]} numberOfLines={1}>
-                    {qrData?.accountNumber || qrData?.userId || "BIM"}
-                  </Text>
-                </View>
-              )}
-
-              {/* PIN dots */}
-              <Animated.View style={{ transform: [{ translateX: pinShake }] }}>
-                <PinDots value={pin} t={t} />
-              </Animated.View>
-
-              {pinError.length > 0 && (
-                <View style={g.pinErrRow}>
-                  <Ionicons name="alert-circle-outline" size={14} color={C.error} />
-                  <Text style={g.pinErrText}>{pinError}</Text>
-                </View>
-              )}
-
-              {/* Keypad */}
-              <Keypad
-                onPress={handlePinKey}
-                onDelete={handlePinDel}
-                t={t}
-                disabled={isVerifying}
-              />
-
-              {/* Valider */}
-              <TouchableOpacity
-                style={[g.confirmBtn, { opacity: pin.length === 6 ? 1 : 0.38 }]}
-                onPress={handleConfirmPin}
-                disabled={pin.length < 6 || isVerifying}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={[C.deep, C.primary]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={g.confirmGrad}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                  <Text style={g.confirmText}>Valider et transférer</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={g.cancelRow} onPress={handlePinBack}>
-                <Text style={[g.cancelText, { color: t.textSub }]}>← Retour au montant</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
       </Modal>
 
       {/* ════════════════════════════════════════════
@@ -793,14 +554,6 @@ const g = StyleSheet.create({
     paddingBottom: Platform.OS === "ios" ? 44 : 28,
   },
 
-  /* Sheet PIN — centré */
-  pinSheet: {
-    borderTopLeftRadius: 32, borderTopRightRadius: 32,
-    paddingHorizontal: 24, paddingTop: 24,
-    paddingBottom: Platform.OS === "ios" ? 44 : 36,
-    alignItems: "center",
-  },
-
   /* Destinataire */
   recipientRow:   { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 18, borderRadius: 16, padding: 14, borderWidth: 1 },
   recipientAvatar:{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
@@ -823,20 +576,6 @@ const g = StyleSheet.create({
   cancelRow:    { alignItems: "center", paddingVertical: 10 },
   cancelText:   { fontFamily: "NexaLight", fontSize: 13 },
 
-  /* PIN sheet */
-  processingBox: { alignItems: "center", paddingVertical: 32, gap: 14, width: "100%" },
-  lockWrap:      { width: 70, height: 70, borderRadius: 35, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  passTitle:     { fontFamily: "NexaLight", fontSize: 18, marginBottom: 4, letterSpacing: 0.2 },
-  passSub:       { fontFamily: "NexaLight", fontSize: 12, textAlign: "center", lineHeight: 18, marginBottom: 16, paddingHorizontal: 10 },
-  amtReminder:   { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 10, marginBottom: 18, width: "100%" },
-  amtReminderAmt:  { fontFamily: "NexaLight", fontSize: 16 },
-  amtReminderDest: { fontFamily: "NexaLight", fontSize: 12, flex: 1 },
-  pinErrRow:  { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, marginBottom: 2 },
-  pinErrText: { fontFamily: "NexaLight", fontSize: 12, color: C.error },
-  confirmBtn: { width: "100%", borderRadius: 16, overflow: "hidden", marginTop: 16 },
-  confirmGrad:{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  confirmText:{ color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-
   /* Succès / Erreur */
   centerBox:  { alignItems: "center", paddingVertical: 8 },
   bigIcon:    { width: 104, height: 104, borderRadius: 52, alignItems: "center", justifyContent: "center", marginBottom: 16 },
@@ -849,16 +588,4 @@ const g = StyleSheet.create({
   doneBtn:    { width: "100%", borderRadius: 16, overflow: "hidden" },
   doneGrad:   { paddingVertical: 16, alignItems: "center" },
   doneTxt:    { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-});
-
-const pd = StyleSheet.create({
-  row: { flexDirection: "row", gap: 12, marginBottom: 8 },
-  dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
-});
-
-const kp = StyleSheet.create({
-  grid:    { flexDirection: "row", flexWrap: "wrap", width: 288, gap: 10, justifyContent: "center", marginVertical: 10 },
-  key:     { width: 82, height: 58, borderRadius: 16, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  empty:   { width: 82, height: 58 },
-  keyText: { fontSize: 22, fontFamily: "NexaLight" },
 });

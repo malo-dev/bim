@@ -33,6 +33,7 @@ import {
   useSendSOSMutation,
   useGetMyRatingsQuery,
 } from "@/services/livreurService";
+import { useMarkOrderPaidMutation } from "@/services/orderService";
 import axiosInstance from "@/services/axiosInstance";
 import { getSocket } from "@/services/socketService";
 
@@ -269,13 +270,34 @@ export default function LivreurSpaceScreen() {
     ]);
   }
 
+  const [markOrderPaid, { isLoading: confirmingCash }] = useMarkOrderPaidMutation();
+  async function handleConfirmCash(orderNumber: string, amount?: number) {
+    Alert.alert(
+      "Confirmer le paiement",
+      `Confirmez-vous avoir reçu ${amount?.toFixed(2) ?? "le montant"} EC en espèces pour la commande ${orderNumber} ? Cet argent ne sera pas déduit du portefeuille du client.`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Oui, j'ai reçu le paiement", onPress: async () => {
+            const res: any = await markOrderPaid(orderNumber);
+            if (res.error) {
+              Alert.alert("Erreur", res.error?.data?.message || "Impossible de confirmer ce paiement.");
+            } else {
+              Alert.alert("✅ Paiement confirmé", "La commande est marquée livrée et payée.");
+              refetchMine();
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function handleLogout() {
     Alert.alert("Déconnexion", "Quitter l'espace livreur ?", [
       { text: "Annuler", style: "cancel" },
       { text: "Quitter", style: "destructive", onPress: async () => {
           if (locationInterval.current) clearInterval(locationInterval.current);
           await AsyncStorage.multiRemove(["livreurToken", "livreurId", "livreurUser"]);
-          router.replace("/login");
+          router.replace("/livreur/login");
         },
       },
     ]);
@@ -574,10 +596,24 @@ export default function LivreurSpaceScreen() {
                       </View>
                     )}
 
-                    <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(o.orderNumber)} activeOpacity={0.85}>
-                      <Ionicons name="close-circle-outline" size={16} color={C.red} />
-                      <Text style={[s.cancelTxt, { color: C.red }]}>Annuler ma livraison</Text>
-                    </TouchableOpacity>
+                    {o.paymentStatus !== "paid" && (
+                      <TouchableOpacity
+                        style={s.cashBtn}
+                        onPress={() => handleConfirmCash(o.orderNumber, o.grandTotal)}
+                        activeOpacity={0.85}
+                        disabled={confirmingCash}
+                      >
+                        <Ionicons name="cash-outline" size={16} color={C.onlineGreen ?? "#10B981"} />
+                        <Text style={[s.cancelTxt, { color: C.onlineGreen ?? "#10B981" }]}>J'ai reçu le paiement en espèces</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {o.status !== "shipped" && (
+                      <TouchableOpacity style={s.cancelBtn} onPress={() => handleCancel(o.orderNumber)} activeOpacity={0.85}>
+                        <Ionicons name="close-circle-outline" size={16} color={C.red} />
+                        <Text style={[s.cancelTxt, { color: C.red }]}>Annuler ma livraison</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               );
@@ -924,6 +960,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   acceptGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
   acceptTxt:  { fontFamily: "NexaBold", fontSize: 14, color: "#fff" },
   cancelBtn:  { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, alignSelf: "flex-start", borderWidth: 1, borderColor: C.red + "40", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  cashBtn:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, alignSelf: "flex-start", borderWidth: 1, borderColor: C.onlineGreen + "40", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   cancelTxt:  { fontFamily: "NexaBold", fontSize: 13 },
 
   /* Empty state */

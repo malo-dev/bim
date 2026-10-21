@@ -10,9 +10,12 @@ export default function TRansportLayout() {
     >
       <Stack.Screen name="[id]" options={{ headerShown: false }} />
       <Stack.Screen name="choix-gamme" options={{ headerShown: false }} />
+      <Stack.Screen name="choix-chauffeur" options={{ headerShown: false }} />
       <Stack.Screen name="suivi" options={{ headerShown: false }} />
       <Stack.Screen name="fin-course" options={{ headerShown: false }} />
       <Stack.Screen name="historique" options={{ headerShown: false }} />
+      <Stack.Screen name="mode-chauffeur" options={{ headerShown: false }} />
+      <Stack.Screen name="course-en-cours" options={{ headerShown: false }} />
     </Stack>
   );
 }

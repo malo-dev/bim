@@ -160,7 +160,7 @@ export default function MyOrders() {
 
   return (
     <View style={[s.root, { backgroundColor: t.bg }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── HEADER ── */}
       <View style={[s.header, { shadowColor: isDark ? "#000" : C.primary }]}>

@@ -22,6 +22,7 @@ import { useAppTheme } from "@/app/_layout";
 
 /* ─── Skeleton card ─────────────────────────────────────────────────────── */
 function SkeletonCard() {
+  const { isDark } = useAppTheme();
   const anim = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     Animated.loop(
@@ -32,12 +33,15 @@ function SkeletonCard() {
     ).start();
   }, []);
   return (
-    <Animated.View style={[sk.card, { opacity: anim }]}>
-      <View style={sk.icon} />
+    <Animated.View style={[
+      sk.card, { opacity: anim },
+      isDark && { backgroundColor: "#1A2540", borderColor: "#1F2A44" },
+    ]}>
+      <View style={[sk.icon, isDark && { backgroundColor: "#243150" }]} />
       <View style={{ flex: 1, gap: 8 }}>
-        <View style={[sk.line, { width: "55%" }]} />
-        <View style={[sk.line, { width: "85%" }]} />
-        <View style={[sk.line, { width: "35%" }]} />
+        <View style={[sk.line, { width: "55%" }, isDark && { backgroundColor: "#243150" }]} />
+        <View style={[sk.line, { width: "85%" }, isDark && { backgroundColor: "#243150" }]} />
+        <View style={[sk.line, { width: "35%" }, isDark && { backgroundColor: "#243150" }]} />
       </View>
     </Animated.View>
   );

@@ -124,6 +124,7 @@ const fr = {
     scanner:      "Scanner",
     support:      "Support",
     orders:       "Mes commandes",
+    allProducts:  "Tous nos produits",
   },
 
   /* ── PARAMS ── */

@@ -24,11 +24,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
-import { useRechargeMutation, useVerifyPaymentMutation } from "@/services/tsxService";
+import { useRechargeMutation, useVerifyPaymentMutation, useCreateManualRechargeMutation } from "@/services/tsxService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
 import { useAppTheme } from "@/app/_layout";
 import { getSocket } from "@/services/socketService";
+import axiosInstance from "@/services/axiosInstance";
 
 /* ─── PALETTE ─────────────────────────────────────────────────────────── */
 const _ios = Platform.OS === "ios";
@@ -110,6 +111,9 @@ const METHODS = [
 const SHORTCUTS       = ["1 000", "2 500", "5 000", "10 000"];
 const SHORTCUTS_CLEAN = ["1000",  "2500",  "5000",  "10000"];
 
+const SHORTCUTS_CDF       = ["50 000", "100 000", "250 000", "500 000"];
+const SHORTCUTS_CDF_CLEAN = ["50000",  "100000",  "250000",  "500000"];
+
 /* ─── TOP BAR ─────────────────────────────────────────────────────────── */
 function TopBar({ onBack, onNotif, badge = 0 }: { onBack: () => void; onNotif: () => void; badge?: number }) {
   const { isDark } = useAppTheme();
@@ -152,7 +156,7 @@ function MethodCard({ item, selected, onPress }: { item: typeof METHODS[number];
         </View>
         <View style={{ flex: 1 }}>
           <Text style={ms.name}>{item.name}</Text>
-          <Text style={ms.fee}>Demande traitée par notre équipe</Text>
+          <Text style={ms.fee}>Push instantané — crédit automatique</Text>
         </View>
         <View style={[ms.radio, selected && { borderColor: C.primary, backgroundColor: "rgba(0,53,197,0.10)" }]}>
           {selected && <View style={ms.radioDot} />}
@@ -309,15 +313,25 @@ export default function RechargeEcoinsScreen() {
   const router = useRouter();
   const { unread: notifCount } = useUnreadNotifications();
 
+  const [mode, setMode] = useState<"auto" | "manuel">("auto");
+
   const [amount,         setAmount]         = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [phone,          setPhone]          = useState("");
   const [userId,         setUserId]         = useState<string | null>(null);
+  const [currency,       setCurrency]       = useState<"USD" | "CDF">("USD");
+  const [cdfRate,        setCdfRate]        = useState<number | null>(null);
 
-  /* Card-specific fields */
-  const [cardName,      setCardName]      = useState("");
+  // Recharge manuelle — traitée par un agent BIM, pas de push FlexPay.
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualNote,  setManualNote]  = useState("");
+  const [manualSent,  setManualSent]  = useState(false);
+  const [manualRef,   setManualRef]   = useState<string | null>(null);
+  const [createManualRecharge, { isLoading: sendingManual }] = useCreateManualRechargeMutation();
+
+  /* Card-specific field — le reste des infos carte est saisi sur la page
+     sécurisée FlexPay elle-même, pas dans l'app */
   const [contactPhone,  setContactPhone]  = useState("");
-  const [cardRef,       setCardRef]       = useState("");
 
   type Phase = "idle" | "waiting" | "success";
   const [phase,       setPhase]       = useState<Phase>("idle");
@@ -328,8 +342,6 @@ export default function RechargeEcoinsScreen() {
 
   const inputFocAmt  = useRef(new Animated.Value(0)).current;
   const inputFocPh   = useRef(new Animated.Value(0)).current;
-  const inputFocName = useRef(new Animated.Value(0)).current;
-  const inputFocRef  = useRef(new Animated.Value(0)).current;
   const inputFocCont = useRef(new Animated.Value(0)).current;
 
   const isCard   = selectedMethod === "Card";
@@ -339,6 +351,22 @@ export default function RechargeEcoinsScreen() {
   const [verifyPayment] = useVerifyPaymentMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+
+  // Taux EC/USD → CDF, pour que l'utilisateur voie combien d'EC il recevra
+  // s'il paie en francs via FlexPay.
+  useEffect(() => {
+    axiosInstance.get("/currency").then(({ data }) => {
+      const list = data?.data || [];
+      const cdf = list.find((c: any) => c.code === "CDF");
+      if (cdf?.rate) setCdfRate(Number(cdf.rate));
+    }).catch(() => {});
+  }, []);
+
+  const estimatedEc = useMemo(() => {
+    const n = parseFloat(amount.replace(/\s/g, "").replace(",", "."));
+    if (currency !== "CDF" || !cdfRate || !n) return null;
+    return n / cdfRate;
+  }, [amount, currency, cdfRate]);
 
   /* ── Suivi temps réel du paiement FlexPay (push mobile money / callback carte) ── */
   useEffect(() => {
@@ -360,12 +388,72 @@ export default function RechargeEcoinsScreen() {
     socket.on("recharge:failed", onFailed);
     socket.on("recharge:declined", onFailed);
 
+    /* Carte : le navigateur externe (WebBrowser) bloque l'exécution jusqu'à sa
+       fermeture, donc FlexPay a pu déjà confirmer (ou refuser) le paiement
+       avant même que ce listener socket ne soit attaché. On rattrape l'état
+       réel une fois avec une vérification immédiate au lieu d'attendre un
+       événement qui a pu être manqué. */
+    if (isCard) {
+      verifyPayment({ reference: rechargeRef }).unwrap()
+        .then((res: any) => {
+          if (res.status === "success" || res.status === "already_done") {
+            setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
+            setPhase("success");
+          } else if (res.status === "cancelled") {
+            Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
+            setPhase("idle");
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => {
       socket.off("recharge:success", onSuccess);
       socket.off("recharge:cancelled", onFailed);
       socket.off("recharge:failed", onFailed);
       socket.off("recharge:declined", onFailed);
     };
+  }, [phase, rechargeRef]);
+
+  /* ── Filet de sécurité : si le webhook FlexPay (et donc l'événement socket)
+     n'arrive jamais, on vérifie nous-mêmes en arrière-plan toutes les 3
+     secondes pendant 1 heure max. Au-delà, on prévient l'utilisateur plutôt
+     que de le laisser indéfiniment sur l'écran d'attente. ── */
+  useEffect(() => {
+    if (phase !== "waiting" || !rechargeRef) return;
+
+    const startedAt = Date.now();
+    const POLL_MS    = 3000;
+    const TIMEOUT_MS = 60 * 60 * 1000; // 1 heure
+
+    const poll = async () => {
+      try {
+        const res: any = await verifyPayment({ reference: rechargeRef }).unwrap();
+        if (res.status === "success" || res.status === "already_done") {
+          setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
+          setPhase("success");
+          return;
+        }
+        if (res.status === "cancelled") {
+          Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
+          setPhase("idle");
+          return;
+        }
+      } catch {
+        // Erreur réseau ponctuelle — on retente au prochain tick, sans déranger l'utilisateur.
+      }
+
+      if (Date.now() - startedAt >= TIMEOUT_MS) {
+        Alert.alert(
+          "Problème de paiement",
+          "Votre paiement n'a pas pu être confirmé après 1 heure. Veuillez contacter l'équipe support de BIM NEXT."
+        );
+        setPhase("idle");
+      }
+    };
+
+    const intervalId = setInterval(poll, POLL_MS);
+    return () => clearInterval(intervalId);
   }, [phase, rechargeRef]);
 
   const handleVerifyNow = async () => {
@@ -404,11 +492,14 @@ export default function RechargeEcoinsScreen() {
     if (isMobile && !phone) {
       Alert.alert("Champs manquants", "Veuillez entrer votre numéro de téléphone."); return;
     }
-    if (isCard && (!cardName || !contactPhone || !cardRef)) {
-      Alert.alert("Champs manquants", "Veuillez remplir tous les champs de la carte."); return;
+    if (isCard && !contactPhone) {
+      Alert.alert("Champs manquants", "Veuillez entrer un numéro de contact."); return;
     }
     if (!userId) {
       Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
+    }
+    if (currency === "CDF" && !cdfRate) {
+      Alert.alert("Taux indisponible", "Le taux de change CDF n'est pas disponible pour le moment. Réessayez en USD."); return;
     }
     const cleanAmt = parseFloat(cleanAmount(amount).replace(",", "."));
 
@@ -418,11 +509,13 @@ export default function RechargeEcoinsScreen() {
         amount:        cleanAmt,
         telephone:     isMobile ? cleanAmount(phone) : cleanAmount(contactPhone),
         PayTypeValue:  isCard ? "Card" : selectedMethod,
-        CurrencyValue: "USD",
+        CurrencyValue: currency,
       }).unwrap();
 
       setPendingInfo({
-        amount: `${amount} EC`,
+        amount: currency === "CDF"
+          ? `${amount} FC (≈ ${estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC)`
+          : `${amount} EC`,
         contact: isMobile ? phone : contactPhone,
         method:  selectedMethod ?? "",
       });
@@ -439,12 +532,66 @@ export default function RechargeEcoinsScreen() {
     }
   };
 
+  const handleManualSubmit = async () => {
+    if (!amount) {
+      Alert.alert("Champ manquant", "Veuillez entrer un montant."); return;
+    }
+    if (!manualPhone) {
+      Alert.alert("Champ manquant", "Veuillez entrer votre numéro de téléphone."); return;
+    }
+    if (!userId) {
+      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
+    }
+    const cleanAmt = parseFloat(cleanAmount(amount).replace(",", "."));
+    try {
+      const res: any = await createManualRecharge({
+        id: userId,
+        amount: cleanAmt,
+        telephone: cleanAmount(manualPhone),
+        method: manualNote.trim() || "Manuel",
+      }).unwrap();
+      setManualRef(res.data?.reference ?? null);
+      setManualSent(true);
+    } catch (err: any) {
+      Alert.alert("Erreur", err?.data?.message || "La demande n'a pas pu être envoyée, réessayez.");
+    }
+  };
+
   const topBar = (
     <TopBar
       onBack={() => router.back()}
       onNotif={() => router.push("/notification" as any)}
       badge={notifCount}
     />
+  );
+
+  if (mode === "manuel" && manualSent) return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />{topBar}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={{ alignItems: "center", paddingTop: 40, paddingBottom: 20 }}>
+          <View style={s.manualSuccessIcon}>
+            <Ionicons name="time-outline" size={32} color={C.primary} />
+          </View>
+          <Text style={s.manualSuccessTitle}>Demande envoyée</Text>
+          <Text style={s.manualSuccessSub}>
+            Notre équipe va vérifier votre paiement et créditer votre compte de {amount} EC sous peu.
+          </Text>
+          {manualRef && (
+            <View style={s.manualRefBox}>
+              <Text style={s.manualRefLabel}>Référence</Text>
+              <Text style={s.manualRefVal}>{manualRef}</Text>
+            </View>
+          )}
+          <TouchableOpacity style={s.ctaBtn} onPress={() => router.replace("/(tabs)" as any)} activeOpacity={0.88}>
+            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
+              <Ionicons name="home-outline" size={18} color={C.white} />
+              <Text style={s.ctaText}>Retour à l'accueil</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 
   if (phase === "waiting" || phase === "success") return (
@@ -477,11 +624,50 @@ export default function RechargeEcoinsScreen() {
             <Text style={s.pageSub}>Rechargez vos Ecoins facilement</Text>
           </View>
 
+          {/* ── MODE : AUTOMATIQUE / MANUELLE ───────────────────────────── */}
+          <View style={s.modeToggle}>
+            <TouchableOpacity
+              style={[s.modeBtn, mode === "auto" && s.modeBtnOn]}
+              onPress={() => setMode("auto")}
+              activeOpacity={0.85}
+            >
+              <Text style={[s.modeText, mode === "auto" && s.modeTextOn]}>Automatique</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.modeBtn, mode === "manuel" && s.modeBtnOn]}
+              onPress={() => setMode("manuel")}
+              activeOpacity={0.85}
+            >
+              <Text style={[s.modeText, mode === "manuel" && s.modeTextOn]}>Manuelle</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ── DEVISE DE PAIEMENT (recharge automatique uniquement) ────── */}
+          {mode === "auto" && (
+            <View style={s.glassCard}>
+              <Text style={s.sectionLabel}>Devise de paiement</Text>
+              <View style={s.shortcuts}>
+                {(["USD", "CDF"] as const).map((cur) => {
+                  const active = currency === cur;
+                  return (
+                    <TouchableOpacity key={cur}
+                      style={[s.currChip, { backgroundColor: active ? C.primary : C.surface, borderColor: active ? C.primary : C.border }]}
+                      onPress={() => { setCurrency(cur); setAmount(""); }} activeOpacity={0.8}>
+                      <Text style={[s.chipText, { color: active ? C.white : C.textSec, fontFamily: active ? "NexaBold" : "NexaLight" }]}>
+                        {cur === "USD" ? "Dollar (USD)" : "Franc (CDF)"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {/* ── MONTANT ──────────────────────────────────────────────── */}
           <View style={s.glassCard}>
             <Text style={s.sectionLabel}>Montant à recharger</Text>
             <Animated.View style={[s.amountRow, { borderColor: borderOf(inputFocAmt) }]}>
-              <Text style={s.amountCurrency}>EC</Text>
+              <Text style={s.amountCurrency}>{mode === "auto" && currency === "CDF" ? "FC" : "EC"}</Text>
               <TextInput
                 placeholder="0" placeholderTextColor={C.textMut} keyboardType="numeric"
                 style={s.amountInput} value={amount} onChangeText={setAmount}
@@ -495,8 +681,9 @@ export default function RechargeEcoinsScreen() {
               )}
             </Animated.View>
             <View style={s.shortcuts}>
-              {SHORTCUTS.map((v, i) => {
-                const clean = SHORTCUTS_CLEAN[i]; const active = amount === clean;
+              {(mode === "auto" && currency === "CDF" ? SHORTCUTS_CDF : SHORTCUTS).map((v, i) => {
+                const clean = (mode === "auto" && currency === "CDF" ? SHORTCUTS_CDF_CLEAN : SHORTCUTS_CLEAN)[i];
+                const active = amount === clean;
                 return (
                   <TouchableOpacity key={v}
                     style={[s.chip, { backgroundColor: active ? C.primary : C.surface, borderColor: active ? C.primary : C.border }]}
@@ -506,8 +693,71 @@ export default function RechargeEcoinsScreen() {
                 );
               })}
             </View>
+            {mode === "auto" && currency === "CDF" && amount && (
+              <Text style={s.convertedHint}>
+                ≈ {estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC seront crédités sur votre compte
+              </Text>
+            )}
           </View>
 
+          {mode === "manuel" ? (
+            <>
+              {/* ── DEMANDE MANUELLE ─────────────────────────────────── */}
+              <View style={s.glassCard}>
+                <Text style={s.sectionLabel}>Votre numéro de téléphone</Text>
+                <Animated.View style={s.inputRow}>
+                  <Text style={s.prefix}>+</Text>
+                  <View style={s.prefixDivider} />
+                  <TextInput
+                    placeholder="243812 345 678" placeholderTextColor={C.textMut}
+                    keyboardType="numeric" style={s.inputField}
+                    value={manualPhone} onChangeText={setManualPhone}
+                    returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
+                  />
+                </Animated.View>
+              </View>
+
+              <View style={s.glassCard}>
+                <Text style={s.sectionLabel}>Précision (optionnel)</Text>
+                <Animated.View style={s.inputRow}>
+                  <TextInput
+                    placeholder="Ex. Dépôt agence, Western Union…" placeholderTextColor={C.textMut}
+                    style={s.inputField} value={manualNote} onChangeText={setManualNote}
+                    returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
+                  />
+                </Animated.View>
+              </View>
+
+              <View style={s.cardInfoNote}>
+                <Ionicons name="information-circle-outline" size={14} color={C.primary} />
+                <Text style={s.cardInfoText}>
+                  Votre demande sera vérifiée et validée manuellement par notre équipe — le crédit n'est pas instantané.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[s.ctaBtn, { opacity: sendingManual ? 0.7 : 1, marginTop: 16 }]}
+                onPress={handleManualSubmit}
+                disabled={sendingManual}
+                activeOpacity={0.88}
+              >
+                <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
+                  {sendingManual
+                    ? <ActivityIndicator size="small" color={C.white} />
+                    : <><Ionicons name="paper-plane-outline" size={18} color={C.white} /><Text style={s.ctaText}>Envoyer la demande</Text></>
+                  }
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <View style={s.secureRow}>
+                <Ionicons name="time-outline" size={12} color={C.textMut} />
+                <Text style={s.secureText}>Traitée par un agent BIM, généralement sous quelques heures</Text>
+              </View>
+
+              <View style={{ height: 60 }} />
+            </>
+          ) : (
+            <>
           {/* ── MOBILE MONEY ─────────────────────────────────────────── */}
           <View style={s.section}>
             <Text style={s.sectionTitle}>Mobile Money</Text>
@@ -572,30 +822,6 @@ export default function RechargeEcoinsScreen() {
             <View style={s.glassCard}>
               <Text style={s.sectionLabel}>Informations de la demande</Text>
 
-              {/* Nom */}
-              <Text style={s.fieldLabel}>Nom complet du titulaire</Text>
-              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocName), marginBottom: 14 }]}>
-                <Ionicons name="person-outline" size={16} color={C.textMut} />
-                <TextInput
-                  placeholder="Votre nom complet" placeholderTextColor={C.textMut}
-                  style={s.inputField} value={cardName} onChangeText={setCardName}
-                  onFocus={() => focusAnim(inputFocName, 1)} onBlur={() => focusAnim(inputFocName, 0)}
-                  returnKeyType="next"
-                />
-              </Animated.View>
-
-              {/* Numéro de référence carte */}
-              <Text style={s.fieldLabel}>Numéro de référence / carte</Text>
-              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocRef), marginBottom: 14 }]}>
-                <Ionicons name="card-outline" size={16} color={C.textMut} />
-                <TextInput
-                  placeholder="XXXX XXXX XXXX XXXX" placeholderTextColor={C.textMut}
-                  keyboardType="numeric" style={s.inputField} value={cardRef} onChangeText={setCardRef}
-                  onFocus={() => focusAnim(inputFocRef, 1)} onBlur={() => focusAnim(inputFocRef, 0)}
-                  returnKeyType="next"
-                />
-              </Animated.View>
-
               {/* Numéro de contact */}
               <Text style={s.fieldLabel}>Numéro de contact (en cas d'erreur)</Text>
               <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocCont) }]}>
@@ -611,7 +837,7 @@ export default function RechargeEcoinsScreen() {
 
               <View style={s.cardInfoNote}>
                 <Ionicons name="information-circle-outline" size={14} color={C.primary} />
-                <Text style={s.cardInfoText}>Notre équipe vous appellera sur ce numéro pour finaliser la recharge.</Text>
+                <Text style={s.cardInfoText}>Vous allez être redirigé vers la page de paiement sécurisée FlexPay pour saisir les détails de votre carte.</Text>
               </View>
             </View>
           )}
@@ -629,15 +855,19 @@ export default function RechargeEcoinsScreen() {
                   <Text style={s.recapVal}>+{phone}</Text>
                 </View>
               ) : null}
-              {isCard && cardName ? (
+              {isCard && contactPhone ? (
                 <View style={s.recapRow}>
-                  <Text style={s.recapLabel}>Titulaire</Text>
-                  <Text style={s.recapVal}>{cardName}</Text>
+                  <Text style={s.recapLabel}>Contact</Text>
+                  <Text style={s.recapVal}>+{contactPhone}</Text>
                 </View>
               ) : null}
               <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
                 <Text style={s.recapLabel}>Montant</Text>
-                <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>{amount} EC</Text>
+                <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>
+                  {currency === "CDF"
+                    ? `${amount} FC (≈ ${estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC)`
+                    : `${amount} EC`}
+                </Text>
               </View>
             </View>
           )}
@@ -663,6 +893,8 @@ export default function RechargeEcoinsScreen() {
           </View>
 
           <View style={{ height: 60 }} />
+            </>
+          )}
         </ScrollView>
       </TouchableWithoutFeedback>
 
@@ -696,7 +928,9 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   amountInput:    { flex: 1, fontSize: 38, fontFamily: "NexaBold", color: C.text, padding: 0 },
   shortcuts:      { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   chip:           { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1.5 },
+  currChip:       { flex: 1, alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, borderWidth: 1.5 },
   chipText:       { fontSize: 12 },
+  convertedHint:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginTop: 10 },
 
   section:      { marginBottom: 16 },
   sectionTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 10 },
@@ -735,6 +969,19 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   ctaText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
   secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 8 },
   secureText:{ fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textAlign: "center" },
+
+  modeToggle: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 18, padding: 4, gap: 4, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
+  modeBtn:    { flex: 1, borderRadius: 14, paddingVertical: 11, alignItems: "center" },
+  modeBtnOn:  { backgroundColor: C.primary },
+  modeText:   { fontFamily: "NexaBold", fontSize: 13, color: C.textSec },
+  modeTextOn: { color: "#fff" },
+
+  manualSuccessIcon:  { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(0,53,197,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  manualSuccessTitle: { fontFamily: "NexaBold", fontSize: 20, color: C.text, marginBottom: 8 },
+  manualSuccessSub:   { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, textAlign: "center", lineHeight: 20, paddingHorizontal: 20, marginBottom: 20 },
+  manualRefBox:   { backgroundColor: C.glassBg, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, marginBottom: 28, borderWidth: 1, borderColor: C.glassBord, alignItems: "center" },
+  manualRefLabel: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
+  manualRefVal:   { fontFamily: "NexaBold", fontSize: 15, color: C.primary, marginTop: 2 },
 }); }
 
 function mkMs(C: typeof LIGHT) { return StyleSheet.create({

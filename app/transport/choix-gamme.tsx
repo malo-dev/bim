@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "@/app/_layout";
 import { useEstimateRideMutation, useRequestRideMutation } from "@/services/rideService";
+import LiveMap from "@/components/transport/LiveMap";
 
 const LIGHT = {
   bg: "#F8FAFC", canvas: "#EEF2F8",
@@ -45,7 +46,13 @@ export default function ChoixGammeScreen() {
   const C = isDark ? DARK : LIGHT;
   const s = useMemo(() => mkS(C), [isDark]);
   const router = useRouter();
-  const { pickup, destination, tier: initialTier } = useLocalSearchParams<{ pickup: string; destination: string; tier?: string }>();
+  const { pickup, destination, pickupLat, pickupLng, destLat, destLng, tier: initialTier } = useLocalSearchParams<{
+    pickup: string; destination: string; pickupLat?: string; pickupLng?: string; destLat?: string; destLng?: string; tier?: string;
+  }>();
+  const pLat = pickupLat ? parseFloat(pickupLat) : null;
+  const pLng = pickupLng ? parseFloat(pickupLng) : null;
+  const dLat = destLat ? parseFloat(destLat) : null;
+  const dLng = destLng ? parseFloat(destLng) : null;
 
   const [estimateRide, { isLoading: estimating }] = useEstimateRideMutation();
   const [requestRide, { isLoading: requesting }] = useRequestRideMutation();
@@ -57,7 +64,11 @@ export default function ChoixGammeScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const res: any = await estimateRide({ pickupAddress: pickup, destinationAddress: destination }).unwrap();
+        const res: any = await estimateRide({
+          pickupAddress: pickup, destinationAddress: destination,
+          pickupLat: pLat, pickupLng: pLng,
+          destinationLat: dLat, destinationLng: dLng,
+        }).unwrap();
         setEstimate(res.data);
       } catch {
         setError("Impossible d'estimer le tarif, réessayez.");
@@ -73,10 +84,12 @@ export default function ChoixGammeScreen() {
       const res: any = await requestRide({
         pickupAddress: pickup,
         destinationAddress: destination,
+        pickupLat: pLat, pickupLng: pLng,
+        destinationLat: dLat, destinationLng: dLng,
         vehicleTier: selectedTier,
         paymentMethod: "wallet",
       }).unwrap();
-      router.replace({ pathname: "/transport/suivi", params: { rideNumber: res.data.rideNumber } } as any);
+      router.replace({ pathname: "/transport/choix-chauffeur", params: { rideNumber: res.data.rideNumber } } as any);
     } catch (e: any) {
       setError(e?.data?.message || "La demande de course a échoué, réessayez.");
     }
@@ -94,6 +107,13 @@ export default function ChoixGammeScreen() {
           <View style={{ width: 38 }} />
         </View>
       </SafeAreaView>
+
+      {/* ── Aperçu carte ── */}
+      {pLat != null && pLng != null && (
+        <View style={s.miniMapWrap}>
+          <LiveMap style={StyleSheet.absoluteFill} pickupLat={pLat} pickupLng={pLng} destLat={dLat} destLng={dLng} />
+        </View>
+      )}
 
       {/* ── Résumé trajet ── */}
       <View style={s.routeCard}>
@@ -202,6 +222,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
   title: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
 
+  miniMapWrap: { height: 140, marginHorizontal: 20, marginBottom: 12, borderRadius: 20, overflow: "hidden", backgroundColor: C.canvas },
   routeCard: { marginHorizontal: 20, backgroundColor: C.glass, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: C.glassBord },
   routeRow: { flexDirection: "row", gap: 12 },
   routeDots: { alignItems: "center", paddingTop: 4 },

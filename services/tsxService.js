@@ -143,6 +143,20 @@ export const transactionApi = createApi({
       }),
       invalidatesTags: ['Paiement'],
     }),
+
+    // ── Demandes de recharge manuelle (Espace Gestion — à approuver/rejeter) ──
+    getRecharges: builder.query({
+      query: (params) => ({ url: '/tsx/admin/recharges', method: 'GET', params }),
+      providesTags: ['Transaction'],
+    }),
+    approveRecharge: builder.mutation({
+      query: (id) => ({ url: `/tsx/admin/recharges/${id}/approve`, method: 'PATCH' }),
+      invalidatesTags: ['Transaction'],
+    }),
+    rejectRecharge: builder.mutation({
+      query: ({ id, reason }) => ({ url: `/tsx/admin/recharges/${id}/reject`, method: 'PATCH', data: { reason } }),
+      invalidatesTags: ['Transaction'],
+    }),
   }),
 });
 
@@ -160,4 +174,7 @@ export const {
   useUpdateTransactionMutation,
   useDeleteTransactionMutation,
   useCreateRetraitMutation,
+  useGetRechargesQuery,
+  useApproveRechargeMutation,
+  useRejectRechargeMutation,
 } = transactionApi;
