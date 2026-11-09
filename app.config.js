@@ -9,6 +9,9 @@ const GRADLE_PROPS = {
   'org.gradle.parallel': 'false',
   'org.gradle.workers.max': '2',
   'kotlin.daemon.jvmargs': '-Xmx1536m',
+  // Code natif (C++) compilé seulement pour les vrais téléphones : x86 et
+  // x86_64 ne servent qu'aux émulateurs et doublaient la mémoire nécessaire.
+  reactNativeArchitectures: 'armeabi-v7a,arm64-v8a',
 };
 
 const withLimitedGradleMemory = (config) =>
