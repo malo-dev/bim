@@ -23,13 +23,23 @@ function addSubscriber(onSuccess, onError) {
 
 const BASE_URL = Constants.expoConfig.extra.API_URL;
 
+// Connexions faibles (2G / 3G instable) : 30 s par requête (60 s pour l'envoi
+// d'images) au lieu de 15 s, et nouvelles tentatives automatiques (voir plus bas).
+const TIMEOUT_MS = 30000;
+const UPLOAD_TIMEOUT_MS = 60000;
+
 const instance = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: TIMEOUT_MS,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+// Clé unique par action (payer, commander, transférer…), réutilisée à chaque
+// nouvelle tentative : le serveur ne l'exécute qu'une fois (idempotency.middleware).
+const newIdempotencyKey = () =>
+  `${Date.now().toString(36)}-${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
 
 /* ---------------- REQUEST INTERCEPTOR ---------------- */
 
@@ -42,10 +52,46 @@ instance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    const method = String(config.method || "get").toLowerCase();
+    if (method !== "get") {
+      if (!config.__idemKey) config.__idemKey = newIdempotencyKey();
+      config.headers["Idempotency-Key"] = config.__idemKey;
+    }
+    const isUpload = typeof FormData !== "undefined" && config.data instanceof FormData;
+    if (isUpload && (!config.timeout || config.timeout < UPLOAD_TIMEOUT_MS)) config.timeout = UPLOAD_TIMEOUT_MS;
+
     return config;
   },
   (error) => Promise.reject(error)
 );
+
+/* ---------------- NOUVELLES TENTATIVES (réseau faible) ---------------- */
+
+// Lecture : 2 nouvelles tentatives. Action (POST/PUT…) : 3, avec la même clé
+// d'idempotence — sans risque de doublon. Attentes : 1,5 s, 3 s, 6 s.
+const RETRY_DELAYS_MS = [1500, 3000, 6000];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function shouldRetry(error) {
+  const cfg = error?.config;
+  if (!cfg || cfg.__noRetry) return false;
+  const method = String(cfg.method || "get").toLowerCase();
+  const max = method === "get" ? 2 : 3;
+  if ((cfg.__retryCount || 0) >= max) return false;
+  const status = error?.response?.status;
+  if (!error?.response) return true;                                   // pas de réseau / délai dépassé
+  if (status === 502 || status === 503 || status === 504) return true; // serveur momentanément indisponible
+  if (status === 409 && error.response.data?.code === "IN_PROGRESS") return true; // 1re tentative encore en cours
+  return false;
+}
+
+instance.interceptors.response.use(undefined, async (error) => {
+  if (!shouldRetry(error)) return Promise.reject(error);
+  const cfg = error.config;
+  cfg.__retryCount = (cfg.__retryCount || 0) + 1;
+  await sleep(RETRY_DELAYS_MS[cfg.__retryCount - 1] ?? 6000);
+  return instance(cfg);
+});
 
 /* ---------------- RESPONSE INTERCEPTOR ---------------- */
 
@@ -57,6 +103,11 @@ instance.interceptors.request.use(
 const NETWORK_ERROR_MESSAGE =
   "Impossible de contacter le serveur. Vérifiez votre connexion internet (Wifi ou données mobiles) et réessayez. " +
   "Si le problème persiste, contactez le support BIM NEXT.";
+// Action (paiement, commande…) dont on n'a pas reçu la réponse malgré les
+// nouvelles tentatives : elle a pu passer quand même.
+const ACTION_NETWORK_ERROR_MESSAGE =
+  "La connexion est trop faible : nous n'avons pas reçu la confirmation. Votre opération a peut-être été enregistrée — " +
+  "vérifiez votre solde ou vos commandes avant de réessayer.";
 
 instance.interceptors.response.use(
   (response) => response,
@@ -71,7 +122,8 @@ instance.interceptors.response.use(
       error.response.data = {};
     }
     if (error.isNetworkError && !error.response.data.message) {
-      error.response.data.message = NETWORK_ERROR_MESSAGE;
+      const isAction = String(originalRequest?.method || "get").toLowerCase() !== "get";
+      error.response.data.message = isAction ? ACTION_NETWORK_ERROR_MESSAGE : NETWORK_ERROR_MESSAGE;
     }
 
     const isTokenExpired =
@@ -99,7 +151,8 @@ instance.interceptors.response.use(
         try {
           const { data } = await axios.post(
             `${BASE_URL}/auth/refresh-token`,
-            { refreshToken }
+            { refreshToken },
+            { timeout: TIMEOUT_MS }
           );
 
           await AsyncStorage.setItem("token", data.token);

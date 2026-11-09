@@ -23,6 +23,10 @@ const iconFor = (n: N): BimIconName => {
   return "sparkle";
 };
 
+// Retire les coches vertes (✅ ✔️ ☑️) des titres et messages, y compris des
+// notifications déjà enregistrées : l'icône à gauche suffit.
+const clean = (s?: string) => (s ?? "").replace(/[✅✔☑]️?/g, "").replace(/\s{2,}/g, " ").trim();
+
 const ago = (iso?: string) => {
   if (!iso) return "";
   const d = new Date(iso).getTime();
@@ -93,7 +97,7 @@ export default function NotificationsScreen() {
               const r = isRead(item);
               return (
                 <Appear kind="rise" delay={Math.min(index, 8) * 50}>
-                  <PressScale onPress={() => read(item)} accessibilityLabel={`${item.title ?? "Notification"}${r ? "" : ", non lue"}`}
+                  <PressScale onPress={() => read(item)} accessibilityLabel={`${clean(item.title) || "Notification"}${r ? "" : ", non lue"}`}
                     style={{ flexDirection: "row", gap: 12, padding: 14, borderRadius: 22, backgroundColor: th.glassFill(r ? 0.08 : 0.18), borderWidth: 1, borderColor: th.glass(0.18), boxShadow: th.glassFx }}>
                     <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: th.ink, alignItems: "center", justifyContent: "center" }}>
                       <BimIcon name={iconFor(item)} size={20} color={th.onInk} strokeWidth={1.7} />
@@ -101,10 +105,10 @@ export default function NotificationsScreen() {
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-                        <T w="bold" size={14} style={{ flexShrink: 1 }} numberOfLines={1}>{item.title ?? "BIMNEXT"}</T>
+                        <T w="bold" size={14} style={{ flexShrink: 1 }} numberOfLines={1}>{clean(item.title) || "BIMNEXT"}</T>
                         <T size={12} color={th.muted}>{ago(item.createdAt)}</T>
                       </View>
-                      {!!item.message && <T size={13} color={th.mutedSoft} style={{ marginTop: 3, lineHeight: 19 }}>{item.message}</T>}
+                      {!!clean(item.message) && <T size={13} color={th.mutedSoft} style={{ marginTop: 3, lineHeight: 19 }}>{clean(item.message)}</T>}
                     </View>
                   </PressScale>
                 </Appear>

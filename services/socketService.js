@@ -24,7 +24,11 @@ export const connectSocket = (userId) => {
     transports: ['websocket'],
     reconnection: true,
     reconnectionDelay: 2000,
-    reconnectionAttempts: 10,
+    // Réseau faible : on ne renonce jamais (avant : abandon après 10 essais,
+    // plus aucun temps réel jusqu'au redémarrage de l'app).
+    reconnectionDelayMax: 15000,
+    timeout: 30000,
+    reconnectionAttempts: Infinity,
   });
 
   sock.on('connect', () => {
