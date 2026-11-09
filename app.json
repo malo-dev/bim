@@ -44,7 +44,8 @@
         "android.permission.USE_FINGERPRINT",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.bimnext.app"
+      "package": "com.bimnext.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
