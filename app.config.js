@@ -7,8 +7,8 @@ const { withGradleProperties } = require('expo/config-plugins');
 const GRADLE_PROPS = {
   'org.gradle.jvmargs': '-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8',
   'org.gradle.parallel': 'false',
-  'org.gradle.workers.max': '2',
-  'kotlin.daemon.jvmargs': '-Xmx1536m',
+  'org.gradle.workers.max': '1',
+  'kotlin.compiler.execution.strategy': 'in-process',
   // Code natif (C++) compilé seulement pour les vrais téléphones : x86 et
   // x86_64 ne servent qu'aux émulateurs et doublaient la mémoire nécessaire.
   reactNativeArchitectures: 'armeabi-v7a,arm64-v8a',
