@@ -261,7 +261,7 @@ export default function CompanyOrders() {
           )}
           contentContainerStyle={{ padding: 14, paddingBottom: 30 }}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={C.primary} />}
+          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={() => { refetch(); }} tintColor={C.primary} />}
         />
       )}
     </SafeAreaView>

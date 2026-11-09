@@ -376,7 +376,7 @@ export default function HotelsList() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.surface} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── HEADER full white ── */}
       <SafeAreaView edges={["top"]} style={s.headerWrap}>
@@ -458,7 +458,7 @@ export default function HotelsList() {
               <View style={{ paddingVertical: 20, alignItems: "center" }}>
                 <Ionicons name="ellipsis-horizontal" size={24} color={C.textMut} />
               </View>
-            ) : null
+            ) : undefined
           }
           renderItem={({ item, index }) => (
             <HotelCard

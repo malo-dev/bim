@@ -508,7 +508,7 @@ export default function FuelScreen() {
             <View style={{ paddingVertical: 20, alignItems: "center" }}>
               <ActivityIndicator color={C.primary} />
             </View>
-          ) : null}
+          ) : undefined}
           renderItem={({ item, index }) => (
             <ProductCard
               item={item}
@@ -523,7 +523,7 @@ export default function FuelScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={s.trackerContent}
           refreshControl={
-            <RefreshControl refreshing={txFetching && !txData} onRefresh={() => refetchTx()} tintColor={C.primary} colors={[C.primary]} />
+            <RefreshControl refreshing={txFetching && !txData} onRefresh={() => { refetchTx(); }} tintColor={C.primary} colors={[C.primary]} />
           }
         >
           {/* section header */}

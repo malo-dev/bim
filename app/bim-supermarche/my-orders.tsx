@@ -272,7 +272,7 @@ export default function MyOrders() {
             contentContainerStyle={s.list}
             showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={C.primary} />
+              <RefreshControl refreshing={isFetching} onRefresh={() => { refetch(); }} tintColor={C.primary} />
             }
           />
         )}

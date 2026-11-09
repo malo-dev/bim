@@ -1,3 +1,5 @@
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -30,9 +32,9 @@ const DARK: typeof LIGHT = { bg: "#0B1220", primary: "#4D8DFF", text: "#EAF0FF",
 
 export default function GestionUsersScreen() {
   const router = useRouter();
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
+  const s = useMemo(() => mkS(C), [C]);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -90,7 +92,7 @@ export default function GestionUsersScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -128,7 +130,7 @@ export default function GestionUsersScreen() {
           data={users}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 16, gap: 10 }}
-          ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun utilisateur</Text> : null}
+          ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun utilisateur</Text> : undefined}
           renderItem={({ item }) => (
             <TouchableOpacity style={s.card} onPress={() => openActions(item)} activeOpacity={0.85}>
               <View style={{ flex: 1 }}>
@@ -181,25 +183,25 @@ export default function GestionUsersScreen() {
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  title: { fontFamily: "LatoBold", fontSize: 17, color: C.text },
   searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+  searchInput: { flex: 1, fontFamily: "LatoLight", fontSize: 13, color: C.text },
   chipRow: { paddingHorizontal: 16, paddingVertical: 6, gap: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  chipText: { fontFamily: "NexaBold", fontSize: 12, color: C.muted },
+  chipText: { fontFamily: "LatoBold", fontSize: 12, color: C.muted },
   chipTextActive: { color: "#fff" },
   card: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
-  name: { fontFamily: "NexaBold", fontSize: 14, color: C.text },
-  email: { fontFamily: "NexaLight", fontSize: 12, color: C.muted, marginTop: 2 },
+  name: { fontFamily: "LatoBold", fontSize: 14, color: C.text },
+  email: { fontFamily: "LatoLight", fontSize: 12, color: C.muted, marginTop: 2 },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: "NexaBold", fontSize: 10, textTransform: "uppercase" },
-  amount: { fontFamily: "NexaBold", fontSize: 14, color: C.primary },
-  empty: { textAlign: "center", fontFamily: "NexaLight", color: C.muted, marginTop: 40 },
+  badgeText: { fontFamily: "LatoBold", fontSize: 10, textTransform: "uppercase" },
+  amount: { fontFamily: "LatoBold", fontSize: 14, color: C.primary },
+  empty: { textAlign: "center", fontFamily: "LatoLight", color: C.muted, marginTop: 40 },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
   modalCard: { width: "100%", backgroundColor: C.card, borderRadius: 20, padding: 20 },
-  modalTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text, marginBottom: 12 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "NexaLight", fontSize: 14, color: C.text },
+  modalTitle: { fontFamily: "LatoBold", fontSize: 15, color: C.text, marginBottom: 12 },
+  input: { borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "LatoLight", fontSize: 14, color: C.text },
   modalBtn: { flex: 1, borderRadius: 14, paddingVertical: 13, alignItems: "center" },
-  modalBtnText: { fontFamily: "NexaBold", fontSize: 14 },
+  modalBtnText: { fontFamily: "LatoBold", fontSize: 14 },
 }); }

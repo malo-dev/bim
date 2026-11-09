@@ -1,1033 +1,391 @@
-/* eslint-disable */
-import { Ionicons } from "@expo/vector-icons";
-import { useTranslation } from "react-i18next";
-import { LinearGradient } from "expo-linear-gradient";
-import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  Alert,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+/**
+ * Recharge d'Ecoins — parcours en 4 étapes (le bouton « Continuer » reste fixe en bas) :
+ *  1. Type      : Automatique (crédit direct, par défaut) ou Manuelle (demande à un agent BIM)
+ *  2. Devise    : Dollar (USD) ou Franc (CDF)
+ *  3. Montant   : montant + « Payer avec » (liste déroulante, Airtel Money par défaut)
+ *  4. Numéro    : « Tu y es presque ! » — numéro d'inscription ou un autre numéro
+ * Puis attente animée → « Félicitations ! » → Nouvelle recharge / Retour à l'accueil.
+ * Paiement via FlexPay (POST /tsx/recharge), confirmé par socket + vérification toutes les 3 s.
+ */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useRechargeMutation, useVerifyPaymentMutation, useCreateManualRechargeMutation } from "@/services/tsxService";
-import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
-import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
-import { useAppTheme } from "@/app/_layout";
-import { getSocket } from "@/services/socketService";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Animated, Easing, KeyboardAvoidingView, ScrollView, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AFRICA_COUNTRIES } from "@/constants/africaCountries";
+import { BimIcon, BimIconName } from "@/components/bim/icons";
+import { F, ec, useTh } from "@/components/bim/theme";
+import {
+  AmountChips, Appear, BimBackground, DEFAULT_COUNTRY, Glass, Header, PhoneField, PillButton, PressScale,
+  SectionLabel, SlideButton, StatusOverlay, T, TextField,
+} from "@/components/bim/ui";
 import axiosInstance from "@/services/axiosInstance";
+import { getSocket } from "@/services/socketService";
+import { useCreateManualRechargeMutation, useRechargeMutation, useVerifyPaymentMutation } from "@/services/tsxService";
+import { useGetUserByIdQuery } from "@/services/userService";
+import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
 
-/* ─── PALETTE ─────────────────────────────────────────────────────────── */
-const _ios = Platform.OS === "ios";
-const LIGHT = {
-  primary:  "#0035C5",
-  deep:     "#302E99",
-  gold:     "#FFD700",
-  white:    "#FFFFFF",
-  error:    "#EF4444",
-  success:  "#22C55E",
-  bg:       "#F9F9F9",
-  surface:  "#FFFFFF",
-  text:     "#1A1C1C",
-  textSec:  "#434657",
-  textMut:  "#747688",
-  border:   "rgba(196,197,218,0.40)",
-  // Android : tous les fonds semi-transparents → opaques (pas de backdrop blur natif)
-  topBarBg:        _ios ? "rgba(255,255,255,0.92)" : "#FFFFFF",
-  topBarBord:      "rgba(196,197,218,0.20)",
-  glassBg:         _ios ? "rgba(255,255,255,0.75)" : "#FFFFFF",
-  glassBord:       _ios ? "rgba(255,255,255,0.85)" : "rgba(196,197,218,0.35)",
-  cardInfoBg:      "rgba(0,53,197,0.05)",
-  cardInfoBord:    "rgba(0,53,197,0.12)",
-  recapBord:       "rgba(196,197,218,0.30)",
-  pmHandle:        "rgba(0,0,0,0.10)",
-  pmLockBg:        "rgba(0,53,197,0.08)",
-  pmReminderBg:    "rgba(0,53,197,0.04)",
-  pmReminderBord:  "rgba(196,197,218,0.40)",
-  receiptBg:       "#FFFFFF",
-  receiptPerfBg:   "#F9F9F9",
-  receiptPerfBord: "rgba(196,197,218,0.35)",
-  stepsCardBg:     _ios ? "rgba(255,255,255,0.80)" : "#FFFFFF",
-  stepsCardBord:   _ios ? "rgba(255,255,255,0.85)" : "rgba(196,197,218,0.35)",
-  infoBannerBg:    "rgba(0,53,197,0.05)",
-  infoBannerBord:  "rgba(0,53,197,0.12)",
-  stepConnBg:      "rgba(196,197,218,0.40)",
-};
-const DARK: typeof LIGHT = {
-  primary:  "#4D8DFF",
-  deep:     "#302E99",
-  gold:     "#FFD700",
-  white:    "#FFFFFF",
-  error:    "#EF4444",
-  success:  "#22C55E",
-  bg:       "#0B1220",
-  surface:  "#1A2540",
-  text:     "#EAF0FF",
-  textSec:  "#9FB0D0",
-  textMut:  "#6B7A99",
-  border:   "rgba(31,42,68,0.80)",
-  topBarBg:        "#1A2540",
-  topBarBord:      "rgba(31,42,68,0.80)",
-  glassBg:         "rgba(26,37,64,0.75)",
-  glassBord:       "rgba(31,42,68,0.80)",
-  cardInfoBg:      "rgba(77,150,255,0.05)",
-  cardInfoBord:    "rgba(77,150,255,0.12)",
-  recapBord:       "rgba(31,42,68,0.80)",
-  pmHandle:        "rgba(255,255,255,0.12)",
-  pmLockBg:        "rgba(77,150,255,0.08)",
-  pmReminderBg:    "rgba(77,150,255,0.04)",
-  pmReminderBord:  "rgba(31,42,68,0.80)",
-  receiptBg:       "#1A2540",
-  receiptPerfBg:   "#0B1220",
-  receiptPerfBord: "rgba(31,42,68,0.80)",
-  stepsCardBg:     "rgba(26,37,64,0.80)",
-  stepsCardBord:   "rgba(31,42,68,0.80)",
-  infoBannerBg:    "rgba(77,150,255,0.05)",
-  infoBannerBord:  "rgba(77,150,255,0.12)",
-  stepConnBg:      "rgba(31,42,68,0.80)",
-};
+const OPS = [
+  { id: "airtel", name: "Airtel Money", initials: "AM", sub: "Mobile Money", pay: "AirtelMoney" },
+  { id: "orange", name: "Orange Money", initials: "OM", sub: "Mobile Money", pay: "OrangeMoney" },
+  { id: "mpesa", name: "M-Pesa", initials: "MP", sub: "Mobile Money", pay: "M-Pesa" },
+  { id: "visa", name: "Carte Visa", initials: "VISA", sub: "Carte bancaire", pay: "Card" },
+] as const;
+type OpId = (typeof OPS)[number]["id"];
+type Mode = "auto" | "manual";
+type Cur = "USD" | "CDF";
+const STEP_LABELS = ["Type", "Devise", "Montant", "Numéro"];
 
-const METHODS = [
-  { id: "airtel",   name: "AirtelMoney", logo: "https://images.africanfinancials.com/797d4617-ng-airtel-logo.png",       color: "#E4002B" },
-  { id: "orange",   name: "OrangeMoney", logo: "https://c.woopic.com/logo-orange.png",                                   color: "#FF6900" },
-  { id: "vodacom",  name: "M-Pesa",      logo: "https://www.vodacom.co.za/themes/custom/blip/img/menu/vodacom-logo.png", color: "#E60000" },
-  { id: "africell", name: "AfriMoney",   logo: "https://upload.wikimedia.org/wikipedia/commons/c/c9/AfricellLogo.png",   color: "#0077C8" },
-];
-
-const SHORTCUTS       = ["1 000", "2 500", "5 000", "10 000"];
-const SHORTCUTS_CLEAN = ["1000",  "2500",  "5000",  "10000"];
-
-const SHORTCUTS_CDF       = ["50 000", "100 000", "250 000", "500 000"];
-const SHORTCUTS_CDF_CLEAN = ["50000",  "100000",  "250000",  "500000"];
-
-/* ─── TOP BAR ─────────────────────────────────────────────────────────── */
-function TopBar({ onBack, onNotif, badge = 0 }: { onBack: () => void; onNotif: () => void; badge?: number }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const tb = useMemo(() => mkTb(C), [isDark]);
+function OpBadge({ initials, size = 42, font = 11 }: { initials: string; size?: number; font?: number }) {
+  const th = useTh();
   return (
-    <SafeAreaView edges={["top"]} style={tb.safe}>
-      <View style={tb.bar}>
-        <TouchableOpacity style={tb.iconBtn} onPress={onBack} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={C.text} />
-        </TouchableOpacity>
-        <Text style={tb.brand}>BIM<Text style={{ color: C.primary }}>Next</Text></Text>
-        <TouchableOpacity style={tb.iconBtn} onPress={onNotif} activeOpacity={0.7}>
-          <Ionicons name="notifications-outline" size={22} color={C.primary} />
-          {badge > 0 && (
-            <View style={tb.badge}>
-              <Text style={tb.badgeText}>{badge > 99 ? "99+" : badge}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: th.ink, alignItems: "center", justifyContent: "center" }}>
+      <T w="bold" size={font} color={th.onInk} style={{ letterSpacing: 0.5 }}>{initials}</T>
+    </View>
   );
 }
 
-/* ─── METHOD CARD ─────────────────────────────────────────────────────── */
-function MethodCard({ item, selected, onPress }: { item: typeof METHODS[number]; selected: boolean; onPress: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const ms = useMemo(() => mkMs(C), [isDark]);
-  const scale = useRef(new Animated.Value(1)).current;
+/** Barre d'étapes : 4 segments qui se remplissent + libellés. */
+function StepBar({ step }: { step: number }) {
+  const th = useTh();
+  const v = useRef(new Animated.Value(step)).current;
+  useEffect(() => { Animated.timing(v, { toValue: step, duration: 450, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: false }).start(); }, [step]);
   return (
-    <TouchableOpacity activeOpacity={1}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true }).start()}
-      onPress={onPress}>
-      <Animated.View style={[ms.card, selected && { borderColor: C.primary, borderWidth: 2 }, { transform: [{ scale }] }]}>
-        <View style={[ms.logoBox, { backgroundColor: item.color + "14" }]}>
-          <Image source={{ uri: item.logo }} style={ms.logo} contentFit="contain" transition={200} />
+    <View style={{ marginTop: 18 }} accessibilityLabel={`Étape ${step + 1} sur 4 : ${STEP_LABELS[step]}`}>
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {STEP_LABELS.map((_, i) => (
+          <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: th.glass(0.22), overflow: "hidden" }}>
+            <Animated.View style={{ height: 4, borderRadius: 2, backgroundColor: i === step ? th.knob : th.fg,
+              width: v.interpolate({ inputRange: [i - 1, i, i + 1], outputRange: ["0%", "100%", "100%"], extrapolate: "clamp" }) }} />
+          </View>
+        ))}
+      </View>
+      <View style={{ flexDirection: "row", marginTop: 8 }}>
+        {STEP_LABELS.map((l, i) => (
+          <T key={l} size={11} w={i === step ? "bold" : "regular"} color={i <= step ? th.fg : th.muted} style={{ flex: 1, textAlign: "center", letterSpacing: 0.3 }}>{i + 1}. {l}</T>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Grande carte de choix (type, devise, numéro). */
+function ChoiceCard({ icon, mark, title, text, on, onPress, badge }: { icon?: BimIconName; mark?: string; title: string; text: string; on: boolean; onPress: () => void; badge?: string }) {
+  const th = useTh();
+  return (
+    <PressScale onPress={onPress} scaleTo={0.97} accessibilityLabel={title}
+      style={{ flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderRadius: 24, borderWidth: on ? 2 : 1,
+        borderColor: on ? th.fg : th.glass(0.22), backgroundColor: on ? th.glassFill(0.22) : th.glassFill(0.1), boxShadow: th.glassFx }}>
+      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: on ? th.accent : th.ink, alignItems: "center", justifyContent: "center" }}>
+        {icon ? <BimIcon name={icon} size={24} color={on ? th.onAccent : th.onInk} strokeWidth={1.9} /> : <T w="bold" size={18} color={on ? th.onAccent : th.onInk}>{mark}</T>}
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <T w="bold" size={17}>{title}</T>
+          {!!badge && <View style={{ paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: th.knob, justifyContent: "center" }}><T w="bold" size={10} color="#FFFFFF">{badge}</T></View>}
         </View>
+        <T size={13} color={th.muted} style={{ marginTop: 3, lineHeight: 19 }}>{text}</T>
+      </View>
+      <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: th.fg, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: on ? th.fg : "transparent" }} />
+      </View>
+    </PressScale>
+  );
+}
+
+/** Liste déroulante « Payer avec » : l'opérateur choisi, puis les autres en dépliant. */
+function PaySelect({ value, onChange }: { value: OpId; onChange: (id: OpId) => void }) {
+  const th = useTh();
+  const [open, setOpen] = useState(false);
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(v, { toValue: open ? 1 : 0, duration: 260, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: false }).start(); }, [open]);
+  const sel = OPS.find((o) => o.id === value)!;
+  const others = OPS.filter((o) => o.id !== value);
+  const rowH = 62;
+  return (
+    <View style={{ borderRadius: 24, borderWidth: 1, borderColor: open ? th.fg : th.glass(0.24), backgroundColor: th.glassFill(0.14), overflow: "hidden", boxShadow: th.glassFx }}>
+      <PressScale onPress={() => setOpen((o) => !o)} scaleTo={0.98} accessibilityLabel={`Payer avec ${sel.name}. ${open ? "Fermer la liste" : "Voir les autres moyens"}`}
+        style={{ height: rowH, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 10, paddingRight: 16 }}>
+        <OpBadge initials={sel.initials} />
         <View style={{ flex: 1 }}>
-          <Text style={ms.name}>{item.name}</Text>
-          <Text style={ms.fee}>Push instantané — crédit automatique</Text>
+          <T w="bold" size={15}>{sel.name}</T>
+          <T size={12} color={th.muted}>{sel.sub} · {open ? "choisis un autre moyen" : "toucher pour changer"}</T>
         </View>
-        <View style={[ms.radio, selected && { borderColor: C.primary, backgroundColor: "rgba(0,53,197,0.10)" }]}>
-          {selected && <View style={ms.radioDot} />}
-        </View>
+        <Animated.View style={{ transform: [{ rotate: v.interpolate({ inputRange: [0, 1], outputRange: ["90deg", "270deg"] }) }] }}>
+          <BimIcon name="chevron" size={20} color={th.fg} strokeWidth={2} />
+        </Animated.View>
+      </PressScale>
+      <Animated.View style={{ height: v.interpolate({ inputRange: [0, 1], outputRange: [0, others.length * rowH + 1] }), opacity: v }}>
+        <View style={{ height: 1, backgroundColor: th.glass(0.16) }} />
+        {others.map((o) => (
+          <PressScale key={o.id} onPress={() => { onChange(o.id); setOpen(false); }} scaleTo={0.98} accessibilityLabel={`Payer avec ${o.name}`}
+            style={{ height: rowH, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 10, paddingRight: 16 }}>
+            <OpBadge initials={o.initials} />
+            <View style={{ flex: 1 }}>
+              <T w="bold" size={15}>{o.name}</T>
+              <T size={12} color={th.muted}>{o.sub}</T>
+            </View>
+            <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: th.glass(0.6) }} />
+          </PressScale>
+        ))}
       </Animated.View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
-/* ─── PENDING SCREEN ──────────────────────────────────────────────────── */
-function PendingScreen({
-  amount, contactPhone, method, onBack, success = false, onVerify, verifying = false,
-}: {
-  amount: string; contactPhone: string; method: string; onBack: () => void;
-  success?: boolean; onVerify?: () => void; verifying?: boolean;
-}) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const pv = useMemo(() => mkPv(C), [isDark]);
-  const slideUp = useRef(new Animated.Value(30)).current;
-  const fadeIn  = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeIn,  { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(slideUp, { toValue: 0, duration: 450, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
-  const timeStr = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const ref = `BIM-${Date.now().toString(36).toUpperCase().slice(-8)}`;
-
-  return (
-    <Animated.View style={[pv.container, { opacity: fadeIn, transform: [{ translateY: slideUp }] }]}>
-
-      {/* ── RECEIPT CARD ─────────────────────────────────────────── */}
-      <View style={pv.receipt}>
-        {/* Header */}
-        <LinearGradient colors={success ? [C.success, "#16A34A"] : [C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={pv.receiptHeader}>
-          <View style={pv.receiptCheckCircle}>
-            {success
-              ? <Ionicons name="checkmark-done" size={28} color={C.success} />
-              : <ActivityIndicator size="small" color={C.primary} />}
-          </View>
-          <Text style={pv.receiptTitle}>{success ? "Compte crédité !" : "Paiement en attente"}</Text>
-          <Text style={pv.receiptSub}>
-            {success ? "Votre recharge a été confirmée avec succès" : "Validez la demande de paiement sur votre téléphone"}
-          </Text>
-        </LinearGradient>
-
-        {/* Perforated edge */}
-        <View style={pv.perfRow}>
-          <View style={pv.perfHalf} />
-          {Array.from({ length: 10 }).map((_, i) => <View key={i} style={pv.perfDot} />)}
-          <View style={pv.perfHalf} />
-        </View>
-
-        {/* Details */}
-        <View style={pv.receiptBody}>
-          <View style={pv.detailRow}>
-            <Text style={pv.detailLabel}>Référence</Text>
-            <Text style={pv.detailVal}>{ref}</Text>
-          </View>
-          <View style={pv.detailRow}>
-            <Text style={pv.detailLabel}>Date</Text>
-            <Text style={pv.detailVal}>{dateStr}</Text>
-          </View>
-          <View style={pv.detailRow}>
-            <Text style={pv.detailLabel}>Heure</Text>
-            <Text style={pv.detailVal}>{timeStr}</Text>
-          </View>
-          <View style={pv.detailRow}>
-            <Text style={pv.detailLabel}>Méthode</Text>
-            <Text style={pv.detailVal}>{method}</Text>
-          </View>
-          {contactPhone ? (
-            <View style={pv.detailRow}>
-              <Text style={pv.detailLabel}>Contact</Text>
-              <Text style={pv.detailVal}>+{contactPhone}</Text>
-            </View>
-          ) : null}
-          <View style={pv.detailDivider} />
-          <View style={pv.detailRow}>
-            <Text style={[pv.detailLabel, { fontFamily: "NexaBold", color: C.text }]}>Montant</Text>
-            <Text style={pv.amountVal}>{amount}</Text>
-          </View>
-        </View>
-      </View>
-
-      {!success && (
-        <>
-          {/* ── STEPS ────────────────────────────────────────────────── */}
-          <View style={pv.stepsCard}>
-            <Text style={pv.stepsTitle}>Comment ça marche</Text>
-
-            <View style={pv.step}>
-              <View style={[pv.stepNum, { backgroundColor: "rgba(0,53,197,0.08)" }]}>
-                <Text style={[pv.stepNumText, { color: C.primary }]}>1</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={pv.stepTitle}>Push envoyé{contactPhone ? ` au +${contactPhone}` : ""}</Text>
-                <Text style={pv.stepDesc}>
-                  Ouvrez la notification {method} sur votre téléphone et validez le paiement avec votre code.
-                </Text>
-              </View>
-            </View>
-
-            <View style={pv.stepConnector} />
-
-            <View style={pv.step}>
-              <View style={[pv.stepNum, { backgroundColor: "rgba(34,197,94,0.08)" }]}>
-                <Text style={[pv.stepNumText, { color: C.success }]}>2</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={pv.stepTitle}>Compte crédité automatiquement</Text>
-                <Text style={pv.stepDesc}>Dès la validation, votre compte est crédité de {amount} sans attendre — vous êtes notifié ici même.</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* ── INFO ─────────────────────────────────────────────────── */}
-          <View style={pv.infoBanner}>
-            <Ionicons name="time-outline" size={16} color={C.primary} />
-            <Text style={pv.infoText}>Déjà validé le paiement mais rien ne se passe ? Vérifiez le statut manuellement.</Text>
-          </View>
-
-          <TouchableOpacity style={pv.verifyBtn} onPress={onVerify} activeOpacity={0.85} disabled={verifying}>
-            {verifying
-              ? <ActivityIndicator size="small" color={C.primary} />
-              : <><Ionicons name="refresh-outline" size={16} color={C.primary} /><Text style={pv.verifyText}>Vérifier le statut maintenant</Text></>}
-          </TouchableOpacity>
-        </>
-      )}
-
-      {/* ── BTN ──────────────────────────────────────────────────── */}
-      <TouchableOpacity style={pv.backBtn} onPress={onBack} activeOpacity={0.88}>
-        <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={pv.backGrad}>
-          <Ionicons name="home-outline" size={18} color={C.white} />
-          <Text style={pv.backText}>Retour à l'accueil</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-
-    </Animated.View>
-  );
+/** Découpe un numéro « +243812345678 » en pays + numéro local. */
+function splitPhone(tel?: string | null) {
+  const t = String(tel ?? "").replace(/\s/g, "");
+  if (!t) return null;
+  const withPlus = t.startsWith("+") ? t : `+${t}`;
+  const c = [...AFRICA_COUNTRIES].sort((a, b) => b.code.length - a.code.length).find((x) => withPlus.startsWith(x.code));
+  if (!c) return { country: DEFAULT_COUNTRY, local: t.replace(/^\+/, "") };
+  return { country: c, local: withPlus.slice(c.code.length).replace(/^0+/, "") };
 }
 
-/* ─── MAIN SCREEN ─────────────────────────────────────────────────────── */
-export default function RechargeEcoinsScreen() {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+export default function RechargeScreen() {
+  const th = useTh();
   const router = useRouter();
-  const { unread: notifCount } = useUnreadNotifications();
+  const insets = useSafeAreaInsets();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [mode, setMode] = useState<Mode>("auto");
+  const [cur, setCur] = useState<Cur>("USD");
+  const [amount, setAmount] = useState("10");
+  const [op, setOp] = useState<OpId>("airtel");
+  const [useMine, setUseMine] = useState(true);
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
+  const [phase, setPhase] = useState<"idle" | "proc" | "done">("idle");
+  const [ref, setRef] = useState<string | null>(null);
+  const [credited, setCredited] = useState<string | null>(null);
+  const [rate, setRate] = useState<number | null>(null);
 
-  const [mode, setMode] = useState<"auto" | "manuel">("auto");
-
-  const [amount,         setAmount]         = useState("");
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
-  const [phone,          setPhone]          = useState("");
-  const [userId,         setUserId]         = useState<string | null>(null);
-  const [currency,       setCurrency]       = useState<"USD" | "CDF">("USD");
-  const [cdfRate,        setCdfRate]        = useState<number | null>(null);
-
-  // Recharge manuelle — traitée par un agent BIM, pas de push FlexPay.
-  const [manualPhone, setManualPhone] = useState("");
-  const [manualNote,  setManualNote]  = useState("");
-  const [manualSent,  setManualSent]  = useState(false);
-  const [manualRef,   setManualRef]   = useState<string | null>(null);
-  const [createManualRecharge, { isLoading: sendingManual }] = useCreateManualRechargeMutation();
-
-  /* Card-specific field — le reste des infos carte est saisi sur la page
-     sécurisée FlexPay elle-même, pas dans l'app */
-  const [contactPhone,  setContactPhone]  = useState("");
-
-  type Phase = "idle" | "waiting" | "success";
-  const [phase,       setPhase]       = useState<Phase>("idle");
-  const [pendingInfo, setPendingInfo]  = useState({ amount: "", contact: "", method: "" });
-  const [rechargeRef, setRechargeRef]  = useState<string | null>(null);
-  const [creditedAmount, setCreditedAmount] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
-
-  const inputFocAmt  = useRef(new Animated.Value(0)).current;
-  const inputFocPh   = useRef(new Animated.Value(0)).current;
-  const inputFocCont = useRef(new Animated.Value(0)).current;
-
-  const isCard   = selectedMethod === "Card";
-  const isMobile = selectedMethod !== null && !isCard;
-
-  const [recharge, { isLoading: submitting }] = useRechargeMutation();
+  const [recharge, { isLoading }] = useRechargeMutation();
   const [verifyPayment] = useVerifyPaymentMutation();
+  const [createManual, { isLoading: sendingManual }] = useCreateManualRechargeMutation();
 
   useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
-
-  // Taux EC/USD → CDF, pour que l'utilisateur voie combien d'EC il recevra
-  // s'il paie en francs via FlexPay.
+  const { data: user, refetch } = useGetUserByIdQuery(userId!, { skip: !userId });
   useEffect(() => {
     axiosInstance.get("/currency").then(({ data }) => {
-      const list = data?.data || [];
-      const cdf = list.find((c: any) => c.code === "CDF");
-      if (cdf?.rate) setCdfRate(Number(cdf.rate));
+      const cdf = (data?.data || []).find((c: any) => c.code === "CDF");
+      if (cdf?.rate) setRate(Number(cdf.rate));
     }).catch(() => {});
   }, []);
 
-  const estimatedEc = useMemo(() => {
-    const n = parseFloat(amount.replace(/\s/g, "").replace(",", "."));
-    if (currency !== "CDF" || !cdfRate || !n) return null;
-    return n / cdfRate;
-  }, [amount, currency, cdfRate]);
+  const mine = useMemo(() => splitPhone(user?.telephone), [user?.telephone]);
+  const usingMine = useMine && !!mine;
 
-  /* ── Suivi temps réel du paiement FlexPay (push mobile money / callback carte) ── */
+  const sel = OPS.find((o) => o.id === op)!;
+  const isCard = mode === "auto" && op === "visa";
+  const amt = Number(normalizeDecimal(amount || "0")) || 0;
+  const unit = cur === "USD" ? "EC" : "FC";
+  const estimatedEc = useMemo(() => (cur === "CDF" && rate ? amt / rate : amt), [amt, cur, rate]);
+  const payLabel = cur === "USD" ? `Tu paies ${amt} USD` : rate ? `≈ ${ec(estimatedEc)} EC au taux du jour` : "Payé en CDF au taux du jour";
+  const finalTel = () => (usingMine && mine ? { code: mine.country.code, local: mine.local } : { code: country.code, local: phone.replace(/\s/g, "") });
+
+  const succeed = (montant?: any) => {
+    setCredited(montant != null ? ec(montant) : ec(estimatedEc));
+    setPhase("done");
+    refetch();
+  };
+
+  /* Suivi temps réel du paiement automatique */
   useEffect(() => {
-    if (phase !== "waiting" || !rechargeRef) return;
+    if (phase !== "proc" || !ref) return;
     const socket = getSocket();
-    if (!socket) return;
-
-    const onSuccess = (payload: any) => {
-      setCreditedAmount(`${Number(payload?.montantCredite ?? 0).toFixed(2)} EC`);
-      setPhase("success");
-    };
-    const onFailed = () => {
-      Alert.alert("Paiement annulé", "Le paiement n'a pas abouti. Vous pouvez réessayer.");
-      setPhase("idle");
-    };
-
-    socket.on("recharge:success", onSuccess);
-    socket.on("recharge:cancelled", onFailed);
-    socket.on("recharge:failed", onFailed);
-    socket.on("recharge:declined", onFailed);
-
-    /* Carte : le navigateur externe (WebBrowser) bloque l'exécution jusqu'à sa
-       fermeture, donc FlexPay a pu déjà confirmer (ou refuser) le paiement
-       avant même que ce listener socket ne soit attaché. On rattrape l'état
-       réel une fois avec une vérification immédiate au lieu d'attendre un
-       événement qui a pu être manqué. */
-    if (isCard) {
-      verifyPayment({ reference: rechargeRef }).unwrap()
-        .then((res: any) => {
-          if (res.status === "success" || res.status === "already_done") {
-            setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
-            setPhase("success");
-          } else if (res.status === "cancelled") {
-            Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
-            setPhase("idle");
-          }
-        })
-        .catch(() => {});
-    }
-
-    return () => {
-      socket.off("recharge:success", onSuccess);
-      socket.off("recharge:cancelled", onFailed);
-      socket.off("recharge:failed", onFailed);
-      socket.off("recharge:declined", onFailed);
-    };
-  }, [phase, rechargeRef]);
-
-  /* ── Filet de sécurité : si le webhook FlexPay (et donc l'événement socket)
-     n'arrive jamais, on vérifie nous-mêmes en arrière-plan toutes les 3
-     secondes pendant 1 heure max. Au-delà, on prévient l'utilisateur plutôt
-     que de le laisser indéfiniment sur l'écran d'attente. ── */
-  useEffect(() => {
-    if (phase !== "waiting" || !rechargeRef) return;
-
-    const startedAt = Date.now();
-    const POLL_MS    = 3000;
-    const TIMEOUT_MS = 60 * 60 * 1000; // 1 heure
-
-    const poll = async () => {
+    const ok = (p: any) => succeed(p?.montantCredite);
+    const ko = () => { Alert.alert("Paiement annulé", "Le paiement n'a pas abouti. Tu peux réessayer."); setPhase("idle"); };
+    socket?.on("recharge:success", ok);
+    ["recharge:cancelled", "recharge:failed", "recharge:declined"].forEach((e) => socket?.on(e, ko));
+    const started = Date.now();
+    const id = setInterval(async () => {
       try {
-        const res: any = await verifyPayment({ reference: rechargeRef }).unwrap();
-        if (res.status === "success" || res.status === "already_done") {
-          setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
-          setPhase("success");
-          return;
-        }
-        if (res.status === "cancelled") {
-          Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
-          setPhase("idle");
-          return;
-        }
-      } catch {
-        // Erreur réseau ponctuelle — on retente au prochain tick, sans déranger l'utilisateur.
-      }
-
-      if (Date.now() - startedAt >= TIMEOUT_MS) {
-        Alert.alert(
-          "Problème de paiement",
-          "Votre paiement n'a pas pu être confirmé après 1 heure. Veuillez contacter l'équipe support de BIM NEXT."
-        );
+        const res: any = await verifyPayment({ reference: ref }).unwrap();
+        if (res.status === "success" || res.status === "already_done") { clearInterval(id); succeed(res.montantCredite); }
+        else if (res.status === "cancelled") { clearInterval(id); ko(); }
+      } catch {}
+      if (Date.now() - started > 60 * 60 * 1000) {
+        clearInterval(id);
+        Alert.alert("Problème de paiement", "Ton paiement n'a pas pu être confirmé. Contacte le support BIM NEXT.");
         setPhase("idle");
       }
+    }, 3000);
+    return () => {
+      clearInterval(id);
+      socket?.off("recharge:success", ok);
+      ["recharge:cancelled", "recharge:failed", "recharge:declined"].forEach((e) => socket?.off(e, ko));
     };
+  }, [phase, ref]);
 
-    const intervalId = setInterval(poll, POLL_MS);
-    return () => clearInterval(intervalId);
-  }, [phase, rechargeRef]);
-
-  const handleVerifyNow = async () => {
-    if (!rechargeRef) return;
-    setVerifying(true);
+  const submit = async () => {
+    const { code, local } = finalTel();
+    if (local.length < 8) { Alert.alert("Numéro manquant", isCard ? "Entre un numéro de contact valide." : mode === "auto" ? `Entre ton numéro ${sel.name}.` : "Entre ton numéro de téléphone."); return; }
+    if (!userId) { Alert.alert("Erreur", "Reconnecte-toi puis réessaie."); return; }
+    const telephone = `${code.replace("+", "")}${local}`;
     try {
-      const res: any = await verifyPayment({ reference: rechargeRef }).unwrap();
-      if (res.status === "success" || res.status === "already_done") {
-        setCreditedAmount(res.montantCredite ? `${Number(res.montantCredite).toFixed(2)} EC` : pendingInfo.amount);
-        setPhase("success");
-      } else if (res.status === "cancelled") {
-        Alert.alert("Paiement annulé", "Le paiement a été annulé ou refusé.");
-        setPhase("idle");
-      } else {
-        Alert.alert("En attente", "Le paiement n'est pas encore confirmé. Validez le push sur votre téléphone puis réessayez.");
+      if (mode === "manual") {
+        await createManual({ id: userId, amount: amt, telephone, method: note.trim() || "Manuel" }).unwrap();
+        setCredited(null);
+        setPhase("done");
+        return;
       }
+      const res: any = await recharge({ userId, amount: amt, telephone, PayTypeValue: sel.pay, CurrencyValue: cur }).unwrap();
+      setRef(res.reference);
+      if (isCard && res.redirectUrl) await WebBrowser.openBrowserAsync(res.redirectUrl);
+      setPhase("proc");
     } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "Impossible de vérifier le paiement pour le moment.");
-    } finally {
-      setVerifying(false);
+      Alert.alert("Erreur", err?.data?.message || err?.data?.details || "Une erreur est survenue. Réessaie.");
     }
   };
 
-  const focusAnim = (anim: Animated.Value, v: number) =>
-    Animated.timing(anim, { toValue: v, duration: 200, useNativeDriver: false }).start();
-
-  const borderOf = (anim: Animated.Value) =>
-    anim.interpolate({ inputRange: [0,1], outputRange: [C.border, C.primary] });
-
-  const cleanAmount = (v: string) => v.replace(/\s/g, "");
-
-  const handleConfirmPress = async () => {
-    if (!amount || !selectedMethod) {
-      Alert.alert("Champs manquants", "Veuillez sélectionner un montant et une méthode."); return;
+  const next = () => {
+    if (step === 2) {
+      if (amt <= 0) { Alert.alert("Montant manquant", "Choisis un montant à recharger."); return; }
+      if (cur === "CDF" && !rate && mode === "auto") { Alert.alert("Taux indisponible", "Le taux du franc n'est pas disponible. Réessaie en USD."); return; }
     }
-    if (isMobile && !phone) {
-      Alert.alert("Champs manquants", "Veuillez entrer votre numéro de téléphone."); return;
-    }
-    if (isCard && !contactPhone) {
-      Alert.alert("Champs manquants", "Veuillez entrer un numéro de contact."); return;
-    }
-    if (!userId) {
-      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
-    }
-    if (currency === "CDF" && !cdfRate) {
-      Alert.alert("Taux indisponible", "Le taux de change CDF n'est pas disponible pour le moment. Réessayez en USD."); return;
-    }
-    const cleanAmt = parseFloat(cleanAmount(amount).replace(",", "."));
-
-    try {
-      const res: any = await recharge({
-        userId,
-        amount:        cleanAmt,
-        telephone:     isMobile ? cleanAmount(phone) : cleanAmount(contactPhone),
-        PayTypeValue:  isCard ? "Card" : selectedMethod,
-        CurrencyValue: currency,
-      }).unwrap();
-
-      setPendingInfo({
-        amount: currency === "CDF"
-          ? `${amount} FC (≈ ${estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC)`
-          : `${amount} EC`,
-        contact: isMobile ? phone : contactPhone,
-        method:  selectedMethod ?? "",
-      });
-      setRechargeRef(res.reference);
-
-      if (isCard && res.redirectUrl) {
-        // Paiement carte : ouverture de la page FlexPay dans un navigateur intégré.
-        await WebBrowser.openBrowserAsync(res.redirectUrl);
-      }
-      // Mobile money : le push FlexPay part directement sur le téléphone du client.
-      setPhase("waiting");
-    } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || err?.data?.details || "Une erreur est survenue. Réessayez.");
-    }
+    if (step < 3) setStep(step + 1); else return submit();
   };
+  const back = () => (step > 0 ? setStep(step - 1) : router.back());
+  const restart = () => { setPhase("idle"); setRef(null); setCredited(null); setStep(0); setNote(""); };
 
-  const handleManualSubmit = async () => {
-    if (!amount) {
-      Alert.alert("Champ manquant", "Veuillez entrer un montant."); return;
-    }
-    if (!manualPhone) {
-      Alert.alert("Champ manquant", "Veuillez entrer votre numéro de téléphone."); return;
-    }
-    if (!userId) {
-      Alert.alert("Erreur", "Utilisateur introuvable. Veuillez vous reconnecter."); return;
-    }
-    const cleanAmt = parseFloat(cleanAmount(amount).replace(",", "."));
-    try {
-      const res: any = await createManualRecharge({
-        id: userId,
-        amount: cleanAmt,
-        telephone: cleanAmount(manualPhone),
-        method: manualNote.trim() || "Manuel",
-      }).unwrap();
-      setManualRef(res.data?.reference ?? null);
-      setManualSent(true);
-    } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "La demande n'a pas pu être envoyée, réessayez.");
-    }
-  };
+  const ctaLabel = step < 3 ? "Continuer" : mode === "manual" ? "Envoyer la demande" : `Confirmer · ${amt} ${unit}`;
 
-  const topBar = (
-    <TopBar
-      onBack={() => router.back()}
-      onNotif={() => router.push("/notification" as any)}
-      badge={notifCount}
-    />
-  );
-
-  if (mode === "manuel" && manualSent) return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />{topBar}
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <View style={{ alignItems: "center", paddingTop: 40, paddingBottom: 20 }}>
-          <View style={s.manualSuccessIcon}>
-            <Ionicons name="time-outline" size={32} color={C.primary} />
-          </View>
-          <Text style={s.manualSuccessTitle}>Demande envoyée</Text>
-          <Text style={s.manualSuccessSub}>
-            Notre équipe va vérifier votre paiement et créditer votre compte de {amount} EC sous peu.
-          </Text>
-          {manualRef && (
-            <View style={s.manualRefBox}>
-              <Text style={s.manualRefLabel}>Référence</Text>
-              <Text style={s.manualRefVal}>{manualRef}</Text>
-            </View>
-          )}
-          <TouchableOpacity style={s.ctaBtn} onPress={() => router.replace("/(tabs)" as any)} activeOpacity={0.88}>
-            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
-              <Ionicons name="home-outline" size={18} color={C.white} />
-              <Text style={s.ctaText}>Retour à l'accueil</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+  /* ─── Contenu de chaque étape ─── */
+  const content = () => {
+    if (step === 0) return (
+      <>
+        <T style={{ marginTop: 22 }}><T w="light" size={30} style={{ lineHeight: 35 }}>Quel type{"\n"}</T><T w="bold" size={30} style={{ lineHeight: 35 }}>de recharge ?</T></T>
+        <View style={{ marginTop: 20, gap: 12 }}>
+          <ChoiceCard icon="flash" title="Automatique" badge="Recommandé" on={mode === "auto"} onPress={() => setMode("auto")}
+            text="Ton solde est crédité directement, dès que tu valides le paiement sur ton téléphone." />
+          <ChoiceCard icon="user" title="Manuelle" on={mode === "manual"} onPress={() => setMode("manual")}
+            text="Tu fais une demande de recharge auprès de BIM : un agent la traite et crédite ton compte." />
         </View>
-      </ScrollView>
-    </View>
-  );
+      </>
+    );
+    if (step === 1) return (
+      <>
+        <T style={{ marginTop: 22 }}><T w="light" size={30} style={{ lineHeight: 35 }}>Dans quelle{"\n"}</T><T w="bold" size={30} style={{ lineHeight: 35 }}>devise ?</T></T>
+        <View style={{ marginTop: 20, gap: 12 }}>
+          <ChoiceCard mark="$" title="Dollar (USD)" on={cur === "USD"} onPress={() => { if (cur !== "USD") setAmount("10"); setCur("USD"); }} text="1 USD = 1 EC crédité sur ton compte." />
+          <ChoiceCard mark="FC" title="Franc (CDF)" on={cur === "CDF"} onPress={() => { if (cur !== "CDF") setAmount("10000"); setCur("CDF"); }}
+            text={rate ? `Converti au taux du jour : 1 EC = ${Math.round(rate).toLocaleString("fr-FR")} FC.` : "Converti en EC au taux du jour."} />
+        </View>
+      </>
+    );
+    if (step === 2) return (
+      <>
+        <T style={{ marginTop: 22 }}><T w="light" size={30} style={{ lineHeight: 35 }}>Combien veux-tu{"\n"}</T><T w="bold" size={30} style={{ lineHeight: 35 }}>recharger ?</T></T>
+        <Glass a={0.14} b={0.22} radius={24} style={{ marginTop: 18, padding: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+            <T w="light" size={20}>{unit}</T>
+            <TextInput value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.,]/g, ""))} keyboardType="decimal-pad" accessibilityLabel="Montant à recharger"
+              style={{ flex: 1, fontFamily: F.bold, fontSize: 44, color: th.fg, paddingVertical: 0, letterSpacing: -0.8, includeFontPadding: false }} />
+          </View>
+          <T size={13} color={th.muted} style={{ marginTop: 2 }}>{payLabel}</T>
+          <View style={{ marginTop: 12 }}><AmountChips values={cur === "USD" ? [5, 10, 20, 50] : [5000, 10000, 20000, 50000]} value={amt} onPick={(n) => setAmount(String(n))} /></View>
+        </Glass>
+        {mode === "auto" ? (
+          <>
+            <SectionLabel style={{ marginTop: 20 }}>PAYER AVEC</SectionLabel>
+            <View style={{ marginTop: 8 }}><PaySelect value={op} onChange={setOp} /></View>
+          </>
+        ) : (
+          <View style={{ marginTop: 20 }}>
+            <TextField id="rm-note" label="Comment vas-tu payer l'agent ? (facultatif)" value={note} onChange={setNote} placeholder="Ex. Airtel Money, cash à l'agence" />
+          </View>
+        )}
+      </>
+    );
+    // Étape 4 : numéro
+    return (
+      <>
+        <T style={{ marginTop: 22 }}><T w="light" size={30} style={{ lineHeight: 35 }}>Tu y es{"\n"}</T><T w="bold" size={30} style={{ lineHeight: 35 }}>presque !</T></T>
+        <T size={15} color={th.muted} style={{ marginTop: 8, lineHeight: 22 }}>
+          {isCard ? "Tu vas saisir ta carte sur la page sécurisée de notre partenaire bancaire. Indique un numéro pour te joindre."
+            : mode === "auto" ? `Tu vas recevoir une demande de paiement ${sel.name} sur ce numéro. Valide-la avec ton code secret.`
+            : "Un agent BIM te contactera sur ce numéro pour finaliser ta recharge."}
+        </T>
 
-  if (phase === "waiting" || phase === "success") return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />{topBar}
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <PendingScreen
-          success={phase === "success"}
-          amount={creditedAmount ?? pendingInfo.amount}
-          contactPhone={pendingInfo.contact}
-          method={pendingInfo.method}
-          onBack={() => router.replace("/(tabs)" as any)}
-          onVerify={handleVerifyNow}
-          verifying={verifying}
-        />
-      </ScrollView>
-    </View>
-  );
+        <Glass a={0.12} b={0.2} radius={22} style={{ marginTop: 16, paddingVertical: 4, paddingHorizontal: 16 }}>
+          {[
+            ["Type", mode === "auto" ? "Automatique" : "Manuelle"],
+            ["Montant", `${amt} ${unit}${cur === "CDF" && rate ? ` (≈ ${ec(estimatedEc)} EC)` : ""}`],
+            ...(mode === "auto" ? [["Payer avec", sel.name]] : []),
+          ].map(([k, val], i, arr) => (
+            <View key={k} style={{ height: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: th.glass(0.12) }}>
+              <T size={14} color={th.muted}>{k}</T>
+              <T w="bold" size={14}>{val}</T>
+            </View>
+          ))}
+        </Glass>
+
+        <SectionLabel style={{ marginTop: 20 }}>{isCard ? "NUMÉRO DE CONTACT" : mode === "auto" ? `NUMÉRO ${sel.name.toUpperCase()}` : "TON NUMÉRO"}</SectionLabel>
+        <View style={{ marginTop: 8, gap: 8 }}>
+          {mine && (
+            <ChoiceCard icon="phone" title="Mon numéro d'inscription" on={usingMine} onPress={() => setUseMine(true)} text={`${mine.country.code} ${mine.local}`} />
+          )}
+          <ChoiceCard icon="plus" title="Un autre numéro" on={!usingMine} onPress={() => setUseMine(false)} text="Utiliser un numéro différent pour cette recharge." />
+        </View>
+        {!usingMine && (
+          <Appear kind="rise" style={{ marginTop: 14 }}>
+            <PhoneField id="rc-tel" label="Nouveau numéro" value={phone} onChange={setPhone} country={country} setCountry={setCountry} />
+          </Appear>
+        )}
+      </>
+    );
+  };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      {topBar}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <BimBackground enter={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <View style={{ paddingTop: 28 + insets.top, paddingHorizontal: 24 }}>
+          <Header title="Recharge" backLabel={step > 0 ? "Étape précédente" : "Retour à l'accueil"} onBack={back} />
+          <StepBar step={step} />
+        </View>
 
-          {/* ── TITRE ────────────────────────────────────────────────── */}
-          <View style={s.titleSection}>
-            <Text style={s.pageTitle}>Recharge</Text>
-            <Text style={s.pageSub}>Rechargez vos Ecoins facilement</Text>
-          </View>
-
-          {/* ── MODE : AUTOMATIQUE / MANUELLE ───────────────────────────── */}
-          <View style={s.modeToggle}>
-            <TouchableOpacity
-              style={[s.modeBtn, mode === "auto" && s.modeBtnOn]}
-              onPress={() => setMode("auto")}
-              activeOpacity={0.85}
-            >
-              <Text style={[s.modeText, mode === "auto" && s.modeTextOn]}>Automatique</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.modeBtn, mode === "manuel" && s.modeBtnOn]}
-              onPress={() => setMode("manuel")}
-              activeOpacity={0.85}
-            >
-              <Text style={[s.modeText, mode === "manuel" && s.modeTextOn]}>Manuelle</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── DEVISE DE PAIEMENT (recharge automatique uniquement) ────── */}
-          {mode === "auto" && (
-            <View style={s.glassCard}>
-              <Text style={s.sectionLabel}>Devise de paiement</Text>
-              <View style={s.shortcuts}>
-                {(["USD", "CDF"] as const).map((cur) => {
-                  const active = currency === cur;
-                  return (
-                    <TouchableOpacity key={cur}
-                      style={[s.currChip, { backgroundColor: active ? C.primary : C.surface, borderColor: active ? C.primary : C.border }]}
-                      onPress={() => { setCurrency(cur); setAmount(""); }} activeOpacity={0.8}>
-                      <Text style={[s.chipText, { color: active ? C.white : C.textSec, fontFamily: active ? "NexaBold" : "NexaLight" }]}>
-                        {cur === "USD" ? "Dollar (USD)" : "Franc (CDF)"}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {/* ── MONTANT ──────────────────────────────────────────────── */}
-          <View style={s.glassCard}>
-            <Text style={s.sectionLabel}>Montant à recharger</Text>
-            <Animated.View style={[s.amountRow, { borderColor: borderOf(inputFocAmt) }]}>
-              <Text style={s.amountCurrency}>{mode === "auto" && currency === "CDF" ? "FC" : "EC"}</Text>
-              <TextInput
-                placeholder="0" placeholderTextColor={C.textMut} keyboardType="numeric"
-                style={s.amountInput} value={amount} onChangeText={setAmount}
-                onFocus={() => focusAnim(inputFocAmt, 1)} onBlur={() => focusAnim(inputFocAmt, 0)}
-                returnKeyType="done"
-              />
-              {amount.length > 0 && (
-                <TouchableOpacity onPress={() => setAmount("")}>
-                  <Ionicons name="close-circle" size={20} color={C.textMut} />
-                </TouchableOpacity>
-              )}
-            </Animated.View>
-            <View style={s.shortcuts}>
-              {(mode === "auto" && currency === "CDF" ? SHORTCUTS_CDF : SHORTCUTS).map((v, i) => {
-                const clean = (mode === "auto" && currency === "CDF" ? SHORTCUTS_CDF_CLEAN : SHORTCUTS_CLEAN)[i];
-                const active = amount === clean;
-                return (
-                  <TouchableOpacity key={v}
-                    style={[s.chip, { backgroundColor: active ? C.primary : C.surface, borderColor: active ? C.primary : C.border }]}
-                    onPress={() => setAmount(clean)} activeOpacity={0.8}>
-                    <Text style={[s.chipText, { color: active ? C.white : C.textSec, fontFamily: active ? "NexaBold" : "NexaLight" }]}>{v}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {mode === "auto" && currency === "CDF" && amount && (
-              <Text style={s.convertedHint}>
-                ≈ {estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC seront crédités sur votre compte
-              </Text>
-            )}
-          </View>
-
-          {mode === "manuel" ? (
-            <>
-              {/* ── DEMANDE MANUELLE ─────────────────────────────────── */}
-              <View style={s.glassCard}>
-                <Text style={s.sectionLabel}>Votre numéro de téléphone</Text>
-                <Animated.View style={s.inputRow}>
-                  <Text style={s.prefix}>+</Text>
-                  <View style={s.prefixDivider} />
-                  <TextInput
-                    placeholder="243812 345 678" placeholderTextColor={C.textMut}
-                    keyboardType="numeric" style={s.inputField}
-                    value={manualPhone} onChangeText={setManualPhone}
-                    returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
-                  />
-                </Animated.View>
-              </View>
-
-              <View style={s.glassCard}>
-                <Text style={s.sectionLabel}>Précision (optionnel)</Text>
-                <Animated.View style={s.inputRow}>
-                  <TextInput
-                    placeholder="Ex. Dépôt agence, Western Union…" placeholderTextColor={C.textMut}
-                    style={s.inputField} value={manualNote} onChangeText={setManualNote}
-                    returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
-                  />
-                </Animated.View>
-              </View>
-
-              <View style={s.cardInfoNote}>
-                <Ionicons name="information-circle-outline" size={14} color={C.primary} />
-                <Text style={s.cardInfoText}>
-                  Votre demande sera vérifiée et validée manuellement par notre équipe — le crédit n'est pas instantané.
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[s.ctaBtn, { opacity: sendingManual ? 0.7 : 1, marginTop: 16 }]}
-                onPress={handleManualSubmit}
-                disabled={sendingManual}
-                activeOpacity={0.88}
-              >
-                <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
-                  {sendingManual
-                    ? <ActivityIndicator size="small" color={C.white} />
-                    : <><Ionicons name="paper-plane-outline" size={18} color={C.white} /><Text style={s.ctaText}>Envoyer la demande</Text></>
-                  }
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <View style={s.secureRow}>
-                <Ionicons name="time-outline" size={12} color={C.textMut} />
-                <Text style={s.secureText}>Traitée par un agent BIM, généralement sous quelques heures</Text>
-              </View>
-
-              <View style={{ height: 60 }} />
-            </>
-          ) : (
-            <>
-          {/* ── MOBILE MONEY ─────────────────────────────────────────── */}
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Mobile Money</Text>
-            <View style={s.methodsList}>
-              {METHODS.map((item) => (
-                <MethodCard key={item.id} item={item}
-                  selected={selectedMethod === item.name}
-                  onPress={() => setSelectedMethod(item.name)} />
-              ))}
-            </View>
-          </View>
-
-          {/* ── NUMÉRO MOBILE ────────────────────────────────────────── */}
-          {isMobile && (
-            <View style={s.glassCard}>
-              <Text style={s.sectionLabel}>Votre numéro ({selectedMethod})</Text>
-              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocPh) }]}>
-                <Text style={s.prefix}>+</Text>
-                <View style={s.prefixDivider} />
-                <TextInput
-                  placeholder="243812 345 678" placeholderTextColor={C.textMut}
-                  keyboardType="numeric" style={s.inputField}
-                  value={phone} onChangeText={setPhone}
-                  onFocus={() => focusAnim(inputFocPh, 1)} onBlur={() => focusAnim(inputFocPh, 0)}
-                  returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
-                />
-                {phone.length > 0 && (
-                  <TouchableOpacity onPress={() => setPhone("")}>
-                    <Ionicons name="close-circle" size={18} color={C.textMut} />
-                  </TouchableOpacity>
-                )}
-              </Animated.View>
-            </View>
-          )}
-
-          {/* ── CARTE BANCAIRE ───────────────────────────────────────── */}
-          <View style={s.section}>
-            <Text style={s.sectionTitle}>Carte bancaire</Text>
-            <TouchableOpacity activeOpacity={0.88} onPress={() => setSelectedMethod("Card")}>
-              <View style={[s.cardOption, isCard && { borderColor: C.primary, borderWidth: 2 }]}>
-                <LinearGradient colors={["#0A0E3A", "#0035C5", "#071A6E"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <View style={s.cardDeco1} /><View style={s.cardDeco2} />
-                {isCard && (
-                  <View style={s.cardCheck}><Ionicons name="checkmark" size={12} color={C.deep} /></View>
-                )}
-                <View style={s.cardRow}>
-                  <Text style={s.cardBank}>BIM BANK</Text>
-                  <View style={s.cardChip}><View style={s.cardChipH} /><View style={s.cardChipV} /></View>
-                </View>
-                <Text style={s.cardNum}>•••• •••• •••• ••••</Text>
-                <View style={s.cardBottom}>
-                  <View><Text style={s.cardLabel}>TITULAIRE</Text><Text style={s.cardValue}>VOTRE NOM</Text></View>
-                  <View><Text style={s.cardLabel}>EXPIRE</Text><Text style={s.cardValue}>12/27</Text></View>
-                  <Text style={s.cardVisa}>VISA</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* ── CHAMPS CARTE ─────────────────────────────────────────── */}
-          {isCard && (
-            <View style={s.glassCard}>
-              <Text style={s.sectionLabel}>Informations de la demande</Text>
-
-              {/* Numéro de contact */}
-              <Text style={s.fieldLabel}>Numéro de contact (en cas d'erreur)</Text>
-              <Animated.View style={[s.inputRow, { borderColor: borderOf(inputFocCont) }]}>
-                <Text style={s.prefix}>+</Text>
-                <View style={s.prefixDivider} />
-                <TextInput
-                  placeholder="243812 345 678" placeholderTextColor={C.textMut}
-                  keyboardType="numeric" style={s.inputField} value={contactPhone} onChangeText={setContactPhone}
-                  onFocus={() => focusAnim(inputFocCont, 1)} onBlur={() => focusAnim(inputFocCont, 0)}
-                  returnKeyType="done" onSubmitEditing={Keyboard.dismiss}
-                />
-              </Animated.View>
-
-              <View style={s.cardInfoNote}>
-                <Ionicons name="information-circle-outline" size={14} color={C.primary} />
-                <Text style={s.cardInfoText}>Vous allez être redirigé vers la page de paiement sécurisée FlexPay pour saisir les détails de votre carte.</Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── RECAP ────────────────────────────────────────────────── */}
-          {amount && selectedMethod && (
-            <View style={s.recapCard}>
-              <View style={s.recapRow}>
-                <Text style={s.recapLabel}>Méthode</Text>
-                <Text style={s.recapVal}>{selectedMethod}</Text>
-              </View>
-              {isMobile && phone ? (
-                <View style={s.recapRow}>
-                  <Text style={s.recapLabel}>Numéro</Text>
-                  <Text style={s.recapVal}>+{phone}</Text>
-                </View>
-              ) : null}
-              {isCard && contactPhone ? (
-                <View style={s.recapRow}>
-                  <Text style={s.recapLabel}>Contact</Text>
-                  <Text style={s.recapVal}>+{contactPhone}</Text>
-                </View>
-              ) : null}
-              <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                <Text style={s.recapLabel}>Montant</Text>
-                <Text style={[s.recapVal, { color: C.primary, fontFamily: "NexaBold" }]}>
-                  {currency === "CDF"
-                    ? `${amount} FC (≈ ${estimatedEc != null ? estimatedEc.toFixed(2) : "…"} EC)`
-                    : `${amount} EC`}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── CTA ──────────────────────────────────────────────────── */}
-          <TouchableOpacity
-            style={[s.ctaBtn, { opacity: submitting ? 0.7 : 1 }]}
-            onPress={handleConfirmPress}
-            disabled={submitting}
-            activeOpacity={0.88}
-          >
-            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.ctaGrad}>
-              {submitting
-                ? <ActivityIndicator size="small" color={C.white} />
-                : <><Ionicons name="flash-outline" size={18} color={C.white} /><Text style={s.ctaText}>Recharger maintenant</Text></>
-              }
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <View style={s.secureRow}>
-            <Ionicons name="lock-closed-outline" size={12} color={C.textMut} />
-            <Text style={s.secureText}>Paiement sécurisé par FlexPay, crédit automatique</Text>
-          </View>
-
-          <View style={{ height: 60 }} />
-            </>
-          )}
+        <ScrollView key={step} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}>
+          <Appear kind="page" duration={500}>{content()}</Appear>
         </ScrollView>
-      </TouchableWithoutFeedback>
 
-    </KeyboardAvoidingView>
+        {/* Bouton fixe : il ne bouge pas, seul le contenu au-dessus change */}
+        <View style={{ paddingHorizontal: 24, paddingTop: 10, paddingBottom: 20 + insets.bottom }}>
+          {step === 3 && (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }}>
+              <BimIcon name="lock" size={14} color={th.muted} strokeWidth={2} />
+              <T size={12} color={th.muted}>Paiement sécurisé</T>
+            </View>
+          )}
+          <SlideButton variant="accent" loading={isLoading || sendingManual} label={ctaLabel} onDone={next} />
+        </View>
+      </KeyboardAvoidingView>
+
+      {phase !== "idle" && (
+        <StatusOverlay phase={phase}
+          title={phase === "proc" ? "Paiement en cours…" : mode === "manual" ? "Félicitations, c'est envoyé !" : "Félicitations, tu y es arrivé !"}
+          text={phase === "proc"
+            ? (isCard ? "On vérifie ta carte auprès de la banque." : `Valide la demande ${sel.name} reçue sur ton téléphone.`)
+            : mode === "manual"
+              ? `Merci ! Ta demande de ${amt} ${unit} est envoyée à BIM. Tu recevras une notification dès qu'elle est créditée.`
+              : `Merci ! ${credited} EC ont été ajoutés à ton solde.`}>
+          {phase === "done" && (
+            <>
+              <PillButton variant="accent" label="Faire une nouvelle recharge" onPress={restart} />
+              <PillButton label="Retour à l'accueil" onPress={() => router.replace("/(tabs)" as any)} />
+            </>
+          )}
+        </StatusOverlay>
+      )}
+      {phase === "proc" && (
+        <View style={{ position: "absolute", left: 24, right: 24, bottom: 40 + insets.bottom, zIndex: 60 }}>
+          <PillButton label="Annuler l'attente" onPress={() => setPhase("idle")} />
+        </View>
+      )}
+    </BimBackground>
   );
 }
-
-/* ─── STYLES ──────────────────────────────────────────────────────────── */
-function mkTb(C: typeof LIGHT) { return StyleSheet.create({
-  safe:      { backgroundColor: Platform.OS === "android" ? C.surface : C.topBarBg, borderBottomWidth: 1, borderBottomColor: C.topBarBord },
-  bar:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
-  iconBtn:   { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  brand:     { fontFamily: "NexaBold", fontSize: 18, color: C.text },
-  badge:     { position: "absolute", top: -3, right: -3, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: C.white },
-  badgeText: { color: "#FFFFFF", fontSize: 9, fontFamily: "NexaBold", lineHeight: 12 },
-}); }
-
-function mkS(C: typeof LIGHT) { return StyleSheet.create({
-  scroll: { paddingHorizontal: 16, paddingTop: 8 },
-
-  titleSection: { marginBottom: 20, marginTop: 8 },
-  pageTitle:    { fontFamily: "NexaBold", fontSize: 28, color: C.text, lineHeight: 34 },
-  pageSub:      { fontFamily: "NexaLight", fontSize: 15, color: C.textSec, marginTop: 4 },
-
-  glassCard: { backgroundColor: C.glassBg, borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: C.glassBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.04, shadowRadius: 16 },
-  sectionLabel: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.6 },
-  fieldLabel:   { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginBottom: 6 },
-
-  amountRow:      { flexDirection: "row", alignItems: "center", borderBottomWidth: 2, paddingBottom: 10, marginBottom: 16 },
-  amountCurrency: { fontFamily: "NexaBold", fontSize: 20, color: C.primary, marginRight: 6 },
-  amountInput:    { flex: 1, fontSize: 38, fontFamily: "NexaBold", color: C.text, padding: 0 },
-  shortcuts:      { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip:           { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, borderWidth: 1.5 },
-  currChip:       { flex: 1, alignItems: "center", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 16, borderWidth: 1.5 },
-  chipText:       { fontSize: 12 },
-  convertedHint:  { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, marginTop: 10 },
-
-  section:      { marginBottom: 16 },
-  sectionTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 10 },
-  methodsList:  { gap: 10 },
-
-  inputRow:      { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderRadius: 16, height: 50, paddingHorizontal: 14, gap: 10 },
-  prefix:        { fontFamily: "NexaLight", fontSize: 15, color: C.primary },
-  prefixDivider: { width: 1, height: 20, backgroundColor: C.border },
-  inputField:    { flex: 1, fontSize: 15, fontFamily: "NexaLight", color: C.text },
-
-  cardOption:  { borderRadius: 20, overflow: "hidden", height: 168, padding: 20, justifyContent: "space-between", borderWidth: 2, borderColor: "transparent", elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10 },
-  cardDeco1:   { position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.05)", top: -50, right: -40 },
-  cardDeco2:   { position: "absolute", width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(255,255,255,0.04)", bottom: -30, left: -20 },
-  cardCheck:   { position: "absolute", top: 10, right: 10, zIndex: 10, width: 22, height: 22, borderRadius: 11, backgroundColor: "#FFD700", alignItems: "center", justifyContent: "center" },
-  cardRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardBank:    { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 16, letterSpacing: 3, fontWeight: "700" },
-  cardChip:    { width: 34, height: 26, borderRadius: 5, backgroundColor: "#D4A017", justifyContent: "center", alignItems: "center", overflow: "hidden" },
-  cardChipH:   { position: "absolute", width: "100%", height: 1, backgroundColor: "rgba(0,0,0,0.2)" },
-  cardChipV:   { position: "absolute", width: 1, height: "100%", backgroundColor: "rgba(0,0,0,0.2)" },
-  cardNum:     { color: "rgba(255,255,255,0.90)", fontFamily: "NexaLight", fontSize: 18, letterSpacing: 4, textAlign: "center" },
-  cardBottom:  { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" },
-  cardLabel:   { color: "rgba(255,255,255,0.50)", fontFamily: "NexaLight", fontSize: 8, letterSpacing: 1, marginBottom: 2 },
-  cardValue:   { color: "#FFFFFF", fontFamily: "NexaLight", fontSize: 12, letterSpacing: 1 },
-  cardVisa:    { color: "#FFFFFF", fontSize: 22, fontStyle: "italic", fontWeight: "700", letterSpacing: 1 },
-
-  cardInfoNote: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 14, backgroundColor: C.cardInfoBg, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: C.cardInfoBord },
-  cardInfoText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
-
-  recapCard:   { backgroundColor: C.glassBg, borderRadius: 20, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.glassBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
-  recapRow:    { flexDirection: "row", justifyContent: "space-between", paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.recapBord },
-  recapLabel:  { fontFamily: "NexaLight", fontSize: 13, color: C.textMut },
-  recapVal:    { fontFamily: "NexaLight", fontSize: 13, color: C.text },
-
-  ctaBtn:    { borderRadius: 24, overflow: "hidden", marginBottom: 14 },
-  ctaGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  ctaText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
-  secureRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginBottom: 8 },
-  secureText:{ fontFamily: "NexaLight", fontSize: 11, color: C.textMut, textAlign: "center" },
-
-  modeToggle: { flexDirection: "row", backgroundColor: C.surface, borderRadius: 18, padding: 4, gap: 4, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
-  modeBtn:    { flex: 1, borderRadius: 14, paddingVertical: 11, alignItems: "center" },
-  modeBtnOn:  { backgroundColor: C.primary },
-  modeText:   { fontFamily: "NexaBold", fontSize: 13, color: C.textSec },
-  modeTextOn: { color: "#fff" },
-
-  manualSuccessIcon:  { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(0,53,197,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 18 },
-  manualSuccessTitle: { fontFamily: "NexaBold", fontSize: 20, color: C.text, marginBottom: 8 },
-  manualSuccessSub:   { fontFamily: "NexaLight", fontSize: 13, color: C.textSec, textAlign: "center", lineHeight: 20, paddingHorizontal: 20, marginBottom: 20 },
-  manualRefBox:   { backgroundColor: C.glassBg, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, marginBottom: 28, borderWidth: 1, borderColor: C.glassBord, alignItems: "center" },
-  manualRefLabel: { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
-  manualRefVal:   { fontFamily: "NexaBold", fontSize: 15, color: C.primary, marginTop: 2 },
-}); }
-
-function mkMs(C: typeof LIGHT) { return StyleSheet.create({
-  card:     { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.glassBg, borderRadius: 20, borderWidth: 1.5, borderColor: C.border, paddingVertical: 14, paddingHorizontal: 16, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10 },
-  logoBox:  { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  logo:     { width: 34, height: 34 },
-  name:     { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 3 },
-  fee:      { fontFamily: "NexaLight", fontSize: 11, color: C.textMut },
-  radio:    { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: C.border, alignItems: "center", justifyContent: "center" },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary },
-}); }
-
-function mkPv(C: typeof LIGHT) { return StyleSheet.create({
-  container: { alignItems: "center", paddingTop: 20, paddingBottom: 20 },
-
-  /* receipt */
-  receipt:           { width: "100%", borderRadius: 24, overflow: "hidden", marginBottom: 16, elevation: 4, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 18 },
-  receiptHeader:     { alignItems: "center", paddingTop: 28, paddingBottom: 24, paddingHorizontal: 20 },
-  receiptCheckCircle:{ width: 60, height: 60, borderRadius: 30, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  receiptTitle:      { fontFamily: "NexaBold", fontSize: 20, color: "#FFFFFF", marginBottom: 6 },
-  receiptSub:        { fontFamily: "NexaLight", fontSize: 12, color: "rgba(255,255,255,0.80)", textAlign: "center" },
-  perfRow:           { flexDirection: "row", alignItems: "center", backgroundColor: C.receiptPerfBg },
-  perfHalf:          { flex: 1, height: 1, backgroundColor: C.receiptPerfBord },
-  perfDot:           { width: 10, height: 10, borderRadius: 5, backgroundColor: C.receiptPerfBg, borderWidth: 1, borderColor: C.receiptPerfBord, marginHorizontal: 2 },
-  receiptBody:       { backgroundColor: C.receiptBg, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 },
-  detailRow:         { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.border },
-  detailLabel:       { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
-  detailVal:         { fontFamily: "NexaLight", fontSize: 12, color: C.text },
-  detailDivider:     { height: 1, backgroundColor: C.border, marginVertical: 8 },
-  amountVal:         { fontFamily: "NexaBold", fontSize: 18, color: C.primary },
-
-  /* steps */
-  stepsCard:      { width: "100%", backgroundColor: C.stepsCardBg, borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: C.stepsCardBord, elevation: 2, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12 },
-  stepsTitle:     { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 16 },
-  step:           { flexDirection: "row", alignItems: "flex-start", gap: 14 },
-  stepConnector:  { width: 2, height: 16, backgroundColor: C.stepConnBg, marginLeft: 18, marginVertical: 4 },
-  stepNum:        { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  stepNumText:    { fontFamily: "NexaBold", fontSize: 15 },
-  stepTitle:      { fontFamily: "NexaBold", fontSize: 13, color: C.text, marginBottom: 3, marginTop: 2 },
-  stepDesc:       { fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
-
-  infoBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, width: "100%", backgroundColor: C.infoBannerBg, borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: C.infoBannerBord },
-  infoText:   { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSec, lineHeight: 18 },
-  verifyBtn:  { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", borderRadius: 16, paddingVertical: 14, marginBottom: 16, borderWidth: 1.5, borderColor: C.primary },
-  verifyText: { fontFamily: "NexaBold", fontSize: 13, color: C.primary },
-  backBtn:    { width: "100%", borderRadius: 24, overflow: "hidden" },
-  backGrad:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  backText:   { color: "#FFFFFF", fontFamily: "NexaBold", fontSize: 15 },
-}); }

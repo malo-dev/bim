@@ -49,6 +49,9 @@ export const authApi = createApi({
         const telephone = arg && typeof arg === 'object' ? arg.telephone : arg;
         const password = arg && typeof arg === 'object' ? arg.password : undefined;
         const mustExist = arg && typeof arg === 'object' ? arg.mustExist : undefined;
+        // Inscription (design BIM NEXT) : nom complet + e-mail facultatifs.
+        const fullName = arg && typeof arg === 'object' ? arg.fullName : undefined;
+        const email = arg && typeof arg === 'object' ? arg.email : undefined;
         return {
           url: '/auth/quick-access',
           method: 'POST',
@@ -56,11 +59,42 @@ export const authApi = createApi({
             telephone: telephone || undefined,
             password: password || undefined,
             mustExist: mustExist || undefined,
+            fullName: fullName || undefined,
+            email: email || undefined,
             deviceModel: Device.modelName || undefined,
             deviceBrand: Device.brand || undefined,
           },
         };
       },
+    }),
+
+    // Connexion « Bon retour sur BIMNEXT » : numéro + mot de passe vérifié.
+    phoneLogin: builder.mutation({
+      query: ({ telephone, password }) => ({
+        url: '/auth/phone-login',
+        method: 'POST',
+        data: {
+          telephone,
+          password,
+          deviceModel: Device.modelName || undefined,
+          deviceBrand: Device.brand || undefined,
+        },
+      }),
+    }),
+
+    // Ancien compte rapide (numéro seul) : création du mot de passe à 6
+    // chiffres avec le jeton renvoyé par phone-login (403 PASSWORD_SETUP_REQUIRED).
+    setupPassword: builder.mutation({
+      query: ({ setupToken, newPassword }) => ({
+        url: '/auth/setup-password',
+        method: 'POST',
+        data: {
+          setupToken,
+          newPassword,
+          deviceModel: Device.modelName || undefined,
+          deviceBrand: Device.brand || undefined,
+        },
+      }),
     }),
 
     login: builder.mutation({
@@ -183,5 +217,7 @@ export const {
   useSendUserSOSMutation,
   useGetMyTransactionPasswordMutation,
   useQuickAccessMutation,
+  usePhoneLoginMutation,
+  useSetupPasswordMutation,
   useVerifyAccessCodeMutation,
 } = authApi;

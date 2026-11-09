@@ -41,6 +41,16 @@ export const productApi = createApi({
       providesTags: ["product"],
     }),
 
+    /* CATALOGUE BIM NEXT : eau / gaz / carburant uniquement */
+    getBimCatalogue: builder.query({
+      query: (params) => ({
+        url: "/product/bim-catalogue",
+        method: "GET",
+        params,
+      }),
+      providesTags: ["product"],
+    }),
+
     /* GET BY ID */
     getproductById: builder.query({
       query: (id) => ({
@@ -85,6 +95,7 @@ export const productApi = createApi({
 
 export const {
   useGetAllProductsQuery,
+  useGetBimCatalogueQuery,
   useGetproductByIdQuery,
   useCreateproductMutation,
   useUpdateproductMutation,

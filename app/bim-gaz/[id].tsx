@@ -364,10 +364,10 @@ export default function BimGazScreen() {
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={!isFetching ? (
           <View style={s.emptyWrap}><NoData /></View>
-        ) : null}
+        ) : undefined}
         ListFooterComponent={isFetching && !refreshing ? (
           <View style={s.loadMore}><ActivityIndicator color={C.primary} /></View>
-        ) : null}
+        ) : undefined}
         renderItem={({ item, index }) => (
           <GazCard
             item={item}

@@ -1,4 +1,6 @@
 /* eslint-disable */
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
@@ -29,6 +31,7 @@ import {
   useGetMyDeliveriesQuery,
   useAcceptOrderMutation,
   useCancelDeliveryMutation,
+  usePickupOrderMutation,
   useGetMyEarningsQuery,
   useSendSOSMutation,
   useGetMyRatingsQuery,
@@ -146,20 +149,23 @@ const STAR = "★";
 
 export default function LivreurSpaceScreen() {
   const router     = useRouter();
-  const { isDark } = useAppTheme();
-  const C          = isDark ? DARK : LIGHT;
+  const isDark = !useTh().light;
+  const C          = useBimPalette() as any;
   const insets     = useSafeAreaInsets();
-  const s          = useMemo(() => mkS(C), [isDark]);
+  const s          = useMemo(() => mkS(C), [C]);
 
   const { data: livreur, refetch: refetchProfile } = useGetMyLivreurProfileQuery(undefined);
-  const { data: availableData, refetch: refetchAvailable, isFetching: loadingAvailable } = useGetAvailableOrdersQuery(undefined);
-  const { data: myDelivData,   refetch: refetchMine }     = useGetMyDeliveriesQuery(undefined);
+  // Rafraîchissement automatique : sans lui, une nouvelle commande n'apparaissait
+  // qu'après un rafraîchissement manuel (livreurs BIM sans entreprise, ou sans socket).
+  const { data: availableData, refetch: refetchAvailable, isFetching: loadingAvailable } = useGetAvailableOrdersQuery(undefined, { pollingInterval: 15000 });
+  const { data: myDelivData,   refetch: refetchMine }     = useGetMyDeliveriesQuery(undefined, { pollingInterval: 20000 });
   const { data: earningsData,  refetch: refetchEarnings }  = useGetMyEarningsQuery(undefined);
 
   const [toggleOnline, { isLoading: togglingOnline }] = useToggleLivreurOnlineMutation();
   const [updateLocation]                              = useUpdateLivreurLocationMutation();
   const [acceptOrder,  { isLoading: accepting }]      = useAcceptOrderMutation();
   const [cancelDelivery]                              = useCancelDeliveryMutation();
+  const [pickupOrder, { isLoading: pickingUp }]       = usePickupOrderMutation();
   const [sendSOS,      { isLoading: sendingSOS }]     = useSendSOSMutation();
 
   const [gpsGranted,  setGpsGranted]  = useState(false);
@@ -205,9 +211,11 @@ export default function LivreurSpaceScreen() {
     const newOrderHandler = () => { refetchAvailable(); };
     const statusHandler   = () => { refetchMine(); };
     if (livreur?.companyId) socket.on(`company:new_order:${livreur.companyId}`, newOrderHandler);
+    socket.on("livreur:new_order", newOrderHandler);
     socket.on("order:status_updated", statusHandler);
     return () => {
       if (livreur?.companyId) socket.off(`company:new_order:${livreur.companyId}`, newOrderHandler);
+      socket.off("livreur:new_order", newOrderHandler);
       socket.off("order:status_updated", statusHandler);
     };
   }, [livreur?.companyId]);
@@ -274,7 +282,7 @@ export default function LivreurSpaceScreen() {
   async function handleConfirmCash(orderNumber: string, amount?: number) {
     Alert.alert(
       "Confirmer le paiement",
-      `Confirmez-vous avoir reçu ${amount?.toFixed(2) ?? "le montant"} EC en espèces pour la commande ${orderNumber} ? Cet argent ne sera pas déduit du portefeuille du client.`,
+      `Confirmez-vous avoir remis la commande ${orderNumber} et reçu ${amount?.toFixed(2) ?? "le montant"} EC (espèces ou Mobile Money) ? Cet argent ne sera pas déduit du portefeuille du client.`,
       [
         { text: "Annuler", style: "cancel" },
         { text: "Oui, j'ai reçu le paiement", onPress: async () => {
@@ -289,6 +297,24 @@ export default function LivreurSpaceScreen() {
         },
       ]
     );
+  }
+
+  async function handlePickup(orderNumber: string) {
+    const res: any = await pickupOrder(orderNumber);
+    if (res.error) Alert.alert("Erreur", res.error?.data?.message || "Impossible de passer la commande en route.");
+    else { Alert.alert("🚴 En route !", "Le client est prévenu que tu arrives."); refetchMine(); }
+  }
+
+  function handleConfirmDelivered(orderNumber: string) {
+    Alert.alert("Commande livrée ?", `Confirmez-vous avoir remis la commande ${orderNumber} au client ? Elle est déjà payée dans l'app : ne demandez pas d'argent.`, [
+      { text: "Annuler", style: "cancel" },
+      { text: "Oui, livrée", onPress: async () => {
+          const res: any = await markOrderPaid(orderNumber);
+          if (res.error) Alert.alert("Erreur", res.error?.data?.message || "Impossible de confirmer la livraison.");
+          else { Alert.alert("✅ Livraison confirmée", "Le client a été prévenu."); refetchMine(); }
+        },
+      },
+    ]);
   }
 
   async function handleLogout() {
@@ -359,7 +385,7 @@ export default function LivreurSpaceScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle="light-content" backgroundColor={C.headerFrom} />
+      <StatusBar barStyle="light-content" />
 
       {/* ── HEADER ── */}
       <View style={s.header}>
@@ -510,7 +536,7 @@ export default function LivreurSpaceScreen() {
                   {o.clientPhone && (
                     <TouchableOpacity style={s.infoRow} onPress={() => Linking.openURL(`tel:${o.clientPhone}`)}>
                       <Ionicons name="call-outline" size={14} color={C.green} />
-                      <Text style={[s.infoTxt, { color: C.green, fontFamily: "NexaBold" }]}>{o.clientPhone}</Text>
+                      <Text style={[s.infoTxt, { color: C.green, fontFamily: "LatoBold" }]}>{o.clientPhone}</Text>
                     </TouchableOpacity>
                   )}
                   {o.shippingAddress && (
@@ -586,7 +612,7 @@ export default function LivreurSpaceScreen() {
                     {o.clientPhone && (
                       <TouchableOpacity style={s.infoRow} onPress={() => Linking.openURL(`tel:${o.clientPhone}`)}>
                         <Ionicons name="call-outline" size={14} color={C.green} />
-                        <Text style={[s.infoTxt, { color: C.green, fontFamily: "NexaBold" }]}>{o.clientPhone}</Text>
+                        <Text style={[s.infoTxt, { color: C.green, fontFamily: "LatoBold" }]}>{o.clientPhone}</Text>
                       </TouchableOpacity>
                     )}
                     {o.shippingAddress && (
@@ -596,7 +622,22 @@ export default function LivreurSpaceScreen() {
                       </View>
                     )}
 
-                    {o.paymentStatus !== "paid" && (
+                    {(o.status === "confirmed" || o.status === "processing") && (
+                      <TouchableOpacity style={s.cashBtn} onPress={() => handlePickup(o.orderNumber)} activeOpacity={0.85} disabled={pickingUp}>
+                        <Ionicons name="bicycle-outline" size={16} color={C.onlineGreen ?? "#10B981"} />
+                        <Text style={[s.cancelTxt, { color: C.onlineGreen ?? "#10B981" }]}>J'ai récupéré la commande — en route</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <View style={{ marginTop: 6, padding: 8, borderRadius: 10, backgroundColor: C.statusBg?.(o.paymentStatus === "paid" ? "#10B981" : "#F97316") }}>
+                      <Text style={[s.infoTxt, { fontFamily: "LatoBold", color: o.paymentStatus === "paid" ? "#10B981" : "#F97316" }]}>
+                        {o.paymentStatus === "paid"
+                          ? "Déjà payée dans l'app — ne rien encaisser"
+                          : `À encaisser : ${Number(o.grandTotal ?? 0).toFixed(2)} EC${o.paymentMethod === "mobile_money" ? " (Mobile Money)" : " (espèces)"}`}
+                      </Text>
+                    </View>
+
+                    {o.paymentStatus !== "paid" ? (
                       <TouchableOpacity
                         style={s.cashBtn}
                         onPress={() => handleConfirmCash(o.orderNumber, o.grandTotal)}
@@ -604,7 +645,18 @@ export default function LivreurSpaceScreen() {
                         disabled={confirmingCash}
                       >
                         <Ionicons name="cash-outline" size={16} color={C.onlineGreen ?? "#10B981"} />
-                        <Text style={[s.cancelTxt, { color: C.onlineGreen ?? "#10B981" }]}>J'ai reçu le paiement en espèces</Text>
+                        <Text style={[s.cancelTxt, { color: C.onlineGreen ?? "#10B981" }]}>J'ai livré et reçu le paiement</Text>
+                      </TouchableOpacity>
+                    ) : o.status !== "delivered" && (
+                      // Déjà payée en EC dans l'app : il ne reste qu'à confirmer la remise.
+                      <TouchableOpacity
+                        style={s.cashBtn}
+                        onPress={() => handleConfirmDelivered(o.orderNumber)}
+                        activeOpacity={0.85}
+                        disabled={confirmingCash}
+                      >
+                        <Ionicons name="checkmark-done-outline" size={16} color={C.onlineGreen ?? "#10B981"} />
+                        <Text style={[s.cancelTxt, { color: C.onlineGreen ?? "#10B981" }]}>Déjà payée en EC — j'ai livré</Text>
                       </TouchableOpacity>
                     )}
 
@@ -647,7 +699,7 @@ export default function LivreurSpaceScreen() {
                     </View>
                   ))}
                   <View style={[s.earningsRow, s.earningsTotalRow]}>
-                    <Text style={[s.earningsLabel, { fontFamily: "NexaBold", color: C.text }]}>Livraisons totales</Text>
+                    <Text style={[s.earningsLabel, { fontFamily: "LatoBold", color: C.text }]}>Livraisons totales</Text>
                     <Text style={[s.earningsVal, { color: C.primary }]}>{earningsData.totalDeliveries ?? 0}</Text>
                   </View>
                 </View>
@@ -845,7 +897,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   topBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   bikeWrap:   { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   logoutBtn:  { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
-  headerTitle:{ flex: 1, fontFamily: "NexaBold", fontSize: 18, color: "#FFFFFF", textAlign: "center" },
+  headerTitle:{ flex: 1, fontFamily: "LatoBold", fontSize: 18, color: "#FFFFFF", textAlign: "center" },
 
   headerBody: { alignItems: "center", paddingBottom: 8, paddingTop: 2 },
   avatarCircle: {
@@ -855,10 +907,10 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     marginBottom: 10,
   },
-  userName:   { fontFamily: "NexaBold", fontSize: 22, color: "#FFFFFF" },
-  companyName:{ fontFamily: "NexaLight", fontSize: 14, color: "rgba(255,255,255,0.75)", marginTop: 2 },
+  userName:   { fontFamily: "LatoBold", fontSize: 22, color: "#FFFFFF" },
+  companyName:{ fontFamily: "LatoLight", fontSize: 14, color: "rgba(255,255,255,0.75)", marginTop: 2 },
   ratingRow:  { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 8 },
-  ratingTxt:  { fontFamily: "NexaLight", fontSize: 13, color: "rgba(255,255,255,0.75)", marginLeft: 6 },
+  ratingTxt:  { fontFamily: "LatoLight", fontSize: 13, color: "rgba(255,255,255,0.75)", marginLeft: 6 },
 
   statusPill: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -869,14 +921,14 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     marginBottom: 16, marginTop: 6,
   },
   statusDotPill: { width: 8, height: 8, borderRadius: 4 },
-  statusPillTxt: { fontFamily: "NexaBold", fontSize: 13, color: "rgba(255,255,255,0.90)" },
+  statusPillTxt: { fontFamily: "LatoBold", fontSize: 13, color: "rgba(255,255,255,0.90)" },
 
   /* Body */
   body: { padding: 14, gap: 12 },
 
   /* GPS warning */
   gpsWarn:    { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#DC2626", borderRadius: 14, padding: 14 },
-  gpsWarnTxt: { fontFamily: "NexaBold", fontSize: 14, color: "#fff", flex: 1, lineHeight: 19 },
+  gpsWarnTxt: { fontFamily: "LatoBold", fontSize: 14, color: "#fff", flex: 1, lineHeight: 19 },
 
   /* Card */
   card: {
@@ -885,7 +937,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     padding: 16,
     elevation: 1, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
   },
-  cardTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text, marginBottom: 14 },
+  cardTitle: { fontFamily: "LatoBold", fontSize: 15, color: C.text, marginBottom: 14 },
 
   /* Toggle card */
   toggleCard: {
@@ -907,8 +959,8 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   toggleRow:    { flexDirection: "row", alignItems: "center" },
   onlineDotWrap:{ width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   onlineDot:    { width: 14, height: 14, borderRadius: 7 },
-  onlineTitle:  { fontFamily: "NexaBold", fontSize: 15, color: C.text },
-  onlineSub:    { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 3, lineHeight: 17 },
+  onlineTitle:  { fontFamily: "LatoBold", fontSize: 15, color: C.text },
+  onlineSub:    { fontFamily: "LatoLight", fontSize: 12, color: C.textMut, marginTop: 3, lineHeight: 17 },
 
   /* Tabs */
   tabWrap: {
@@ -920,9 +972,9 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   },
   tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 11, borderRadius: 10, gap: 5 },
   tabBtnActive: { backgroundColor: C.primary },
-  tabTxt:  { fontFamily: "NexaBold", fontSize: 12 },
+  tabTxt:  { fontFamily: "LatoBold", fontSize: 12 },
   badge:   { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  badgeTxt:{ fontFamily: "NexaBold", fontSize: 10, color: "#fff" },
+  badgeTxt:{ fontFamily: "LatoBold", fontSize: 10, color: "#fff" },
 
   /* Order cards */
   orderCard: {
@@ -935,69 +987,69 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   orderStripe: { width: 5 },
   orderBody:   { flex: 1, padding: 14, gap: 6 },
   orderHeadRow:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  orderNum:    { fontFamily: "NexaBold", fontSize: 14, color: C.text },
-  orderTotal:  { fontFamily: "NexaBold", fontSize: 16, color: C.primary },
+  orderNum:    { fontFamily: "LatoBold", fontSize: 14, color: C.text },
+  orderTotal:  { fontFamily: "LatoBold", fontSize: 16, color: C.primary },
 
   /* Commission badge */
   commBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 2 },
-  commTxt:   { fontFamily: "NexaBold", fontSize: 12, lineHeight: 16 },
+  commTxt:   { fontFamily: "LatoBold", fontSize: 12, lineHeight: 16 },
 
   /* Info rows */
   infoRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 2 },
-  infoTxt: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.textSec, lineHeight: 18 },
+  infoTxt: { flex: 1, fontFamily: "LatoLight", fontSize: 13, color: C.textSec, lineHeight: 18 },
 
   /* Items list */
   itemsList: { marginTop: 4, gap: 3 },
-  itemTxt:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, lineHeight: 17 },
+  itemTxt:   { fontFamily: "LatoLight", fontSize: 12, color: C.textMut, lineHeight: 17 },
 
   /* Status badge */
   statusBadge:   { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, gap: 6, marginBottom: 4 },
   statusDot:     { width: 7, height: 7, borderRadius: 3.5 },
-  statusBadgeTxt:{ fontFamily: "NexaBold", fontSize: 12 },
+  statusBadgeTxt:{ fontFamily: "LatoBold", fontSize: 12 },
 
   /* Accept / Cancel buttons */
   acceptBtn:  { marginTop: 8, borderRadius: 12, overflow: "hidden" },
   acceptGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12 },
-  acceptTxt:  { fontFamily: "NexaBold", fontSize: 14, color: "#fff" },
+  acceptTxt:  { fontFamily: "LatoBold", fontSize: 14, color: "#fff" },
   cancelBtn:  { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, alignSelf: "flex-start", borderWidth: 1, borderColor: C.red + "40", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   cashBtn:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, alignSelf: "flex-start", borderWidth: 1, borderColor: C.onlineGreen + "40", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
-  cancelTxt:  { fontFamily: "NexaBold", fontSize: 13 },
+  cancelTxt:  { fontFamily: "LatoBold", fontSize: 13 },
 
   /* Empty state */
   empty:    { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.border, padding: 36, alignItems: "center", gap: 10 },
-  emptyTxt: { fontFamily: "NexaBold", fontSize: 15, color: C.textMut },
-  emptySub: { fontFamily: "NexaLight", fontSize: 13, color: C.textMut, textAlign: "center", lineHeight: 18 },
+  emptyTxt: { fontFamily: "LatoBold", fontSize: 15, color: C.textMut },
+  emptySub: { fontFamily: "LatoLight", fontSize: 13, color: C.textMut, textAlign: "center", lineHeight: 18 },
 
   /* Earnings */
   earningsRow:     { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
   earningsTotalRow:{ borderBottomWidth: 0, marginTop: 4, paddingTop: 14, borderTopWidth: 1, borderTopColor: C.border },
-  earningsLabel:   { fontFamily: "NexaLight", fontSize: 14, color: C.textSec },
-  earningsVal:     { fontFamily: "NexaBold", fontSize: 15 },
+  earningsLabel:   { fontFamily: "LatoLight", fontSize: 14, color: C.textSec },
+  earningsVal:     { fontFamily: "LatoBold", fontSize: 15 },
   recentRow:       { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
-  recentOrder:     { fontFamily: "NexaBold", fontSize: 13, color: C.text },
-  recentCompany:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut, marginTop: 2 },
-  recentAmt:       { fontFamily: "NexaBold", fontSize: 15, minWidth: 76, textAlign: "right" },
+  recentOrder:     { fontFamily: "LatoBold", fontSize: 13, color: C.text },
+  recentCompany:   { fontFamily: "LatoLight", fontSize: 12, color: C.textMut, marginTop: 2 },
+  recentAmt:       { fontFamily: "LatoBold", fontSize: 15, minWidth: 76, textAlign: "right" },
 
   /* Ratings */
   periodScroll: { paddingHorizontal: 0, paddingBottom: 4, gap: 8 },
   periodBtn:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: C.border },
-  periodTxt:    { fontFamily: "NexaBold", fontSize: 12 },
-  bigScore:     { fontSize: 52, fontFamily: "NexaBold", lineHeight: 60 },
+  periodTxt:    { fontFamily: "LatoBold", fontSize: 12 },
+  bigScore:     { fontSize: 52, fontFamily: "LatoBold", lineHeight: 60 },
   starsRow:     { flexDirection: "row", gap: 4, marginVertical: 6 },
   classBadge:   { borderRadius: 20, borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 5, marginTop: 4, marginBottom: 4 },
-  classTxt:     { fontFamily: "NexaBold", fontSize: 13 },
-  ratingCount:  { fontFamily: "NexaLight", fontSize: 13, color: C.textMut, marginBottom: 10 },
+  classTxt:     { fontFamily: "LatoBold", fontSize: 13 },
+  ratingCount:  { fontFamily: "LatoLight", fontSize: 13, color: C.textMut, marginBottom: 10 },
   distrib:      { width: "100%", gap: 7, marginTop: 8 },
   distribRow:   { flexDirection: "row", alignItems: "center", gap: 8 },
-  distribStar:  { fontFamily: "NexaBold", fontSize: 13, width: 26, color: "#FFD700" },
+  distribStar:  { fontFamily: "LatoBold", fontSize: 13, width: 26, color: "#FFD700" },
   distribBar:   { flex: 1, height: 9, borderRadius: 5, overflow: "hidden" },
   distribFill:  { height: "100%", borderRadius: 5 },
-  distribCount: { fontFamily: "NexaLight", fontSize: 12, width: 22, textAlign: "right", color: C.textMut },
+  distribCount: { fontFamily: "LatoLight", fontSize: 12, width: 22, textAlign: "right", color: C.textMut },
   reviewRow:    { paddingVertical: 14 },
   reviewTop:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
-  reviewDate:   { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
-  reviewUser:   { fontFamily: "NexaBold", fontSize: 14, color: C.text, marginBottom: 4 },
-  reviewComment:{ fontFamily: "NexaLight", fontSize: 13, fontStyle: "italic", color: C.textSec, lineHeight: 18 },
+  reviewDate:   { fontFamily: "LatoLight", fontSize: 12, color: C.textMut },
+  reviewUser:   { fontFamily: "LatoBold", fontSize: 14, color: C.text, marginBottom: 4 },
+  reviewComment:{ fontFamily: "LatoLight", fontSize: 13, fontStyle: "italic", color: C.textSec, lineHeight: 18 },
 
   /* Home card */
   homeCard: {
@@ -1006,7 +1058,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     borderWidth: 1, borderColor: C.border,
     padding: 16,
   },
-  homeCardText: { flex: 1, fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  homeCardText: { flex: 1, fontFamily: "LatoBold", fontSize: 15, color: C.text },
 
   /* SOS */
   sosFloat: { position: "absolute", right: 20 },
@@ -1016,18 +1068,18 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     elevation: 10, shadowColor: "#DC2626", shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
   },
-  sosBtnTxt: { fontFamily: "NexaBold", fontSize: 12, color: "#fff", marginTop: 2 },
+  sosBtnTxt: { fontFamily: "LatoBold", fontSize: 12, color: "#fff", marginTop: 2 },
 
   sosOverlay:   { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sosSheet:     { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingBottom: 36 },
   sosHandleWrap:{ alignItems: "center", paddingVertical: 12 },
   sosHandle:    { width: 40, height: 4, borderRadius: 2 },
-  sosSheetTitle:{ fontFamily: "NexaBold", fontSize: 20, textAlign: "center", marginBottom: 6 },
-  sosSheetSub:  { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 19, color: C.textMut },
+  sosSheetTitle:{ fontFamily: "LatoBold", fontSize: 20, textAlign: "center", marginBottom: 6 },
+  sosSheetSub:  { fontFamily: "LatoLight", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 19, color: C.textMut },
   sosOption:    { flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1.5, borderRadius: 16, padding: 14, marginBottom: 12 },
   sosOptionIcon:{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  sosOptionTitle:{ fontFamily: "NexaBold", fontSize: 15, marginBottom: 3 },
-  sosOptionDesc: { fontFamily: "NexaLight", fontSize: 13, lineHeight: 17, color: C.textMut },
+  sosOptionTitle:{ fontFamily: "LatoBold", fontSize: 15, marginBottom: 3 },
+  sosOptionDesc: { fontFamily: "LatoLight", fontSize: 13, lineHeight: 17, color: C.textMut },
   sosCancelBtn: { marginTop: 4, alignItems: "center", paddingVertical: 14 },
-  sosCancelTxt: { fontFamily: "NexaBold", fontSize: 15 },
+  sosCancelTxt: { fontFamily: "LatoBold", fontSize: 15 },
 }); }

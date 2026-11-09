@@ -1,3 +1,5 @@
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -101,9 +103,9 @@ function formatDate(iso?: string) {
 
 export default function GestionHomeScreen() {
   const router = useRouter();
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
+  const s = useMemo(() => mkS(C), [C]);
   const { unread } = useUnreadNotifications();
 
   const [activeTab, setActiveTab] = useState<TabKey>("commande");
@@ -333,7 +335,7 @@ export default function GestionHomeScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <SafeAreaView style={{ flex: 1 }}>
         {/* ── HEADER ── */}
         <View style={s.header}>
@@ -443,7 +445,7 @@ export default function GestionHomeScreen() {
             data={orders}
             keyExtractor={(item) => String(item.orderId)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune commande</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune commande</Text> : undefined}
             renderItem={({ item }) => (
               <TouchableOpacity style={s.rowCard} onPress={() => setDetailItem({ type: "commande", data: item })} activeOpacity={0.85}>
                 <View style={[s.dot, { backgroundColor: orderStatusColor(item.status, C) }]} />
@@ -462,7 +464,7 @@ export default function GestionHomeScreen() {
             data={livreurs}
             keyExtractor={(item) => String(item.livreurId)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun livreur</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun livreur</Text> : undefined}
             renderItem={({ item }) => (
               <TouchableOpacity style={s.rowCard} onPress={() => setDetailItem({ type: "livreur", data: item })} activeOpacity={0.85}>
                 <View style={[s.dot, { backgroundColor: item.isOnline ? C.green : C.muted }]} />
@@ -481,7 +483,7 @@ export default function GestionHomeScreen() {
             data={users}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun utilisateur</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun utilisateur</Text> : undefined}
             renderItem={({ item }) => (
               <TouchableOpacity style={s.rowCard} onPress={() => setDetailItem({ type: "utilisateur", data: item })} activeOpacity={0.85}>
                 <View style={[s.dot, { backgroundColor: item.isBlocked ? C.red : item.isActive ? C.green : C.muted }]} />
@@ -500,7 +502,7 @@ export default function GestionHomeScreen() {
             data={transactions}
             keyExtractor={(item, i) => String(item.id ?? i)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune transaction</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune transaction</Text> : undefined}
             renderItem={({ item }) => (
               <TouchableOpacity style={s.rowCard} onPress={() => setDetailItem({ type: "transaction", data: item })} activeOpacity={0.85}>
                 <View style={[s.dot, { backgroundColor: (C as any)[TRX_SEVERITY[item.status]] ?? C.muted }]} />
@@ -519,7 +521,7 @@ export default function GestionHomeScreen() {
             data={rechargeRequests}
             keyExtractor={(item, i) => String(rechargeRowId(item) ?? i)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune demande de recharge</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune demande de recharge</Text> : undefined}
             renderItem={({ item }) => (
               <View style={s.rowCard}>
                 <View style={[s.dot, { backgroundColor: rechargeStatusColor(item.status, C) }]} />
@@ -550,7 +552,7 @@ export default function GestionHomeScreen() {
             data={agents}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={s.list}
-            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun agent</Text> : null}
+            ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucun agent</Text> : undefined}
             renderItem={({ item }) => (
               <TouchableOpacity style={s.rowCard} onPress={() => setDetailItem({ type: "agent", data: item })} activeOpacity={0.85}>
                 <View style={[s.dot, { backgroundColor: item.isBlocked ? C.red : C.green }]} />
@@ -841,33 +843,33 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
 
   header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8 },
   profileIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primary + "15", alignItems: "center", justifyContent: "center" },
-  title: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
-  subtitle: { fontFamily: "NexaLight", fontSize: 11, color: C.muted, marginTop: 1 },
+  title: { fontFamily: "LatoBold", fontSize: 16, color: C.text },
+  subtitle: { fontFamily: "LatoLight", fontSize: 11, color: C.muted, marginTop: 1 },
   iconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   badge: { position: "absolute", top: 2, right: 2, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
-  badgeText: { fontFamily: "NexaBold", fontSize: 8, color: "#fff" },
+  badgeText: { fontFamily: "LatoBold", fontSize: 8, color: "#fff" },
 
   kpiRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingBottom: 10 },
   kpiCard: {
     flex: 1, backgroundColor: C.card, borderRadius: 16, borderWidth: 1, borderColor: C.border, paddingVertical: 10, alignItems: "center", gap: 2,
     elevation: 1, shadowColor: "#0F172A", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
   },
-  kpiValue: { fontFamily: "NexaBold", fontSize: 18, color: C.text },
-  kpiLabel: { fontFamily: "NexaLight", fontSize: 11, color: C.muted },
+  kpiValue: { fontFamily: "LatoBold", fontSize: 18, color: C.text },
+  kpiLabel: { fontFamily: "LatoLight", fontSize: 11, color: C.muted },
 
   tabRow: { paddingHorizontal: 16, paddingVertical: 6, gap: 6 },
   tabChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   tabChipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  tabChipText: { fontFamily: "NexaBold", fontSize: 12, color: C.muted },
+  tabChipText: { fontFamily: "LatoBold", fontSize: 12, color: C.muted },
   tabChipTextActive: { color: "#fff" },
 
   searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 8 },
-  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+  searchInput: { flex: 1, fontFamily: "LatoLight", fontSize: 13, color: C.text },
 
   chipRow: { paddingHorizontal: 16, paddingVertical: 6, gap: 6 },
   chip: { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 13, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  chipText: { fontFamily: "NexaBold", fontSize: 11, color: C.muted },
+  chipText: { fontFamily: "LatoBold", fontSize: 11, color: C.muted },
   chipTextActive: { color: "#fff" },
 
   list: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 24, gap: 6 },
@@ -876,39 +878,39 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     elevation: 1, shadowColor: "#0F172A", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
   },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  rowTitle: { fontFamily: "NexaBold", fontSize: 12.5, color: C.text },
-  rowSub: { fontFamily: "NexaLight", fontSize: 11, color: C.muted, marginTop: 1 },
-  rowAmount: { fontFamily: "NexaBold", fontSize: 12.5, color: C.primary },
+  rowTitle: { fontFamily: "LatoBold", fontSize: 12.5, color: C.text },
+  rowSub: { fontFamily: "LatoLight", fontSize: 11, color: C.muted, marginTop: 1 },
+  rowAmount: { fontFamily: "LatoBold", fontSize: 12.5, color: C.primary },
   rowIconBtnBlue: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.primary + "18", alignItems: "center", justifyContent: "center" },
   rowIconBtnGreen: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.green + "18", alignItems: "center", justifyContent: "center" },
   rowIconBtnRed: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.red + "18", alignItems: "center", justifyContent: "center" },
-  empty: { textAlign: "center", fontFamily: "NexaLight", color: C.muted, marginTop: 40 },
+  empty: { textAlign: "center", fontFamily: "LatoLight", color: C.muted, marginTop: 40 },
 
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
   modalCard: { width: "100%", backgroundColor: C.card, borderRadius: 20, padding: 20 },
-  modalTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text, marginBottom: 12 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "NexaLight", fontSize: 14, color: C.text },
+  modalTitle: { fontFamily: "LatoBold", fontSize: 15, color: C.text, marginBottom: 12 },
+  input: { borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "LatoLight", fontSize: 14, color: C.text },
   modalBtn: { flex: 1, borderRadius: 14, paddingVertical: 13, alignItems: "center" },
-  modalBtnText: { fontFamily: "NexaBold", fontSize: 14 },
+  modalBtnText: { fontFamily: "LatoBold", fontSize: 14 },
 
   sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheetCard: { backgroundColor: C.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 24, maxHeight: "85%" },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: "center", marginBottom: 14 },
   sheetHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  sheetTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.text, flex: 1 },
+  sheetTitle: { fontFamily: "LatoBold", fontSize: 17, color: C.text, flex: 1 },
 
   sheetBadge: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 4 },
-  sheetBadgeText: { fontFamily: "NexaBold", fontSize: 11 },
+  sheetBadgeText: { fontFamily: "LatoBold", fontSize: 11 },
 
-  sectionLabel: { fontFamily: "NexaBold", fontSize: 10.5, color: C.muted, letterSpacing: 0.5, marginTop: 16, marginBottom: 4 },
-  sheetRowText: { fontFamily: "NexaBold", fontSize: 14, color: C.text },
-  sheetRowSub: { fontFamily: "NexaLight", fontSize: 12.5, color: C.muted, marginTop: 1 },
-  sheetAmount: { fontFamily: "NexaBold", fontSize: 22, color: C.primary, marginTop: 2 },
+  sectionLabel: { fontFamily: "LatoBold", fontSize: 10.5, color: C.muted, letterSpacing: 0.5, marginTop: 16, marginBottom: 4 },
+  sheetRowText: { fontFamily: "LatoBold", fontSize: 14, color: C.text },
+  sheetRowSub: { fontFamily: "LatoLight", fontSize: 12.5, color: C.muted, marginTop: 1 },
+  sheetAmount: { fontFamily: "LatoBold", fontSize: 22, color: C.primary, marginTop: 2 },
 
   sheetChipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
 
   actionBtn: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.bg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: C.border },
-  actionBtnText: { fontFamily: "NexaBold", fontSize: 13, color: C.text },
+  actionBtnText: { fontFamily: "LatoBold", fontSize: 13, color: C.text },
   destructiveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 16, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: C.red + "40" },
-  destructiveBtnText: { fontFamily: "NexaBold", fontSize: 13, color: C.red },
+  destructiveBtnText: { fontFamily: "LatoBold", fontSize: 13, color: C.red },
 }); }

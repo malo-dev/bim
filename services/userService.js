@@ -63,10 +63,11 @@ export const userApi = createApi({
     }),
 
     deleteAccount: builder.mutation({
-      query: ({ password }) => ({
+      // Compte avec mot de passe : { password } ; compte créé sans mot de passe : { confirm: true }.
+      query: ({ password, confirm }) => ({
         url: "/auth/account",
         method: "DELETE",
-        data: { password },
+        data: password ? { password } : { confirm: !!confirm },
       }),
       invalidatesTags: [{ type: "User", id: "LIST" }],
     }),

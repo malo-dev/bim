@@ -1,21 +1,22 @@
 import { Stack } from "expo-router";
 import React from "react";
+import { BimBackground } from "@/components/bim/ui";
 
-export default function TRansportLayout() {
+/** Taxi + espace chauffeur : fond du thème BIM NEXT derrière les pages (celles qui ont leur propre fond le gardent). */
+export default function TransportLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false, // désactive le header natif
-      }}
-    >
-      <Stack.Screen name="[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="choix-gamme" options={{ headerShown: false }} />
-      <Stack.Screen name="choix-chauffeur" options={{ headerShown: false }} />
-      <Stack.Screen name="suivi" options={{ headerShown: false }} />
-      <Stack.Screen name="fin-course" options={{ headerShown: false }} />
-      <Stack.Screen name="historique" options={{ headerShown: false }} />
-      <Stack.Screen name="mode-chauffeur" options={{ headerShown: false }} />
-      <Stack.Screen name="course-en-cours" options={{ headerShown: false }} />
-    </Stack>
+    <BimBackground enter={false}>
+      <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 260, contentStyle: { backgroundColor: "transparent" } }}>
+        <Stack.Screen name="[id]" />
+        <Stack.Screen name="choix-gamme" />
+        <Stack.Screen name="choix-chauffeur" />
+        <Stack.Screen name="suivi" />
+        <Stack.Screen name="fin-course" />
+        <Stack.Screen name="historique" />
+        <Stack.Screen name="mode-chauffeur" />
+        <Stack.Screen name="course-en-cours" />
+        <Stack.Screen name="chauffeur-access" />
+      </Stack>
+    </BimBackground>
   );
 }

@@ -20,6 +20,20 @@ import logo from "@/assets/images/logo.jpeg";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import Constants from "expo-constants";
+import { BimAlertHost } from "@/components/bim/alert";
+import { BimThemeProvider, useTh } from "@/components/bim/theme";
+import { BLogo } from "@/components/bim/ui";
+
+/** Écran de reprise aux couleurs du thème BIM NEXT. */
+function ResumeCover() {
+  const th = useTh();
+  return (
+    <>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: th.base, backgroundImage: th.bgCss }]} />
+      <BLogo size={96} font={44} />
+    </>
+  );
+}
 
 /* ─── Config notifications (foreground + Android channel) ───────────── */
 Notifications.setNotificationHandler({
@@ -89,7 +103,7 @@ export default function RootLayout() {
   /* ── Écran de reprise (arrière-plan → premier plan) ── */
   const [showResume,   setShowResume]   = useState(false);
   const resumeOpacity  = useRef(new Animated.Value(1)).current;
-  const appStateRef    = useRef<AppStateStatus>(AppState.currentState);
+  const appStateRef    = useRef<AppStateStatus>((AppState.currentState ?? "active") as AppStateStatus);
   const backgroundedAt = useRef<number | null>(null); // timestamp ms quand l'app passe en background
 
   useEffect(() => {
@@ -202,6 +216,11 @@ export default function RootLayout() {
     NexaLight:   require("@/assets/fonts/Nexa-ExtraLight.ttf"),
     NexaRegular: require("@/assets/fonts/Nexa-ExtraLight.ttf"),
     NexaBold:    require("@/assets/fonts/Nexa-Heavy.ttf"),
+    // Police du design BIM NEXT (thème Graphite)
+    LatoLight:   require("@/assets/fonts/Lato_300Light.ttf"),
+    Lato:        require("@/assets/fonts/Lato_400Regular.ttf"),
+    LatoItalic:  require("@/assets/fonts/Lato_400Regular_Italic.ttf"),
+    LatoBold:    require("@/assets/fonts/Lato_700Bold.ttf"),
   });
 
   useEffect(() => {
@@ -222,7 +241,7 @@ export default function RootLayout() {
   /* ── Loading ── */
   if (!fontsLoaded || !themeLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.primary }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#041659" }}>
         <ActivityIndicator size="large" color="#fff" />
       </View>
     );
@@ -232,6 +251,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <AppThemeContext.Provider value={{ isDark, followSystem, toggleTheme, setFollowSystem }}>
+      <BimThemeProvider>
       <Provider store={store}>
         <PersistGate
           persistor={persistor}
@@ -245,7 +265,7 @@ export default function RootLayout() {
             <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
               <AuthGuard>
               <ErrorBoundary>
-              <Stack>
+              <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 260 }}>
                 <Stack.Screen name="onboarding"       options={{ headerShown: false }} />
                 <Stack.Screen name="retrait"          options={{ headerShown: false }} />
                 <Stack.Screen name="history"          options={{ headerShown: false }} />
@@ -281,7 +301,9 @@ export default function RootLayout() {
                 <Stack.Screen name="products"         options={{ headerShown: false }} />
                 <Stack.Screen name="product"           options={{ headerShown: false }} />
                 <Stack.Screen name="solde"            options={{ headerShown: false }} />
-                <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal" }} />
+                <Stack.Screen name="commande"         options={{ headerShown: false }} />
+                <Stack.Screen name="reglages"         options={{ headerShown: false }} />
+                <Stack.Screen name="modal"            options={{ presentation: "modal", title: "Modal", headerShown: true }} />
               </Stack>
               </ErrorBoundary>
 
@@ -297,30 +319,16 @@ export default function RootLayout() {
                   ]}
                   pointerEvents="none"
                 >
-                  <LinearGradient
-                    colors={["#060D1F", "#091528", "#0353CC"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={{
-                    width: 96, height: 96, borderRadius: 26,
-                    backgroundColor: "rgba(255,255,255,0.12)",
-                    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)",
-                    alignItems: "center", justifyContent: "center",
-                    overflow: "hidden",
-                    elevation: 14,
-                    shadowColor: "#000", shadowOpacity: 0.3,
-                    shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
-                  }}>
-                    <Image source={logo} style={{ width: 78, height: 78 }} resizeMode="contain" />
-                  </View>
+                  <ResumeCover />
                 </Animated.View>
               )}
+              {/* Pop-ups BIM (remplacent Alert.alert partout, identiques Android / iPhone) */}
+              <BimAlertHost />
             </ThemeProvider>
           </SocketProvider>
         </PersistGate>
       </Provider>
+      </BimThemeProvider>
     </AppThemeContext.Provider>
     </GestureHandlerRootView>
   );

@@ -1,699 +1,166 @@
-import React, { useRef, useState, useMemo, useEffect } from "react";
-import {
-  Alert,
-  Animated,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+/**
+ * Langue et réglages avancés (design BIM NEXT) : langue, couleurs, e-mail de notification,
+ * espaces professionnels (révélés par code d'accès). La suppression du compte est dans Profil.
+ */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useLogOutMutation, useVerifyAccessCodeMutation } from "@/services/authService";
-import BlinkingCursor from "@/components/ui/BlinkingCursor";
-import { useDeleteAccountMutation, useGetUserByIdQuery, useUpdateUserMutation } from "@/services/userService";
-import { useAppTheme } from "@/app/_layout";
-import { useUnreadNotifications } from "@/hooks/useUnreadNotifications";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { changeLanguage } from "@/i18n";
+import { Alert, Pressable, Switch, TextInput, View } from "react-native";
+import type { TextInputInstance } from "react-native";
+import { useAppTheme } from "@/app/_layout";
+import { BimIcon, BimIconName } from "@/components/bim/icons";
+import { useTh } from "@/components/bim/theme";
+import { Appear, BimPage, Glass, MenuRow, PillButton, PressScale, SectionLabel, T, TextField } from "@/components/bim/ui";
 import { StaffRole } from "@/constants/accessCodes";
-
-/* ─── PALETTE ─────────────────────────────────────────────────────────── */
-const LIGHT = {
-  primary:    "#0035C5",
-  bg:         "#F9F9F9",
-  surface:    "#FFFFFF",
-  outline:    "#747688",
-  secondary:  "#5C5E63",
-  onSurface:  "#1A1C1C",
-  outlineVar: "#C4C5DA",
-  error:      "#BA1A1A",
-  errCont:    "#FFDAD6",
-  errOnCont:  "#93000A",
-  container:  "#EEEEEE",
-};
-const DARK = {
-  primary:    "#4D8DFF",
-  bg:         "#0B1220",
-  surface:    "#1A2540",
-  outline:    "#6B7A99",
-  secondary:  "#A3B4D0",
-  onSurface:  "#EAF0FF",
-  outlineVar: "rgba(31,42,68,0.80)",
-  error:      "#DC2626",
-  errCont:    "#3D1010",
-  errOnCont:  "#FFAAAA",
-  container:  "#0F1A2E",
-};
-
+import { changeLanguage } from "@/i18n";
+import { useVerifyAccessCodeMutation } from "@/services/authService";
+import { useGetUserByIdQuery, useUpdateUserMutation } from "@/services/userService";
 
 const LANGUAGES = [
-  { code: "fr", label: "🇫🇷 Français" },
-  { code: "en", label: "🇬🇧 English" },
-  { code: "ln", label: "🇨🇩 Lingala" },
-  { code: "sw", label: "🇹🇿 Swahili" },
+  { code: "fr", label: "Français", flag: "🇫🇷" },
+  { code: "en", label: "English", flag: "🇬🇧" },
+  { code: "ln", label: "Lingala", flag: "🇨🇩" },
+  { code: "sw", label: "Swahili", flag: "🇹🇿" },
+];
+const STAFF: { role: StaffRole; label: string; icon: BimIconName; route: string }[] = [
+  { role: "LIVREUR" as StaffRole, label: "Espace livreur", icon: "bike", route: "/livreur/login" },
+  { role: "CHAUFFEUR" as StaffRole, label: "Espace chauffeur", icon: "car", route: "/transport/mode-chauffeur" },
+  { role: "BIM" as StaffRole, label: "Espace gestion", icon: "shield", route: "/gestion/login" },
 ];
 
-/* ─── SECTION LABEL ──────────────────────────────────────────────────── */
-function SectionLabel({
-  icon, title, danger = false, colors,
-}: { icon: string; title: string; danger?: boolean; colors: typeof LIGHT }) {
-  const col = danger ? colors.error : colors.primary;
-  const textCol = danger ? colors.error : colors.outline;
-  return (
-    <View style={sl.row}>
-      <Ionicons name={icon as any} size={14} color={col} />
-      <Text style={[sl.text, { color: textCol }]}>{title}</Text>
-    </View>
-  );
-}
-
-/* ─── MENU ROW ────────────────────────────────────────────────────────── */
-function MenuRow({
-  icon, label, isLast, onPress, colors,
-}: { icon: string; label: string; isLast: boolean; onPress: () => void; colors: typeof LIGHT }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  return (
-    <TouchableOpacity
-      activeOpacity={1}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true }).start()}
-      onPress={onPress}
-    >
-      <Animated.View style={[mr.row, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.outlineVar + "40" }, { transform: [{ scale }] }]}>
-        <View style={[mr.iconBox, { backgroundColor: colors.primary + "12" }]}>
-          <Ionicons name={icon as any} size={20} color={colors.primary} />
-        </View>
-        <Text style={[mr.label, { color: colors.onSurface }]}>{label}</Text>
-        <Ionicons name="chevron-forward" size={18} color={colors.outline} />
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-/* ─── MAIN ────────────────────────────────────────────────────────────── */
 export default function Params() {
-  const insets = useSafeAreaInsets();
+  const th = useTh();
   const router = useRouter();
-  const { followSystem, isDark, toggleTheme, setFollowSystem } = useAppTheme();
-  const { unread } = useUnreadNotifications();
-  const { t, i18n } = useTranslation();
-  const C = isDark ? DARK : LIGHT;
-  const s  = useMemo(() => mkS(C), [isDark]);
-  const m  = useMemo(() => mkM(C), [isDark]);
-  const dm = useMemo(() => mkDm(C), [isDark]);
-
-  const [logOut,        { isLoading }]           = useLogOutMutation();
-  const [verifyAccessCode] = useVerifyAccessCodeMutation();
-  const [deleteAccount, { isLoading: isDeleting }] = useDeleteAccountMutation();
-  const [updateUser,    { isLoading: isSavingEmail }] = useUpdateUserMutation();
-
-  const [langModal,   setLangModal]   = useState(false);
-  const [deleteModal, setDeleteModal] = useState(false);
-  const [deletePwd,   setDeletePwd]   = useState("");
-  const [showPwd,     setShowPwd]     = useState(false);
-
+  const { i18n } = useTranslation();
+  const { isDark, toggleTheme, followSystem, setFollowSystem } = useAppTheme();
   const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
-  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
+  const [lang, setLang] = useState(i18n.language ?? "fr");
+  const [notifEmail, setNotifEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [codeFocus, setCodeFocus] = useState(false);
+  const [roles, setRoles] = useState<StaffRole[]>([]);
+  const codeRef = useRef<TextInputInstance>(null);
+  const [verifyAccessCode, { isLoading: checking }] = useVerifyAccessCodeMutation();
+  const [updateUser, { isLoading: saving }] = useUpdateUserMutation();
 
-  const [notificationEmail, setNotificationEmail] = useState("");
   useEffect(() => {
-    if (user?.notificationEmail) setNotificationEmail(user.notificationEmail);
-  }, [user?.notificationEmail]);
-
-  const [accessCode, setAccessCode] = useState("");
-  const accessCodeInputRef = useRef<TextInput>(null);
-  const [accessCodeFocused, setAccessCodeFocused] = useState(false);
-  const [revealedRoles, setRevealedRoles] = useState<StaffRole[]>([]);
-  useEffect(() => {
-    AsyncStorage.getItem("revealedStaffRoles").then(v => setRevealedRoles(v ? JSON.parse(v) : []));
+    AsyncStorage.getItem("userId").then(setUserId);
+    AsyncStorage.getItem("revealedStaffRoles").then((v) => setRoles(v ? JSON.parse(v) : []));
   }, []);
+  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
+  useEffect(() => { if (user?.notificationEmail) setNotifEmail(user.notificationEmail); }, [user?.notificationEmail]);
 
-  const handleAccessCode = async () => {
-    try {
-      const res: any = await verifyAccessCode(accessCode.trim()).unwrap();
-      const role = res.role as StaffRole;
-      const next = revealedRoles.includes(role) ? revealedRoles : [...revealedRoles, role];
-      setRevealedRoles(next);
-      await AsyncStorage.setItem("revealedStaffRoles", JSON.stringify(next));
-      setAccessCode("");
-    } catch {
-      Alert.alert(t("common.error"), "Code invalide.");
-    }
-  };
+  const pickLang = async (c: string) => { setLang(c); await changeLanguage(c); };
 
-  const handleSaveNotificationEmail = async () => {
+  const saveEmail = async () => {
     if (!userId) return;
-    if (notificationEmail.trim() && !notificationEmail.includes("@")) {
-      Alert.alert(t("common.error"), "Adresse email invalide.");
-      return;
-    }
+    if (notifEmail.trim() && !notifEmail.includes("@")) { Alert.alert("E-mail invalide", "Vérifie l'adresse e-mail."); return; }
     try {
       const fd = new FormData();
-      fd.append("notificationEmail", notificationEmail.trim());
+      fd.append("notificationEmail", notifEmail.trim());
       await updateUser({ id: userId, formData: fd }).unwrap();
-      Alert.alert("✅", "E-mail de notification enregistré.");
+      Alert.alert("E-mail enregistré", "Tu recevras aussi tes notifications de commande par e-mail.");
     } catch (err: any) {
-      Alert.alert(t("common.error"), err?.data?.message || "Impossible d'enregistrer.");
+      Alert.alert("Erreur", err?.data?.message || "Impossible d'enregistrer l'e-mail.");
     }
   };
 
-  const currentLang = i18n.language ?? "fr";
-  const currentLangLabel = LANGUAGES.find(l => l.code === currentLang)?.label ?? "🇫🇷 Français";
-
-  const NAV = [
-    { id: "profile",       icon: "person-outline",            label: t("params.profile"),       route: "/profile"      },
-    { id: "notifications", icon: "notifications-outline",     label: t("params.notifications"), route: "/notification" },
-    { id: "favorites",     icon: "heart-outline",             label: "Mes Favoris",             route: "/favorites"    },
-    { id: "history",       icon: "time-outline",              label: t("params.history"),       route: "/history"      },
-    { id: "formation",     icon: "play-circle-outline",       label: "Formation",               route: "/formation"    },
-    { id: "support",       icon: "help-circle-outline",       label: t("params.support"),       route: "/support"      },
-    { id: "bim-sos",       icon: "warning-outline",           label: "BIM SOS",                 route: "/bim-sos"      },
-    { id: "faq",           icon: "help-buoy-outline",         label: t("params.faq"),           route: "/faqs"         },
-    { id: "about",         icon: "information-circle-outline",label: t("params.about"),         route: "/apropos"      },
-  ];
-
-  const handleLogout = async () => {
-    const accountType = await AsyncStorage.getItem("accountType");
-    const isQuick = accountType === "quick";
-
-    Alert.alert(
-      t("params.logoutTitle"),
-      isQuick
-        ? "Vous n'avez pas de mot de passe. Si vous vous déconnectez, vous risquez de ne plus jamais pouvoir accéder à ce compte (et à votre solde), sauf si vous avez enregistré votre numéro de téléphone."
-        : t("params.logoutMsg"),
-      [
-        { text: t("common.cancel"), style: "cancel" },
-        {
-          text: t("params.logoutConfirm"), style: "destructive",
-          onPress: async () => {
-            try {
-              const email = await AsyncStorage.getItem("email");
-              const privacyAcceptedAt = await AsyncStorage.getItem("privacyAcceptedAt");
-              await logOut({ email: String(email) });
-              await AsyncStorage.clear();
-              if (email) await AsyncStorage.setItem("email", email);
-              if (privacyAcceptedAt) await AsyncStorage.setItem("privacyAcceptedAt", privacyAcceptedAt);
-              router.replace({ pathname: "/onboarding", params: { step: "phone" } });
-            } catch (err: any) {
-              Alert.alert(err?.data?.message || err?.data?.error || t("common.error"));
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!deletePwd.trim()) {
-      Alert.alert(t("common.error"), t("params.deleteAccountPwdPlaceholder"));
-      return;
-    }
+  const checkCode = async () => {
+    if (!code) return;
     try {
-      await deleteAccount({ password: deletePwd }).unwrap();
-      setDeleteModal(false);
-      setDeletePwd("");
-      await AsyncStorage.clear();
-      router.replace("/onboarding");
-    } catch (err: any) {
-      Alert.alert(t("common.error"), err?.data?.message || t("common.error"));
+      const res: any = await verifyAccessCode(code.trim()).unwrap();
+      const role = res.role as StaffRole;
+      const next = roles.includes(role) ? roles : [...roles, role];
+      setRoles(next);
+      await AsyncStorage.setItem("revealedStaffRoles", JSON.stringify(next));
+      setCode("");
+      Alert.alert("Accès accordé", "Ton espace professionnel est disponible ci-dessous.");
+    } catch {
+      Alert.alert("Code invalide", "Ce code d'accès n'est pas reconnu.");
     }
   };
-
-  const HEADER_H = (Platform.OS === "ios" ? insets.top : StatusBar.currentHeight ?? 0) + 64;
 
   return (
-    <View style={[s.root, { backgroundColor: C.bg }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
-
-      {/* ── FIXED TOP BAR ── */}
-      <View style={[s.topBar, { backgroundColor: C.surface, paddingTop: Platform.OS === "ios" ? insets.top : (StatusBar.currentHeight ?? 0) + 8 }]}>
-        <TouchableOpacity onPress={() => router.back()} style={s.topSide}>
-          <Ionicons name="arrow-back" size={22} color={C.onSurface} />
-        </TouchableOpacity>
-
-        <Text style={[s.topTitle, { color: C.onSurface }]}>Paramètres</Text>
-
-        <TouchableOpacity onPress={() => router.push("/notification")} style={s.topSide}>
-          <View style={{ position: "relative" }}>
-            <Ionicons name="notifications-outline" size={22} color={C.onSurface} />
-            {unread > 0 && (
-              <View style={[s.notifBadge, { backgroundColor: "#DC0302" }]}>
-                <Text style={s.notifBadgeText}>{unread > 99 ? "99+" : unread}</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── LANGUAGE MODAL ── */}
-      <Modal visible={langModal} transparent animationType="fade" onRequestClose={() => setLangModal(false)}>
-        <Pressable style={m.overlay} onPress={() => setLangModal(false)}>
-          <Pressable style={m.box}>
-            <Text style={m.title}>{t("language.select")}</Text>
-            {LANGUAGES.map(lang => {
-              const sel = lang.code === currentLang;
-              return (
-                <TouchableOpacity
-                  key={lang.code}
-                  style={[m.option, sel && m.optionSel]}
-                  onPress={async () => { setLangModal(false); await changeLanguage(lang.code); }}
-                >
-                  <Text style={m.optionText}>{lang.label}</Text>
-                  {sel && <Ionicons name="checkmark-circle" size={18} color={C.primary} />}
-                </TouchableOpacity>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── DELETE MODAL ── */}
-      <Modal visible={deleteModal} transparent animationType="slide"
-        onRequestClose={() => { setDeleteModal(false); setDeletePwd(""); }}>
-        <Pressable style={dm.overlay} onPress={() => { setDeleteModal(false); setDeletePwd(""); }}>
-          <Pressable style={dm.sheet}>
-
-            {/* Poignée */}
-            <View style={dm.handle} />
-
-            {/* Icône */}
-            <View style={dm.iconWrap}>
-              <Ionicons name="trash" size={26} color={C.error} />
-            </View>
-
-            {/* Titre */}
-            <Text style={dm.title}>Supprimer le compte</Text>
-
-            {/* Message */}
-            <Text style={dm.msg}>
-              Entrez votre mot de passe pour confirmer. Cette action est <Text style={dm.bold}>irréversible</Text>.
-            </Text>
-
-            {/* Champ mot de passe */}
-            <View style={dm.inputRow}>
-              <Ionicons name="lock-closed-outline" size={16} color={C.outline} />
-              <TextInput
-                style={dm.input}
-                placeholder="Mot de passe"
-                placeholderTextColor={C.outline}
-                secureTextEntry={!showPwd}
-                value={deletePwd}
-                onChangeText={setDeletePwd}
-                autoCapitalize="none"
-              />
-              <TouchableOpacity onPress={() => setShowPwd(v => !v)}>
-                <Ionicons name={showPwd ? "eye-off-outline" : "eye-outline"} size={16} color={C.outline} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Boutons */}
-            <View style={dm.btnRow}>
-              <TouchableOpacity style={dm.btnCancel}
-                onPress={() => { setDeleteModal(false); setDeletePwd(""); }}>
-                <Text style={dm.btnCancelTxt}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[dm.btnDelete, isDeleting && { opacity: 0.6 }]}
-                onPress={handleDeleteAccount} disabled={isDeleting}>
-                {isDeleting
-                  ? <Ionicons name="hourglass-outline" size={16} color="#fff" />
-                  : <Text style={dm.btnDeleteTxt}>Supprimer</Text>
-                }
-              </TouchableOpacity>
-            </View>
-
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      {/* ── SCROLL ── */}
-      <ScrollView
-        style={{ flex: 1, marginBottom: insets.bottom + 84 }}
-        contentContainerStyle={[s.scroll, { paddingTop: HEADER_H + 8 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Page header */}
-        <View style={s.pageHeader}>
-          <Text style={[s.pageSub, { color: C.secondary }]}>{t("params.subtitle")}</Text>
+    <BimPage title="Réglages avancés" onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))}>
+      <Appear kind="rise" delay={60}>
+        <SectionLabel style={{ marginTop: 20 }}>LANGUE</SectionLabel>
+        <View style={{ marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {LANGUAGES.map((l) => {
+            const on = lang === l.code;
+            return (
+              <PressScale key={l.code} scaleTo={0.96} onPress={() => pickLang(l.code)} accessibilityLabel={l.label} style={{ width: "48%", flexGrow: 1 }}>
+                <View style={{ height: 54, borderRadius: 27, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16,
+                  borderWidth: on ? 2 : 1, borderColor: on ? th.fg : th.glass(0.2), backgroundColor: on ? th.glass(0.22) : th.glassFill(0.12), boxShadow: th.glassFx }}>
+                  <T size={20}>{l.flag}</T>
+                  <T w={on ? "bold" : "regular"} size={15} style={{ flex: 1 }}>{l.label}</T>
+                  {on && <BimIcon name="check" size={16} color={th.fg} strokeWidth={2.6} />}
+                </View>
+              </PressScale>
+            );
+          })}
         </View>
+      </Appear>
 
-        {/* ── PRÉFÉRENCES ── */}
-        <View style={s.section}>
-          <SectionLabel icon="settings-outline" title={t("params.preferences")} colors={C} />
-          <View style={[s.card, { backgroundColor: C.surface }]}>
-            {/* Langue */}
-            <View style={[s.prefRow]}>
-              <View style={s.prefLeft}>
-                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
-                  <Ionicons name="language-outline" size={20} color={C.primary} />
+      <Appear kind="rise" delay={120}>
+        <SectionLabel style={{ marginTop: 22 }}>APPARENCE</SectionLabel>
+        <Glass a={0.12} b={0.2} radius={22} style={{ marginTop: 8, overflow: "hidden" }}>
+          <MenuRow icon="palette" label="Couleurs de l'app" value={th.name} onPress={() => router.push("/theme" as any)} last />
+        </Glass>
+      </Appear>
+
+      <Appear kind="rise" delay={180}>
+        <SectionLabel style={{ marginTop: 22 }}>NOTIFICATIONS PAR E-MAIL</SectionLabel>
+        <Glass a={0.12} b={0.2} radius={24} style={{ marginTop: 8, padding: 14, gap: 12 }}>
+          <T size={13} color={th.muted} style={{ lineHeight: 19 }}>Facultatif : reçois aussi tes notifications de commande par e-mail.</T>
+          <TextField id="pa-email" label="E-mail de notification" hideLabel icon="mail" value={notifEmail} onChange={setNotifEmail} keyboardType="email-address" placeholder="nom@exemple.com" />
+          <PillButton variant="accent" label={saving ? "Enregistrement…" : "Enregistrer"} onPress={saveEmail} disabled={saving} />
+        </Glass>
+      </Appear>
+
+      {roles.length > 0 && (
+        <Appear kind="rise">
+          <SectionLabel style={{ marginTop: 22 }}>ESPACES PROFESSIONNELS</SectionLabel>
+          <View style={{ marginTop: 8, gap: 8 }}>
+            {STAFF.filter((s) => roles.includes(s.role)).map((s) => (
+              <PressScale key={s.role} scaleTo={0.97} onPress={() => router.push(s.route as any)} accessibilityLabel={s.label}
+                style={{ height: 58, borderRadius: 29, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 6, paddingRight: 18, backgroundColor: th.accent }}>
+                <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: th.knob, alignItems: "center", justifyContent: "center" }}>
+                  <BimIcon name={s.icon} size={20} color="#FFFFFF" />
                 </View>
-                <Text style={[s.prefLabel, { color: C.onSurface }]}>{t("params.language")}</Text>
-              </View>
-              <TouchableOpacity style={[s.langPill, { borderColor: C.outlineVar, backgroundColor: C.surface }]} onPress={() => setLangModal(true)}>
-                <Text style={[s.langPillText, { color: C.onSurface }]}>{currentLangLabel}</Text>
-                <Ionicons name="chevron-down" size={15} color={C.outline} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
-
-            {/* Thème système */}
-            <View style={s.prefRow}>
-              <View style={s.prefLeft}>
-                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
-                  <Ionicons name="phone-portrait-outline" size={20} color={C.primary} />
-                </View>
-                <View>
-                  <Text style={[s.prefLabel, { color: C.onSurface }]}>{t("params.followSystem")}</Text>
-                  <Text style={[s.prefSub, { color: C.outline }]}>{t("params.followSystemOn")}</Text>
-                </View>
-              </View>
-              <Switch
-                value={followSystem}
-                onValueChange={setFollowSystem}
-                trackColor={{ false: C.container, true: C.primary }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor={C.container}
-              />
-            </View>
-
-            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
-
-            {/* Mode sombre */}
-            <View style={[s.prefRow, followSystem && { opacity: 0.45 }]}>
-              <View style={s.prefLeft}>
-                <View style={[s.prefIcon, { backgroundColor: C.container }]}>
-                  <Ionicons name={isDark ? "moon" : "sunny-outline"} size={20} color={C.secondary} />
-                </View>
-                <View>
-                  <Text style={[s.prefLabel, { color: C.secondary }]}>{t("params.darkMode")}</Text>
-                  <Text style={[s.prefSub, { color: C.outline }]}>{t("params.darkModeAuto")}</Text>
-                </View>
-              </View>
-              <Switch
-                value={isDark}
-                onValueChange={followSystem ? undefined : toggleTheme}
-                disabled={followSystem}
-                trackColor={{ false: C.container, true: C.secondary }}
-                thumbColor={followSystem ? "rgba(255,255,255,0.5)" : "#FFFFFF"}
-                ios_backgroundColor={C.container}
-              />
-            </View>
-
-            <View style={[s.hdiv, { backgroundColor: C.outlineVar + "30" }]} />
-
-            {/* E-mail de notification (optionnel) */}
-            <View style={{ paddingVertical: 14, gap: 10 }}>
-              <View style={s.prefLeft}>
-                <View style={[s.prefIcon, { backgroundColor: C.primary + "12" }]}>
-                  <Ionicons name="mail-outline" size={20} color={C.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.prefLabel, { color: C.onSurface }]}>E-mail pour les notifications (optionnel)</Text>
-                  <Text style={[s.prefSub, { color: C.outline }]}>Reçois aussi tes notifications de commande par e-mail</Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                  style={{
-                    flex: 1, borderWidth: 1, borderColor: C.outlineVar, borderRadius: 12,
-                    paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: C.onSurface,
-                  }}
-                  placeholder="votre@email.com"
-                  placeholderTextColor={C.outline}
-                  value={notificationEmail}
-                  onChangeText={setNotificationEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-                <TouchableOpacity
-                  style={{ backgroundColor: C.primary, borderRadius: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", opacity: isSavingEmail ? 0.6 : 1 }}
-                  onPress={handleSaveNotificationEmail}
-                  disabled={isSavingEmail}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Enregistrer</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* ── NAVIGATION ── */}
-        <View style={s.section}>
-          <SectionLabel icon="grid-outline" title={t("params.navigation")} colors={C} />
-          <View style={[s.card, { backgroundColor: C.surface }]}>
-            {NAV.map((item, i) => (
-              <MenuRow
-                key={item.id}
-                icon={item.icon}
-                label={item.label}
-                isLast={i === NAV.length - 1}
-                onPress={() => router.push(item.route as any)}
-                colors={C}
-              />
+                <T w="bold" size={15} color={th.onAccent} style={{ flex: 1 }}>{s.label}</T>
+                <BimIcon name="chevron" size={18} color={th.onAccent} />
+              </PressScale>
             ))}
+            <Glass a={0.12} b={0.2} radius={22} style={{ paddingHorizontal: 16, paddingVertical: 4 }}>
+              <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12 }}>
+                <T size={14} style={{ flex: 1 }}>Suivre le système (espaces pro)</T>
+                <Switch value={followSystem} onValueChange={setFollowSystem} trackColor={{ false: th.glass(0.25), true: th.knob }} thumbColor="#FFFFFF" />
+              </View>
+              <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: th.glass(0.12) }}>
+                <T size={14} style={{ flex: 1 }} color={followSystem ? th.muted : th.fg}>Mode sombre (espaces pro)</T>
+                <Switch value={isDark} onValueChange={followSystem ? undefined : toggleTheme} disabled={followSystem} trackColor={{ false: th.glass(0.25), true: th.knob }} thumbColor="#FFFFFF" />
+              </View>
+            </Glass>
           </View>
-        </View>
+        </Appear>
+      )}
 
-        {/* ── ZONE DE DANGER ── */}
-        <View style={s.section}>
-          <SectionLabel icon="warning-outline" title={t("params.deleteAccountSection")} danger colors={C} />
-          <TouchableOpacity
-            style={s.dangerCard}
-            onPress={() => setDeleteModal(true)}
-            activeOpacity={0.8}
-          >
-            <View style={s.dangerIcon}>
-              <Ionicons name="trash" size={20} color={C.error} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.dangerTitle}>{t("params.deleteAccount")}</Text>
-              <Text style={s.dangerSub} numberOfLines={2}>{t("params.deleteAccountWarning")}</Text>
-            </View>
-            <View style={s.dangerChevron}>
-              <Ionicons name="chevron-forward" size={17} color={C.error} />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── ESPACES STAFF (révélés par code) ── */}
-        {revealedRoles.includes("LIVREUR") && (
-          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/livreur/login" as any)} activeOpacity={0.85}>
-            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
-              <Ionicons name="bicycle-outline" size={20} color="#fff" />
-              <Text style={s.logoutText}>Espace Livreur</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        {revealedRoles.includes("CHAUFFEUR") && (
-          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/transport/mode-chauffeur" as any)} activeOpacity={0.85}>
-            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
-              <Ionicons name="car-outline" size={20} color="#fff" />
-              <Text style={s.logoutText}>Espace Chauffeur</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-        {revealedRoles.includes("BIM") && (
-          <TouchableOpacity style={s.logoutBtn} onPress={() => router.push("/gestion/login" as any)} activeOpacity={0.85}>
-            <View style={[s.logoutGrad, { backgroundColor: C.secondary }]}>
-              <Ionicons name="shield-checkmark-outline" size={20} color="#fff" />
-              <Text style={s.logoutText}>Espace Gestion</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {/* ── Code d'accès (discret) ──
-             `secureTextEntry` + `keyboardType="number-pad"` ne masque pas de
-             façon fiable sur certains claviers Android (le champ affichait
-             les chiffres en clair malgré secureTextEntry). On masque donc
-             nous-mêmes avec des points, sur le même principe que le pavé PIN
-             déjà utilisé ailleurs dans l'app — un TextInput invisible capte
-             la saisie, des points pleins/vides l'affichent. ── */}
-        <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
-          <TouchableOpacity
-            style={{
-              flex: 1, flexDirection: "row", justifyContent: "flex-start", alignItems: "center", gap: 8,
-              borderWidth: 1, borderColor: C.outlineVar, borderRadius: 12,
-              paddingHorizontal: 12, paddingVertical: 10, minHeight: 42,
-            }}
-            activeOpacity={1}
-            onPress={() => accessCodeInputRef.current?.focus()}
-          >
-            {accessCode.length === 0 && !accessCodeFocused && (
-              <Text style={{ color: C.outline, fontSize: 13 }}>Code d'accès</Text>
-            )}
-            {accessCode.length > 0 && (
-              Array.from({ length: accessCode.length }).map((_, i) => (
-                <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: C.onSurface }} />
-              ))
-            )}
-            {accessCodeFocused && <BlinkingCursor color={C.onSurface} height={16} />}
-            <TextInput
-              ref={accessCodeInputRef}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, opacity: 0 }}
-              value={accessCode}
-              onChangeText={(v) => setAccessCode(v.replace(/[^0-9]/g, ""))}
-              onFocus={() => setAccessCodeFocused(true)}
-              onBlur={() => setAccessCodeFocused(false)}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ backgroundColor: C.secondary, borderRadius: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" }}
-            onPress={handleAccessCode}
-          >
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Valider</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── LOGOUT ── */}
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.85}>
-          <LinearGradient
-            colors={[C.primary, "#0047FF"]}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={s.logoutGrad}
-          >
-            {isLoading
-              ? <Ionicons name="hourglass-outline" size={20} color="#fff" />
-              : <>
-                  <Ionicons name="log-out-outline" size={20} color="#fff" />
-                  <Text style={s.logoutText}>{t("params.logout")}</Text>
-                </>
-            }
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* ── FOOTER ── */}
-        <Text style={s.footer}>{t("common.version")}</Text>
-      </ScrollView>
-    </View>
+      {/* Code d'accès discret (masqué par des points, fiable sur tous les claviers Android) */}
+      <View style={{ marginTop: "auto", paddingTop: 30, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Pressable onPress={() => codeRef.current?.focus()} accessibilityLabel="Code d'accès"
+          style={{ flex: 1, height: 46, borderRadius: 23, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 6,
+            backgroundColor: th.glass(0.08), borderWidth: 1, borderColor: codeFocus ? th.glass(0.4) : th.glass(0.14) }}>
+          {code.length === 0 && !codeFocus && <T size={13} color={th.muted}>Code d'accès</T>}
+          {Array.from({ length: code.length }).map((_, i) => <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: th.fg }} />)}
+          <TextInput ref={codeRef} value={code} onChangeText={(v) => setCode(v.replace(/[^0-9]/g, ""))} onFocus={() => setCodeFocus(true)} onBlur={() => setCodeFocus(false)}
+            keyboardType="number-pad" maxLength={6} style={{ position: "absolute", opacity: 0, width: 1, height: 1 }} />
+        </Pressable>
+        <PressScale onPress={checkCode} disabled={!code || checking} accessibilityLabel="Valider le code"
+          style={{ height: 46, paddingHorizontal: 18, borderRadius: 23, backgroundColor: th.glass(0.14), justifyContent: "center" }}>
+          <T w="bold" size={13}>{checking ? "…" : "Valider"}</T>
+        </PressScale>
+      </View>
+    </BimPage>
   );
 }
-
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-function mkS(C: typeof LIGHT) { return StyleSheet.create({
-  root:  { flex: 1 },
-  scroll: { paddingHorizontal: 20, paddingBottom: 8 },
-
-  topBar: {
-    position: "absolute", top: 0, left: 0, right: 0, zIndex: 50,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 16, paddingBottom: 12,
-    elevation: 2, shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-  },
-  topSide: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  topTitle: { flex: 1, textAlign: "center", fontFamily: "NexaBold", fontSize: 17 },
-
-  notifBadge:     { position: "absolute", top: -4, right: -6, minWidth: 16, height: 16, borderRadius: 8, alignItems: "center", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1.5, borderColor: "#fff" },
-  notifBadgeText: { color: "#fff", fontSize: 9, fontFamily: "NexaBold" },
-
-  pageHeader: { marginBottom: 28, marginTop: 8 },
-  pageTitle:  { fontFamily: "NexaBold", fontSize: 26, color: C.onSurface, marginBottom: 4 },
-  pageSub:    { fontFamily: "NexaLight", fontSize: 14, color: C.secondary },
-
-  section: { marginBottom: 20 },
-
-  card: {
-    backgroundColor: C.surface,
-    borderRadius: 20, overflow: "hidden",
-    elevation: 3, shadowColor: "rgba(0,71,255,0.08)",
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 12,
-  },
-
-  prefRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
-  prefLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  prefIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(0,53,197,0.05)", alignItems: "center", justifyContent: "center" },
-  prefLabel: { fontFamily: "NexaBold", fontSize: 14, color: C.onSurface },
-  prefSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.outline, marginTop: 1 },
-
-  hdiv: { height: 1, backgroundColor: "rgba(196,197,218,0.15)", marginHorizontal: 0 },
-
-  langPill: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVar, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: C.surface },
-  langPillText: { fontFamily: "NexaBold", fontSize: 12, color: C.onSurface },
-
-  dangerCard: { backgroundColor: C.errCont, borderWidth: 1, borderColor: C.error + "40", borderRadius: 20, flexDirection: "row", alignItems: "center", padding: 16, gap: 12 },
-  dangerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center" },
-  dangerTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.error, marginBottom: 2 },
-  dangerSub:   { fontFamily: "NexaLight", fontSize: 11, color: C.errOnCont, lineHeight: 16 },
-  dangerChevron: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center" },
-
-  logoutBtn: { borderRadius: 20, overflow: "hidden", marginBottom: 12 },
-  logoutGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16, elevation: 4, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-  logoutText: { fontFamily: "NexaBold", fontSize: 16, color: "#FFFFFF" },
-
-  footer: { textAlign: "center", fontFamily: "NexaLight", fontSize: 10, color: C.outline, textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 },
-
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
-  modalBox: { width: "82%", backgroundColor: C.surface, borderRadius: 24, padding: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20 },
-  modalTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.onSurface, textAlign: "center", marginBottom: 12 },
-  langOption: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, borderColor: "rgba(196,197,218,0.4)", paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
-  langOptionSel: { backgroundColor: "rgba(0,53,197,0.06)", borderColor: C.primary },
-  langOptionText: { fontFamily: "NexaBold", fontSize: 13, color: C.onSurface },
-}); }
-
-/* ─── MENU ROW STYLES ──────────────────────────────────────────────────── */
-const mr = StyleSheet.create({
-  row: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
-  },
-  divider: { borderBottomWidth: 1, borderBottomColor: "rgba(196,197,218,0.15)" },
-  iconBox: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: "rgba(0,53,197,0.05)",
-    alignItems: "center", justifyContent: "center",
-  },
-  label: { flex: 1, fontFamily: "NexaBold", fontSize: 14 },
-});
-
-/* ─── SECTION LABEL STYLES ──────────────────────────────────────────────── */
-const sl = StyleSheet.create({
-  row: {
-    flexDirection: "row", alignItems: "center",
-    gap: 6, marginBottom: 10, paddingLeft: 4,
-  },
-  text: {
-    fontFamily: "NexaLight", fontSize: 11,
-    textTransform: "uppercase", letterSpacing: 1.5,
-  },
-});
-
-/* ─── MODAL STYLES (lang + delete) ─────────────────────────────────────── */
-function mkM(C: typeof LIGHT) { return StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center" },
-  box: { width: "82%", backgroundColor: C.surface, borderRadius: 24, padding: 20, elevation: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20 },
-  title: { fontFamily: "NexaBold", fontSize: 15, color: C.onSurface, textAlign: "center", marginBottom: 12 },
-  option: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: 12, borderWidth: 1, borderColor: C.outlineVar, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
-  optionSel: { backgroundColor: C.primary + "14", borderColor: C.primary },
-  optionText: { fontFamily: "NexaLight", fontSize: 14, color: C.onSurface },
-}); }
-
-/* ─── DELETE MODAL STYLES ───────────────────────────────────────────────── */
-function mkDm(C: typeof LIGHT) { return StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 36, elevation: 20, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 20 },
-  handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: C.outlineVar, marginBottom: 24 },
-  iconWrap: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: C.error + "22", alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  title: { fontFamily: "NexaBold", fontSize: 18, color: C.onSurface, textAlign: "center", marginBottom: 10 },
-  msg: { fontFamily: "NexaLight", fontSize: 14, color: C.secondary, textAlign: "center", lineHeight: 21, marginBottom: 20 },
-  bold: { fontFamily: "NexaBold", color: C.error },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1.5, borderColor: C.outlineVar, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: C.bg, marginBottom: 20 },
-  input: { flex: 1, fontFamily: "NexaLight", fontSize: 15, color: C.onSurface },
-  btnRow: { flexDirection: "row", gap: 12 },
-  btnCancel: { flex: 1, borderWidth: 1.5, borderColor: C.outlineVar, borderRadius: 16, paddingVertical: 14, alignItems: "center", backgroundColor: C.bg },
-  btnCancelTxt: { fontFamily: "NexaBold", fontSize: 15, color: C.secondary },
-  btnDelete: { flex: 1, borderRadius: 16, paddingVertical: 14, alignItems: "center", backgroundColor: C.error },
-  btnDeleteTxt: { fontFamily: "NexaBold", fontSize: 15, color: "#FFFFFF" },
-}); }

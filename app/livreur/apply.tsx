@@ -1,3 +1,5 @@
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
@@ -72,9 +74,9 @@ const DARK: typeof LIGHT = {
 
 export default function LivreurApplyScreen() {
   const router = useRouter();
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
+  const s = useMemo(() => mkS(C), [C]);
 
   const [applyLivreur, { isLoading }] = useApplyAsLivreurMutation();
   const { data: companiesData } = useGetAllHistoriesQuery({});
@@ -147,7 +149,7 @@ export default function LivreurApplyScreen() {
 
   return (
     <View style={s.screen}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Top bar */}
       <SafeAreaView style={s.topBar} edges={["top"]}>
@@ -222,11 +224,11 @@ export default function LivreurApplyScreen() {
                     style={[s.dropItem, s.dropItemBorder]}
                     onPress={() => { setCompanyId(c.companyId); setShowCompanies(false); }}
                   >
-                    <Text style={{ fontFamily: "NexaBold", fontSize: 14, color: c.companyId === companyId ? C.primary : C.text }}>
+                    <Text style={{ fontFamily: "LatoBold", fontSize: 14, color: c.companyId === companyId ? C.primary : C.text }}>
                       {c.name}
                     </Text>
                     {c.commissionRate != null && (
-                      <Text style={{ fontFamily: "NexaRegular", fontSize: 11, color: C.green, marginTop: 2 }}>
+                      <Text style={{ fontFamily: "Lato", fontSize: 11, color: C.green, marginTop: 2 }}>
                         Commission livreur : {c.commissionRate}%
                       </Text>
                     )}
@@ -236,7 +238,7 @@ export default function LivreurApplyScreen() {
                   style={s.dropItem}
                   onPress={() => { setCompanyId(null); setShowCompanies(false); }}
                 >
-                  <Text style={{ fontFamily: "NexaRegular", fontSize: 14, color: C.muted }}>Candidature générale</Text>
+                  <Text style={{ fontFamily: "Lato", fontSize: 14, color: C.muted }}>Candidature générale</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -299,8 +301,8 @@ export default function LivreurApplyScreen() {
 }
 
 function PhotoSlot({ label, asset, onPress }: { label: string; asset: ImagePicker.ImagePickerAsset | null; onPress: () => void }) {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
   return (
     <TouchableOpacity
       style={[
@@ -337,10 +339,10 @@ const ph = StyleSheet.create({
   slotFilled: { borderStyle: "solid", borderWidth: 2 },
   preview:    { width: "100%", height: "100%" },
   cameraCircle:{ width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
-  photoLabel: { fontFamily: "NexaBold", fontSize: 13 },
-  photoHint:  { fontFamily: "NexaRegular", fontSize: 10 },
+  photoLabel: { fontFamily: "LatoBold", fontSize: 13 },
+  photoHint:  { fontFamily: "Lato", fontSize: 10 },
   badge:      { position: "absolute", bottom: 0, left: 0, right: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 6 },
-  badgeTxt:   { fontFamily: "NexaBold", fontSize: 11, color: "#FFFFFF" },
+  badgeTxt:   { fontFamily: "LatoBold", fontSize: 11, color: "#FFFFFF" },
 });
 
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
@@ -358,7 +360,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: C.border,
   },
-  pageTitle: { flex: 1, fontFamily: "NexaBold", fontSize: 17, color: C.text, textAlign: "center" },
+  pageTitle: { flex: 1, fontFamily: "LatoBold", fontSize: 17, color: C.text, textAlign: "center" },
 
   scroll: { padding: 16, paddingTop: 20 },
 
@@ -374,8 +376,8 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     backgroundColor: C.introIconBg,
     alignItems: "center", justifyContent: "center",
   },
-  introTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text },
-  introSub:   { fontFamily: "NexaRegular", fontSize: 12, color: C.muted, lineHeight: 17, marginTop: 3 },
+  introTitle: { fontFamily: "LatoBold", fontSize: 14, color: C.text },
+  introSub:   { fontFamily: "Lato", fontSize: 12, color: C.muted, lineHeight: 17, marginTop: 3 },
 
   section: {
     backgroundColor: C.cardBg,
@@ -387,14 +389,14 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
   sectionDot:    { width: 4, height: 16, borderRadius: 2, backgroundColor: C.primary },
-  sectionTitle:  { fontFamily: "NexaBold", fontSize: 15, color: C.text },
+  sectionTitle:  { fontFamily: "LatoBold", fontSize: 15, color: C.text },
 
   label: {
-    fontFamily: "NexaRegular", fontSize: 12,
+    fontFamily: "Lato", fontSize: 12,
     color: C.muted, letterSpacing: 0.5,
     textTransform: "uppercase", marginBottom: 8,
   },
-  optional: { fontFamily: "NexaRegular", fontSize: 11, color: C.muted, textTransform: "none" },
+  optional: { fontFamily: "Lato", fontSize: 11, color: C.muted, textTransform: "none" },
 
   inputRow: {
     flexDirection: "row", alignItems: "center",
@@ -412,9 +414,9 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   },
   iconFocused: { backgroundColor: C.iconFocusBg },
 
-  input: { flex: 1, height: "100%", fontSize: 14, color: C.text, fontFamily: "NexaRegular" },
+  input: { flex: 1, height: "100%", fontSize: 14, color: C.text, fontFamily: "Lato" },
 
-  hint: { fontFamily: "NexaRegular", fontSize: 12, color: C.muted, lineHeight: 18 },
+  hint: { fontFamily: "Lato", fontSize: 12, color: C.muted, lineHeight: 18 },
 
   dropdown: {
     backgroundColor: C.dropdownBg,
@@ -434,7 +436,7 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     backgroundColor: C.textareaBg,
   },
   textarea: {
-    fontFamily: "NexaRegular", fontSize: 14,
+    fontFamily: "Lato", fontSize: 14,
     color: C.text, minHeight: 120,
   },
 
@@ -447,10 +449,10 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
     shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
-  submitText: { fontFamily: "NexaBold", fontSize: 15, color: C.white, letterSpacing: 0.5 },
+  submitText: { fontFamily: "LatoBold", fontSize: 15, color: C.white, letterSpacing: 0.5 },
 
   footNote: {
-    fontFamily: "NexaRegular", fontSize: 12,
+    fontFamily: "Lato", fontSize: 12,
     color: C.muted, textAlign: "center",
     marginTop: 12, lineHeight: 18,
   },

@@ -55,6 +55,12 @@ export const rideApi = createApi({
       providesTags: ["ride"],
     }),
 
+    // Course en cours du passager (bandeau de l'accueil, reprise de l'écran taxi).
+    getMyActiveRide: builder.query({
+      query: () => ({ url: "/ride/active", method: "GET" }),
+      providesTags: ["ride"],
+    }),
+
     getUserRides: builder.query({
       query: (params) => ({ url: "/ride/history", method: "GET", params }),
       providesTags: ["ride"],
@@ -76,6 +82,11 @@ export const rideApi = createApi({
       providesTags: ["ride"],
     }),
 
+    // Offre en attente (si l'événement socket a été manqué, ex. app ouverte depuis le push).
+    getChauffeurPendingOffer: builder.query({
+      query: () => ({ url: "/ride/chauffeur/offer", method: "GET" }),
+    }),
+
     acceptRide: builder.mutation({
       query: (rideNumber) => ({ url: `/ride/${rideNumber}/accept`, method: "POST" }),
       invalidatesTags: ["ride"],
@@ -90,8 +101,14 @@ export const rideApi = createApi({
       invalidatesTags: ["ride"],
     }),
 
+    // `arg` : numéro de course (passager) ou { rideNumber, pickupCode } (chauffeur :
+    // le code donné par le passager est obligatoire pour démarrer).
     startRide: builder.mutation({
-      query: (rideNumber) => ({ url: `/ride/${rideNumber}/start`, method: "PUT" }),
+      query: (arg) => {
+        const rideNumber = typeof arg === "object" ? arg.rideNumber : arg;
+        const pickupCode = typeof arg === "object" ? arg.pickupCode : undefined;
+        return { url: `/ride/${rideNumber}/start`, method: "PUT", data: pickupCode ? { pickupCode } : undefined };
+      },
       invalidatesTags: ["ride"],
     }),
 
@@ -115,9 +132,11 @@ export const {
   useOfferRideToChauffeurMutation,
   useGetRideByNumberQuery,
   useGetUserRidesQuery,
+  useGetMyActiveRideQuery,
   useCancelRideMutation,
   useRateRideMutation,
   useGetChauffeurActiveRideQuery,
+  useGetChauffeurPendingOfferQuery,
   useAcceptRideMutation,
   useDeclineRideMutation,
   useArrivedRideMutation,

@@ -103,13 +103,20 @@ instance.interceptors.response.use(
           );
 
           await AsyncStorage.setItem("token", data.token);
+          // Le serveur remplace les anciens jetons courts par un jeton longue durée.
+          if (data.refreshToken) await AsyncStorage.setItem("refreshToken", data.refreshToken);
 
           onRefreshed(data.token);
         } catch (err) {
-          await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
           onRefreshFailed(err);
           isRefreshing = false;
-          DeviceEventEmitter.emit("auth:forceLogout");
+          // Déconnexion UNIQUEMENT si le serveur dit que la session est révoquée (401/403).
+          // Pas de réseau, serveur en redémarrage, erreur 500… → on garde la session.
+          const st = err?.response?.status;
+          if (st === 401 || st === 403) {
+            await AsyncStorage.multiRemove(["token", "refreshToken", "userId", "email", "accountType"]);
+            DeviceEventEmitter.emit("auth:forceLogout");
+          }
           return Promise.reject(err);
         }
 

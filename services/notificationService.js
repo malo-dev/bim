@@ -84,6 +84,14 @@ export const notificationApi = createApi({
       }),
       invalidatesTags: ['Notifications'],
     }),
+
+    markAllAsRead: builder.mutation({
+      query: () => ({
+        url: `/notification_track/mark_all_read`,
+        method: 'PUT',
+      }),
+      invalidatesTags: ['Notifications'],
+    }),
   }),
 });
 
@@ -94,4 +102,5 @@ export const {
   useUpdateNotificationMutation,
   useDeleteNotificationMutation,
   useMarkAsReadMutation,
+  useMarkAllAsReadMutation,
 } = notificationApi;

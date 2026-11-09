@@ -1,499 +1,112 @@
-import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import {
-  ActivityIndicator,
-  Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import Modal from "react-native-modal";
+/**
+ * Payer un partenaire (design BIM NEXT) : montant, adresse + téléphone de livraison, confirmation animée.
+ * Même logique : createPaiement { amount, companyId, shippingAddress, clientPhone, notes, paymentMethod, id, productId }.
+ * Les infos de livraison restent obligatoires (sinon la commande créée n'est pas livrable).
+ */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Alert, TextInput, View } from "react-native";
+import { BimIcon } from "@/components/bim/icons";
+import { F, ec, useTh } from "@/components/bim/theme";
+import {
+  AmountChips, Appear, BimPage, DEFAULT_COUNTRY, Glass, InfoRow, PhoneField, PillButton, SectionLabel, SlideButton, StatusOverlay, T, TextField,
+} from "@/components/bim/ui";
 import { useCreatePaiementMutation } from "@/services/tsxService";
+import { useGetUserByIdQuery } from "@/services/userService";
 import { normalizeDecimal } from "@/utils/normalizeDecimal.util";
-import { useAppTheme } from "@/app/_layout";
 
-/* ─── THEME ──────────────────────────────────────────────────────────── */
-const C = {
-  primary: "#0353CC",
-  violet:  "#3906C7",
-  deep:    "#302E99",
-  accent:  "#4D96FF",
-  white:   "#FFFFFF",
-  success: "#22C55E",
-  error:   "#EF4444",
-  gold:    "#C9A84C",
-};
-
-const Colors = {
-  light: {
-    bg:            "#F0F4FF",
-    card:          "#FFFFFF",
-    text:          "#0D1B3E",
-    textSecondary: "#7B8DB0",
-    border:        "rgba(3,83,204,0.15)",
-    inputBg:       "rgba(3,83,204,0.06)",
-    headerGrad:    [C.deep, C.primary] as [string, string],
-    shadow:        "#000",
-    modalBg:       "#FFFFFF",
-    recapBg:       "rgba(3,83,204,0.05)",
-    pinBorder:     "rgba(3,83,204,0.20)",
-    pinFilled:     C.primary,
-    pinFilledBg:   "rgba(3,83,204,0.10)",
-  },
-  dark: {
-    bg:            "#07091A",
-    card:          "#0F1228",
-    text:          "#E2E8F0",
-    textSecondary: "#556080",
-    border:        "rgba(77,150,255,0.12)",
-    inputBg:       "rgba(77,150,255,0.07)",
-    headerGrad:    ["#05081A", "#0D1535"] as [string, string],
-    shadow:        "#000",
-    modalBg:       "#0F1228",
-    recapBg:       "rgba(77,150,255,0.06)",
-    pinBorder:     "rgba(77,150,255,0.20)",
-    pinFilled:     C.accent,
-    pinFilledBg:   "rgba(77,150,255,0.15)",
-  },
-};
-
-const SHORTCUTS      = ["500", "1000", "2500", "5000", "10000"];
-const SHORTCUT_LABELS = ["500", "1 000", "2 500", "5 000", "10 000"];
-
-
-/* ─── MAIN ───────────────────────────────────────────────────────────── */
 export default function Payment() {
+  const th = useTh();
   const router = useRouter();
-  const { productId, companyId } = useLocalSearchParams();
-  const { isDark } = useAppTheme();
-  const t = isDark ? Colors.dark : Colors.light;
-  const { t: tr } = useTranslation();
-
-  const [payAmount,      setPayAmount]      = useState("");
-  const [loadingPayment, setLoadingPayment] = useState(false);
-  const [userId,         setUserId]         = useState<string | null>(null);
-
-  const [showResultModal,setShowResultModal]= useState(false);
-  const [resultData,     setResultData]     = useState<{
-    type: "success" | "error"; text: string; description?: string;
-  } | null>(null);
-
-  // Adresse de livraison + téléphone — demandés juste avant le paiement,
-  // obligatoires : sans ça, la commande créée derrière ce paiement n'a
-  // aucune information exploitable pour la livraison.
-  const [showDeliveryModal, setShowDeliveryModal] = useState(false);
-  const [deliveryAddress,   setDeliveryAddress]   = useState("");
-  const [deliveryPhone,     setDeliveryPhone]     = useState("");
-
-  /* ── Animations card ── */
-  const cardAnim = useRef(new Animated.Value(60)).current;
-  const cardOpac = useRef(new Animated.Value(0)).current;
-  const scaleBtn = useRef(new Animated.Value(1)).current;
-  const inputFoc = useRef(new Animated.Value(0)).current;
-
+  const { productId, companyId } = useLocalSearchParams<{ productId?: string; companyId?: string }>();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [amount, setAmount] = useState("");
+  const [address, setAddress] = useState("");
+  const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [phone, setPhone] = useState("");
+  const [phase, setPhase] = useState<"idle" | "proc" | "done">("idle");
   const [createPaiement] = useCreatePaiementMutation();
 
+  useEffect(() => { AsyncStorage.getItem("userId").then(setUserId); }, []);
+  const { data: user } = useGetUserByIdQuery(userId!, { skip: !userId });
   useEffect(() => {
-    AsyncStorage.getItem("userId").then(setUserId);
-    Animated.parallel([
-      Animated.timing(cardAnim, { toValue: 0, duration: 450, delay: 120, useNativeDriver: true }),
-      Animated.timing(cardOpac, { toValue: 1, duration: 450, delay: 120, useNativeDriver: true }),
-    ]).start();
-  }, []);
+    if (!user) return;
+    if (!address && user.adresse) setAddress(user.adresse);
+    if (!phone && user.telephone) setPhone(String(user.telephone).replace(/^\+\d{3}/, ""));
+  }, [user]);
 
-  const focusIn  = () => Animated.timing(inputFoc, { toValue: 1, duration: 200, useNativeDriver: false }).start();
-  const focusOut = () => Animated.timing(inputFoc, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-  const pressIn  = () => Animated.spring(scaleBtn, { toValue: 0.96, useNativeDriver: true }).start();
-  const pressOut = () => Animated.spring(scaleBtn, { toValue: 1,    useNativeDriver: true }).start();
+  const amt = Number(normalizeDecimal(amount || "0")) || 0;
 
-  const borderColor = inputFoc.interpolate({ inputRange: [0, 1], outputRange: [t.border, C.primary] });
-  const bgColor     = inputFoc.interpolate({ inputRange: [0, 1], outputRange: [t.inputBg, isDark ? "rgba(77,150,255,0.12)" : "rgba(3,83,204,0.10)"] });
-  const cleanAmount = (v: string) => v.replace(/\s/g, "");
-
-  /* ─── Helper : afficher le modal résultat ────────────────────────── */
-  const showResult = (type: "success" | "error", text: string, description?: string) => {
-    setResultData({ type, text, description });
-    setShowResultModal(true);
-  };
-
-  /* ─── Paiement direct (sans PIN) ─────────────────────────────────── */
-  const handlePayPress = () => {
-    const amount = Number(normalizeDecimal(payAmount));
-    if (isNaN(amount) || amount <= 0) {
-      showResult("error", tr("common.error"), "Veuillez entrer un montant valide.");
-      return;
-    }
-    if (!userId) {
-      showResult("error", tr("common.error"), "Veuillez vous reconnecter.");
-      return;
-    }
-    setShowDeliveryModal(true);
-  };
-
-  const confirmDeliveryAndPay = async () => {
-    if (!deliveryAddress.trim() || !deliveryPhone.trim()) {
-      return;
-    }
-    const amount = Number(normalizeDecimal(payAmount));
+  const pay = async () => {
+    if (amt <= 0) { Alert.alert("Montant manquant", "Entre un montant valide."); return; }
+    if (!userId) { Alert.alert("Erreur", "Reconnecte-toi puis réessaie."); return; }
+    if (!address.trim() || phone.replace(/\s/g, "").length < 8) { Alert.alert("Livraison", "Indique ton adresse et ton numéro pour la livraison."); return; }
+    if (user && Number(user.soldNumber ?? 0) < amt) { Alert.alert("Solde insuffisant", `Ton solde est de ${ec(user.soldNumber)} EC. Recharge ton compte.`); return; }
+    setPhase("proc");
     try {
-      setShowDeliveryModal(false);
-      setLoadingPayment(true);
       await createPaiement({
-        amount:          amount,
-        companyId:       Number(companyId),
-        shippingAddress: deliveryAddress.trim(),
-        clientPhone:     deliveryPhone.trim(),
-        notes:           "Paiement produit",
-        paymentMethod:   "BIM NEXT APP",
-        id:              Number(userId),
-        productId:       Number(productId),
+        amount: amt, companyId: Number(companyId), shippingAddress: address.trim(),
+        clientPhone: `${country.code}${phone.replace(/\s/g, "")}`, notes: "Paiement produit", paymentMethod: "BIM NEXT APP",
+        id: Number(userId), productId: Number(productId),
       }).unwrap();
-      showResult("success", tr("payment.successTitle"), tr("payment.successMsg", { amount: payAmount }));
+      setPhase("done");
     } catch (err: any) {
-      showResult("error", tr("payment.failedTitle"), err?.data?.message || tr("common.error"));
-    } finally {
-      setLoadingPayment(false);
+      setPhase("idle");
+      Alert.alert("Paiement échoué", err?.data?.message || "Une erreur est survenue. Réessaie.");
     }
   };
-
-  const formatDisplay = (v: any) => Number(v).toLocaleString("fr-FR");
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={[s.root, { backgroundColor: t.bg }]}
-    >
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ScrollView
-        contentContainerStyle={[s.scrollContent, { backgroundColor: t.bg }]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        bounces={false}
-      >
-        {/* ── HEADER ── */}
-        <View style={[s.header, { shadowColor: t.shadow }]}>
-          <LinearGradient colors={t.headerGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-          <View style={s.deco1} />
-          <View style={s.deco2} />
-          <SafeAreaView edges={["top"]} style={{ width: "100%" }}>
-            <View style={s.topBar}>
-              <TouchableOpacity style={s.iconBtn} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={22} color={C.white} />
-              </TouchableOpacity>
-              <Text style={s.headerTitle}>{tr("payment.title")}</Text>
-              <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notification")}>
-                <Ionicons name="notifications-outline" size={22} color={C.white} />
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-          <View style={s.headerIcon}>
-            <Ionicons name="wallet-outline" size={32} color={C.white} />
-          </View>
-          <Text style={s.headerSub}>{tr("payment.enterAmount")}</Text>
+    <BimPage title="Payer un partenaire"
+      overlay={phase !== "idle" && (
+        <StatusOverlay phase={phase} title={phase === "done" ? "Paiement réussi !" : "Paiement en cours…"}
+          text={phase === "done" ? `${ec(amt)} EC payés avec BIM NEXT. Ta commande est en préparation.` : "On sécurise ton paiement."}>
+          <PillButton variant="accent" label="Suivre mes commandes" onPress={() => router.replace("/commandes" as any)} />
+          <PillButton label="Retour à l'accueil" onPress={() => router.replace("/(tabs)" as any)} />
+        </StatusOverlay>
+      )}>
+      <Appear kind="pop" delay={60} style={{ alignSelf: "center", marginTop: 22 }}>
+        <View style={{ width: 84, height: 84, borderRadius: 42, backgroundColor: th.glassFill(0.14), borderWidth: 1, borderColor: th.glass(0.24), alignItems: "center", justifyContent: "center", boxShadow: th.glassFx }}>
+          <BimIcon name="wallet" size={34} color={th.fg} strokeWidth={1.7} />
         </View>
+      </Appear>
+      <T size={15} color={th.muted} style={{ marginTop: 12, textAlign: "center" }}>Paie un partenaire BIM avec tes Ecoins</T>
 
-        {/* ── CARD ── */}
-        <Animated.View style={[s.card, {
-          backgroundColor: t.card,
-          shadowColor: t.shadow,
-          borderColor: isDark ? t.border : "transparent",
-          borderWidth: isDark ? 1 : 0,
-          opacity: cardOpac,
-          transform: [{ translateY: cardAnim }],
-        }]}>
-          {isDark && <View style={s.cardShimmer} />}
+      <View style={{ marginTop: 20, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <SectionLabel>MONTANT À PAYER</SectionLabel>
+        <T size={12} color={th.muted}>Solde : {ec(user?.soldNumber)} EC</T>
+      </View>
+      <View style={{ marginTop: 6, flexDirection: "row", alignItems: "baseline", gap: 10 }}>
+        <T w="light" size={20}>EC</T>
+        <TextInput value={amount} onChangeText={(v) => setAmount(v.replace(/[^\d.,]/g, ""))} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={th.glass(0.4)}
+          accessibilityLabel="Montant à payer" style={{ flex: 1, fontFamily: F.bold, fontSize: 46, color: th.fg, paddingVertical: 0, letterSpacing: -0.9, includeFontPadding: false }} />
+      </View>
+      <View style={{ marginTop: 10 }}><AmountChips values={[5, 10, 20, 50]} value={amt} onPick={(n) => setAmount(String(n))} /></View>
 
-          <View style={s.labelRow}>
-            <Ionicons name="cash-outline" size={16} color={C.primary} />
-            <Text style={[s.label, { color: C.primary }]}>{tr("payment.amountLabel")}</Text>
-          </View>
+      <SectionLabel style={{ marginTop: 20 }}>LIVRAISON</SectionLabel>
+      <Glass a={0.12} b={0.2} radius={24} style={{ marginTop: 8, padding: 14, gap: 14 }}>
+        <TextField id="pay-address" label="Adresse de livraison" icon="pin" value={address} onChange={setAddress} placeholder="Quartier, avenue, référence…" />
+        <PhoneField id="pay-phone" label="Numéro pour la livraison" value={phone} onChange={setPhone} country={country} setCountry={setCountry} />
+      </Glass>
 
-          <Animated.View style={[s.inputBox, { borderColor, backgroundColor: bgColor }]}>
-            <Text style={[s.currency, { color: C.primary }]}>EC</Text>
-            <TextInput
-              style={[s.input, { color: t.text }]}
-              keyboardType="numeric"
-              placeholder="0"
-              placeholderTextColor={t.textSecondary}
-              value={payAmount}
-              onChangeText={setPayAmount}
-              editable={!loadingPayment}
-              onFocus={focusIn}
-              onBlur={focusOut}
-            />
-            {payAmount.length > 0 && (
-              <TouchableOpacity onPress={() => setPayAmount("")}>
-                <Ionicons name="close-circle" size={20} color={t.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </Animated.View>
+      {amt > 0 && (
+        <Appear kind="rise">
+          <Glass a={0.12} b={0.2} radius={22} style={{ marginTop: 14, paddingHorizontal: 16, paddingVertical: 2 }}>
+            <InfoRow label="Montant" value={`${ec(amt)} EC`} />
+            <InfoRow label="Moyen" value="Solde BIM NEXT" />
+            <InfoRow label="Total" value={`${ec(amt)} EC`} strong last />
+          </Glass>
+        </Appear>
+      )}
 
-          <Text style={[s.shortcutLabel, { color: t.textSecondary }]}>{tr("payment.quickAmounts")}</Text>
-          <View style={s.shortcuts}>
-            {SHORTCUTS.map((v, i) => {
-              const active = cleanAmount(payAmount) === v;
-              return (
-                <TouchableOpacity key={v}
-                  style={[s.chip, { backgroundColor: active ? C.primary : t.inputBg, borderColor: active ? C.primary : t.border }]}
-                  onPress={() => setPayAmount(v)}
-                >
-                  <Text style={[s.chipText, { color: active ? C.white : t.textSecondary }]}>{SHORTCUT_LABELS[i]}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {payAmount.length > 0 && Number(cleanAmount(payAmount)) > 0 && (
-            <View style={[s.recap, { backgroundColor: t.recapBg, borderColor: t.border }]}>
-              <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                <Text style={[s.recapLabel, { color: t.textSecondary }]}>{tr("payment.amount")}</Text>
-                <Text style={[s.recapVal,   { color: t.text }]}>{formatDisplay(cleanAmount(payAmount))} EC</Text>
-              </View>
-              <View style={[s.recapRow, { borderBottomColor: t.border }]}>
-                <Text style={[s.recapLabel, { color: t.textSecondary }]}>{tr("payment.method")}</Text>
-                <Text style={[s.recapVal,   { color: t.text }]}>BIM NEXT APP</Text>
-              </View>
-              <View style={[s.recapRow, { borderBottomWidth: 0 }]}>
-                <Text style={[s.recapLabel, { color: t.text }]}>{tr("payment.total")}</Text>
-                <Text style={[s.recapVal,   { color: C.primary }]}>{formatDisplay(cleanAmount(payAmount))} EC</Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── Bouton principal ── */}
-          <TouchableOpacity activeOpacity={1} onPressIn={pressIn} onPressOut={pressOut} onPress={handlePayPress} disabled={loadingPayment}>
-            <Animated.View style={[s.payBtn, { transform: [{ scale: scaleBtn }] }]}>
-              <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.payGrad}>
-                {loadingPayment ? (
-                  <>
-                    <ActivityIndicator color={C.white} size="small" />
-                    <Text style={s.payText}>{tr("common.processing")}</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="shield-checkmark-outline" size={18} color={C.white} />
-                    <Text style={s.payText}>{tr("payment.confirm")}</Text>
-                  </>
-                )}
-              </LinearGradient>
-            </Animated.View>
-          </TouchableOpacity>
-
-          <View style={s.secureRow}>
-            <Ionicons name="lock-closed-outline" size={12} color={t.textSecondary} />
-            <Text style={[s.secureText, { color: t.textSecondary }]}>{tr("payment.secured")}</Text>
-          </View>
-        </Animated.View>
-      </ScrollView>
-
-      {/* ════════════════════════════════════════════
-          MODAL — ADRESSE DE LIVRAISON + TÉLÉPHONE
-          Obligatoire avant tout paiement direct.
-      ════════════════════════════════════════════ */}
-      <Modal
-        isVisible={showDeliveryModal}
-        onBackdropPress={() => setShowDeliveryModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
-        useNativeDriverForBackdrop
-        avoidKeyboard
-      >
-        <View style={[s.resultModal, {
-          backgroundColor: t.modalBg,
-          borderColor: isDark ? t.border : "transparent",
-          borderWidth: isDark ? 1 : 0,
-          alignItems: "stretch",
-        }]}>
-          <View style={[s.resultIcon, { backgroundColor: "rgba(3,83,204,0.10)", alignSelf: "center" }]}>
-            <Ionicons name="location-outline" size={32} color={C.primary} />
-          </View>
-          <Text style={[s.resultTitle, { color: C.primary, textAlign: "center" }]}>Livraison</Text>
-          <Text style={[s.resultDesc, { color: t.textSecondary, textAlign: "center" }]}>
-            Où et à quel numéro devons-nous vous livrer ?
-          </Text>
-
-          <Text style={[s.label, { color: C.primary, marginTop: 4 }]}>ADRESSE DE LIVRAISON</Text>
-          <View style={[s.inputBox, { borderColor: t.border, backgroundColor: t.inputBg, marginTop: 6 }]}>
-            <Ionicons name="location" size={16} color={t.textSecondary} />
-            <TextInput
-              style={[s.input, { color: t.text, fontSize: 14 }]}
-              placeholder="Quartier, avenue, référence..."
-              placeholderTextColor={t.textSecondary}
-              value={deliveryAddress}
-              onChangeText={setDeliveryAddress}
-            />
-          </View>
-
-          <Text style={[s.label, { color: C.primary, marginTop: 14 }]}>NUMÉRO DE TÉLÉPHONE</Text>
-          <View style={[s.inputBox, { borderColor: t.border, backgroundColor: t.inputBg, marginTop: 6 }]}>
-            <Ionicons name="call" size={16} color={t.textSecondary} />
-            <TextInput
-              style={[s.input, { color: t.text, fontSize: 14 }]}
-              placeholder="Ex: +243 999 999 999"
-              placeholderTextColor={t.textSecondary}
-              keyboardType="phone-pad"
-              value={deliveryPhone}
-              onChangeText={setDeliveryPhone}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[s.resultBtnWrap, { marginTop: 22 }, (!deliveryAddress.trim() || !deliveryPhone.trim()) && { opacity: 0.5 }]}
-            onPress={confirmDeliveryAndPay}
-            disabled={!deliveryAddress.trim() || !deliveryPhone.trim()}
-          >
-            <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.resultBtnGrad}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={C.white} />
-              <Text style={s.resultBtnText}>Confirmer et payer</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+      <View style={{ marginTop: "auto", paddingTop: 22 }}>
+        <SlideButton variant="accent" label={amt > 0 ? `Payer ${ec(amt)} EC` : "Payer"} onDone={pay} />
+        <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <BimIcon name="lock" size={13} color={th.muted} strokeWidth={2} />
+          <T size={12} color={th.muted}>Paiement sécurisé · BIM NEXT</T>
         </View>
-      </Modal>
-
-      {/* ════════════════════════════════════════════
-          MODAL 2 — RÉSULTAT (succès ou erreur)
-          Complètement séparé du modal PIN
-      ════════════════════════════════════════════ */}
-      <Modal
-        isVisible={showResultModal}
-        onBackdropPress={() => {
-          // Sur succès : retour accueil. Sur erreur : juste fermer.
-          if (resultData?.type === "success") {
-            setShowResultModal(false);
-            router.replace("/(tabs)");
-          } else {
-            setShowResultModal(false);
-          }
-        }}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
-        useNativeDriverForBackdrop
-      >
-        <View style={[s.resultModal, {
-          backgroundColor: t.modalBg,
-          borderColor: isDark ? t.border : "transparent",
-          borderWidth: isDark ? 1 : 0,
-        }]}>
-          {/* Icône */}
-          <View style={[s.resultIcon, {
-            backgroundColor: resultData?.type === "success"
-              ? "rgba(34,197,94,0.14)"
-              : "rgba(239,68,68,0.14)",
-          }]}>
-            <Ionicons
-              name={resultData?.type === "success" ? "checkmark-circle" : "close-circle"}
-              size={56}
-              color={resultData?.type === "success" ? C.success : C.error}
-            />
-          </View>
-
-          {/* Titre */}
-          <Text style={[s.resultTitle, {
-            color: resultData?.type === "success" ? C.success : C.error,
-          }]}>
-            {resultData?.type === "success" ? tr("payment.successTitle") : tr("payment.failedTitle")}
-          </Text>
-
-          {/* Description */}
-          <Text style={[s.resultDesc, { color: t.textSecondary }]}>
-            {resultData?.description || resultData?.text}
-          </Text>
-
-          {/* Boutons */}
-          {resultData?.type === "success" ? (
-            <TouchableOpacity
-              style={s.resultBtnWrap}
-              onPress={() => { setShowResultModal(false); router.replace("/(tabs)"); }}
-            >
-              <LinearGradient colors={[C.deep, C.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.resultBtnGrad}>
-                <Ionicons name="home-outline" size={16} color={C.white} />
-                <Text style={s.resultBtnText}>{tr("common.back")}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ) : (
-            <View style={s.resultBtnRow}>
-              <TouchableOpacity
-                style={[s.resultBtnErr, { backgroundColor: C.error }]}
-                onPress={() => { setShowResultModal(false); router.back(); }}
-              >
-                <Text style={s.resultBtnErrText}>{tr("common.back")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.resultBtnErr, { backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "#6B7280" }]}
-                onPress={() => setShowResultModal(false)}
-              >
-                <Text style={s.resultBtnErrText}>{tr("common.retry")}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </Modal>
-    </KeyboardAvoidingView>
+      </View>
+    </BimPage>
   );
 }
-
-/* ─── STYLES ─────────────────────────────────────────────────────────── */
-const s = StyleSheet.create({
-  root:          { flex: 1 },
-  scrollContent: { alignItems: "center", paddingBottom: 60 },
-
-  header: {
-    width: "100%", height: 230, overflow: "hidden",
-    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
-    alignItems: "center", elevation: 12,
-    shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16,
-  },
-  deco1: { position: "absolute", width: 180, height: 180, borderRadius: 90, backgroundColor: "rgba(255,255,255,0.06)", top: -50, right: -40 },
-  deco2: { position: "absolute", width: 120, height: 120, borderRadius: 60,  backgroundColor: "rgba(255,255,255,0.04)", bottom: -20, left: -20 },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 8 },
-  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.10)" },
-  headerTitle: { color: C.white, fontSize: 17, fontFamily: "NexaLight", letterSpacing: 0.3 },
-  headerIcon:  { width: 68, height: 68, borderRadius: 34, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", marginTop: 16, borderWidth: 2, borderColor: "rgba(255,255,255,0.22)" },
-  headerSub:   { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "NexaLight", marginTop: 10 },
-
-  card: { borderRadius: 28, padding: 22, width: "92%", marginTop: -28, elevation: 8, overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 14 },
-  cardShimmer: { position: "absolute", top: 0, left: 0, right: 0, height: 1, backgroundColor: "rgba(255,255,255,0.07)" },
-
-  labelRow:      { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  label:         { fontSize: 11, fontFamily: "NexaLight", letterSpacing: 0.8, textTransform: "uppercase" },
-  inputBox:      { flexDirection: "row", alignItems: "center", borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 14, height: 56, gap: 10, marginBottom: 16 },
-  currency:      { fontFamily: "NexaLight", fontSize: 16, fontWeight: "600" },
-  input:         { flex: 1, fontSize: 22, fontFamily: "NexaLight" },
-  shortcutLabel: { fontFamily: "NexaLight", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.6 },
-  shortcuts:     { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 18 },
-  chip:          { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
-  chipText:      { fontFamily: "NexaLight", fontSize: 12 },
-  recap:         { borderRadius: 14, padding: 14, marginBottom: 18, borderWidth: 1 },
-  recapRow:      { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderBottomWidth: 1 },
-  recapLabel:    { fontFamily: "NexaLight", fontSize: 13 },
-  recapVal:      { fontFamily: "NexaLight", fontSize: 13 },
-  payBtn:        { borderRadius: 16, overflow: "hidden" },
-  payGrad:       { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  payText:       { color: C.white, fontFamily: "NexaLight", fontSize: 15, letterSpacing: 0.3 },
-  secureRow:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 12 },
-  secureText:    { fontFamily: "NexaLight", fontSize: 11 },
-
-  /* ── Modal Résultat ── */
-  resultModal:   { borderRadius: 28, padding: 28, alignItems: "center", marginHorizontal: 16 },
-  resultIcon:    { width: 96, height: 96, borderRadius: 48, alignItems: "center", justifyContent: "center", marginBottom: 18 },
-  resultTitle:   { fontFamily: "NexaLight", fontSize: 22, fontWeight: "700", marginBottom: 10, textAlign: "center" },
-  resultDesc:    { fontFamily: "NexaLight", fontSize: 13, textAlign: "center", lineHeight: 20, marginBottom: 26 },
-  resultBtnWrap: { width: "100%", borderRadius: 16, overflow: "hidden" },
-  resultBtnGrad: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15 },
-  resultBtnText: { color: C.white, fontFamily: "NexaLight", fontSize: 15 },
-  resultBtnRow:  { flexDirection: "row", gap: 12, width: "100%" },
-  resultBtnErr:  { flex: 1, borderRadius: 14, paddingVertical: 13, alignItems: "center" },
-  resultBtnErrText: { color: C.white, fontFamily: "NexaLight", fontSize: 14 },
-});
-

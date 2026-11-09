@@ -1,6 +1,7 @@
 import axiosInstance from "@/services/axiosInstance";
 import { notificationApi } from "@/services/notificationService";
 import { orderApi } from "@/services/orderService";
+import { productApi } from "@/services/productServices";
 import { connectSocket, disconnectSocket } from "@/services/socketService";
 import { userApi } from "@/services/userService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -27,50 +28,39 @@ Notifications.setNotificationHandler({
 async function registerPushToken(userId: string) {
   if (!Device.isDevice) return;
 
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let finalStatus = existing;
-
-  if (existing !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== "granted") return;
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "BIM Notifications",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#0353CC",
-    });
-  }
-
   try {
+    // Android 13+ : le canal doit exister AVANT la demande d'autorisation,
+    // sinon la fenêtre « Autoriser les notifications » n'apparaît jamais.
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "BIM Notifications",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#0353CC",
+        sound: "default",
+      });
+    }
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== "granted") return;
+
     const projectId =
       Constants.expoConfig?.extra?.eas?.projectId ??
       Constants.easConfig?.projectId;
-    const { data: token } = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
 
-    const savedToken = await AsyncStorage.getItem("expoPushToken");
-    const synced     = await AsyncStorage.getItem("expoPushTokenSynced");
-    // `synced` protège aussi les installations déjà affectées par l'ancien bug
-    // (mauvais champ envoyé au serveur) : ces appareils ont déjà un token en
-    // cache identique à l'actuel, donc `token !== savedToken` seul ne suffit
-    // pas à déclencher un nouveau essai — `expoPushTokenSynced` force la
-    // resynchronisation tant qu'aucune confirmation serveur n'a été reçue.
-    if (token !== savedToken || synced !== "1") {
-      const authToken = await AsyncStorage.getItem("token");
-      if (authToken) {
-        // Le backend attend `tokenPush` (voir auth.controller.js storeExpoPushToken).
-        await axiosInstance.post(`/auth/users/${userId}/expoPushToken`, {
-          tokenPush: token,
-        });
-        await AsyncStorage.setItem("expoPushToken", token);
-        await AsyncStorage.setItem("expoPushTokenSynced", "1");
-      }
+    // Le jeton est envoyé à CHAQUE ouverture / connexion pour le compte
+    // connecté : l'ancien cache « déjà synchronisé » n'était pas lié au compte,
+    // donc après un changement de compte sur le même téléphone le nouveau
+    // compte ne recevait jamais rien.
+    if (await AsyncStorage.getItem("token")) {
+      await axiosInstance.post(`/auth/users/${userId}/expoPushToken`, { tokenPush: token });
+      await AsyncStorage.setItem("expoPushToken", token);
     }
   } catch (e) {
     console.warn("Expo push token error:", e);
@@ -86,8 +76,9 @@ export default function SocketProvider({
   const dispatch = useDispatch();
   const router = useRouter();
   const socketRef   = useRef<ReturnType<typeof connectSocket> | null>(null);
+  const userIdRef   = useRef<string | null>(null);
   const notifListenerRef = useRef<Notifications.Subscription | null>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const appStateRef = useRef<AppStateStatus>((AppState.currentState ?? "active") as AppStateStatus);
 
   useEffect(() => {
     let mounted = true;
@@ -95,9 +86,20 @@ export default function SocketProvider({
     async function setup() {
       const userId = await AsyncStorage.getItem("userId");
       if (!userId || !mounted) return;
-      // Déjà connecté pour cet utilisateur (ex. appel déclenché par
-      // "auth:loggedIn" juste après un setup initial réussi) — rien à refaire.
-      if (socketRef.current?.connected) return;
+
+      // Toujours (ré)enregistrer le jeton push pour le compte connecté.
+      registerPushToken(userId);
+
+      // Socket déjà ouvert pour CE compte → rien à refaire. S'il appartient à
+      // un autre compte (déconnexion puis connexion avec un autre compte), on
+      // le ferme : sinon les événements continuaient d'arriver pour l'ancien.
+      if (socketRef.current?.connected && userIdRef.current === userId) return;
+      if (socketRef.current) {
+        socketRef.current.off("notification");
+        disconnectSocket();
+        socketRef.current = null;
+      }
+      userIdRef.current = userId;
 
       /* Connecter le socket en premier (avant registerPushToken qui est lent) */
       const socket = connectSocket(userId);
@@ -111,6 +113,11 @@ export default function SocketProvider({
       // Mise à jour du statut d'une commande depuis l'admin
       socket.on("order:status_updated", () => {
         dispatch(orderApi.util.invalidateTags(["order"]));
+      });
+
+      // Produit ajouté / modifié / masqué depuis l'admin → catalogue rechargé.
+      socket.on("content:updated", (e: { type?: string }) => {
+        if (e?.type === "products") dispatch(productApi.util.invalidateTags(["product"]));
       });
 
       // Recharge FlexPay confirmée (ou annulée) — contrairement aux paiements
@@ -137,8 +144,6 @@ export default function SocketProvider({
         );
       });
 
-      /* Enregistrement push notifications (async, ne bloque plus le socket) */
-      registerPushToken(userId);
     }
 
     setup();

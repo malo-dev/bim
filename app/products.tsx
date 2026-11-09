@@ -144,7 +144,7 @@ export default function ProductsScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={{ flex: 1, backgroundColor: C.bg }}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.surface} />
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
         {/* ── HEADER ── */}
         <SafeAreaView edges={["top"]} style={s.headerWrap}>
@@ -214,7 +214,7 @@ export default function ProductsScreen() {
                 <View style={{ paddingVertical: 20, alignItems: "center" }}>
                   <ActivityIndicator size="small" color={C.primary} />
                 </View>
-              ) : null
+              ) : undefined
             }
             renderItem={({ item }) => (
               <ProductCard item={item} onPress={() => openProduct(item)} />

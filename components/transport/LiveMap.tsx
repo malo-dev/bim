@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { StyleSheet, View, ActivityIndicator } from "react-native";
-import { WebView } from "react-native-webview";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { API_URL_BASE } from "@/constants/api";
 
 /* Carte Google Maps en direct, servie par bim_server (/transport/map) et
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export default function LiveMap({ pickupLat, pickupLng, destLat, destLng, chauffeurLat, chauffeurLng, style }: Props) {
-  const webRef = useRef<WebView>(null);
+  const webRef = useRef<{ injectJavaScript: (js: string) => void } | null>(null);
   const ready = useRef(false);
 
   const params = new URLSearchParams();
@@ -36,12 +36,12 @@ export default function LiveMap({ pickupLat, pickupLng, destLat, destLng, chauff
   return (
     <View style={[styles.wrap, style]}>
       <WebView
-        ref={webRef}
+        ref={webRef as any}
         source={{ uri }}
         style={styles.web}
         javaScriptEnabled
         domStorageEnabled
-        onMessage={(e) => {
+        onMessage={(e: WebViewMessageEvent): void => {
           try {
             const msg = JSON.parse(e.nativeEvent.data);
             if (msg.type === "ready") {

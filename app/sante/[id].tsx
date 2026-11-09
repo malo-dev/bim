@@ -289,7 +289,7 @@ export default function SanteProducts() {
             <View style={{ paddingVertical: 20, alignItems: "center" }}>
               <ActivityIndicator color={C.primary} />
             </View>
-          ) : null}
+          ) : undefined}
           renderItem={({ item, index }) => (
             <ProductCard
               item={item}

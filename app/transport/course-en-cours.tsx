@@ -10,6 +10,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -22,6 +23,7 @@ import {
   useArrivedRideMutation,
   useCompleteRideMutation,
   useCancelRideByChauffeurMutation,
+  useStartRideMutation,
 } from "@/services/rideService";
 import { getSocket } from "@/services/socketService";
 
@@ -57,6 +59,8 @@ export default function CourseEnCoursScreen() {
   const [arrivedRide, { isLoading: arriving }] = useArrivedRideMutation();
   const [completeRide, { isLoading: completing }] = useCompleteRideMutation();
   const [cancelRideByChauffeur, { isLoading: cancelling }] = useCancelRideByChauffeurMutation();
+  const [startRide, { isLoading: starting }] = useStartRideMutation();
+  const [code, setCode] = useState("");
   const ride = data?.data;
 
   // Compteur kilométrique/prix en direct — mis à jour à chaque position reçue
@@ -86,12 +90,15 @@ export default function CourseEnCoursScreen() {
 
   useEffect(() => {
     if (ride?.status === "completed") {
-      Alert.alert("Course terminée", "Merci pour votre travail !", [
-        { text: "OK", onPress: () => router.replace("/transport/mode-chauffeur" as any) },
+      const amount = Number(ride?.finalFare ?? ride?.estimatedFare ?? 0).toFixed(2);
+      Alert.alert("Course terminée", ride?.paymentStatus === "paid"
+        ? `${amount} EC ont été crédités sur ton solde. Merci pour ton travail !`
+        : `Le solde du passager était insuffisant : encaisse ${amount} EC en espèces.`, [
+        { text: "OK", onPress: () => (router.canGoBack() ? router.back() : router.replace("/transport/mode-chauffeur" as any)) },
       ]);
     } else if (ride?.status === "cancelled") {
       Alert.alert("Course annulée", ride?.cancelReason || "Cette course a été annulée.", [
-        { text: "OK", onPress: () => router.replace("/transport/mode-chauffeur" as any) },
+        { text: "OK", onPress: () => (router.canGoBack() ? router.back() : router.replace("/transport/mode-chauffeur" as any)) },
       ]);
     }
   }, [ride?.status]);
@@ -102,7 +109,13 @@ export default function CourseEnCoursScreen() {
     : null;
 
   const doArrived = () => arrivedRide(rideNumber).catch((e: any) => Alert.alert("Erreur", e?.data?.message || "Action impossible."));
-  const doComplete = () => completeRide(rideNumber).catch((e: any) => Alert.alert("Erreur", e?.data?.message || "Action impossible."));
+  const doComplete = () => completeRide(rideNumber).unwrap().then(() => refetch()).catch((e: any) => Alert.alert("Erreur", e?.data?.message || "Action impossible."));
+  // Le passager montre son code à 4 chiffres : preuve que c'est la bonne personne.
+  const doStart = async () => {
+    if (!/^\d{4}$/.test(code.trim())) { Alert.alert("Code", "Demande au passager le code à 4 chiffres affiché dans son app."); return; }
+    try { await startRide({ rideNumber, pickupCode: code.trim() }).unwrap(); setCode(""); refetch(); }
+    catch (e: any) { Alert.alert("Démarrage impossible", e?.data?.message || "Code incorrect."); }
+  };
   const doCancel = () => {
     Alert.alert("Annuler la course ?", "Le passager sera notifié immédiatement.", [
       { text: "Non", style: "cancel" },
@@ -146,8 +159,7 @@ export default function CourseEnCoursScreen() {
                   : <Ionicons name="person" size={22} color={C.primary} />}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.driverName}>{passenger.username ?? "Passager"}</Text>
-                {!!ride?.pickupCode && <Text style={s.driverMeta}>Code : {ride.pickupCode}</Text>}
+                <Text style={s.driverName}>{passenger.fullname || passenger.username || "Passager"}</Text>
               </View>
               {!!passenger.telephone && (
                 <TouchableOpacity style={s.callBtn} onPress={() => Linking.openURL(`tel:${passenger.telephone}`)}>
@@ -187,10 +199,15 @@ export default function CourseEnCoursScreen() {
               {arriving ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryBtnText}>Je suis arrivé</Text>}
             </TouchableOpacity>
           )}
-          {ride?.status === "arriving" && (
-            <View style={s.waitingNote}>
-              <Ionicons name="hourglass-outline" size={14} color={C.textMut} />
-              <Text style={s.waitingNoteText}>En attente que le passager démarre la course</Text>
+          {(ride?.status === "arriving" || ride?.status === "accepted") && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              <Text style={s.waitingNoteText}>Passager à bord ? Entre le code qu'il te montre pour démarrer.</Text>
+              <TextInput value={code} onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 4))} keyboardType="number-pad" maxLength={4}
+                placeholder="Code à 4 chiffres" placeholderTextColor={C.textMut} accessibilityLabel="Code du passager"
+                style={{ height: 48, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, color: C.text, fontSize: 20, letterSpacing: 6, textAlign: "center", backgroundColor: C.glass }} />
+              <TouchableOpacity style={[s.primaryBtn, { backgroundColor: C.green, marginTop: 0 }]} onPress={doStart} disabled={starting}>
+                {starting ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryBtnText}>Démarrer la course</Text>}
+              </TouchableOpacity>
             </View>
           )}
           {ride?.status === "in_progress" && (

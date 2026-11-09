@@ -46,6 +46,14 @@ export const orderApi = createApi({
     }),
 
     /* Créer une commande depuis le panier */
+    getMySavings: builder.query({
+      query: () => ({ url: "/order/my-savings", method: "GET" }),
+      providesTags: ["order"],
+    }),
+    prepayOrder: builder.mutation({
+      query: (orderNumber) => ({ url: `/order/prepay/${orderNumber}`, method: "POST" }),
+      invalidatesTags: ["order"],
+    }),
     createOrder: builder.mutation({
       query: (data) => ({ url: "/order/create", method: "POST", data }),
       invalidatesTags: ["order"],
@@ -102,6 +110,8 @@ export const {
   useGetUserOrdersQuery,
   useGetCompanyOrdersQuery,
   useCreateOrderMutation,
+  useGetMySavingsQuery,
+  usePrepayOrderMutation,
   useUpdateOrderStatusMutation,
   useUpdateOrderShippingMutation,
   useMarkOrderPaidMutation,

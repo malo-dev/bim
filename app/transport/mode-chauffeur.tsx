@@ -1,3 +1,5 @@
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -23,7 +25,7 @@ import {
   useToggleOnlineMutation,
   useUpdateChauffeurLocationMutation,
 } from "@/services/chauffeurService";
-import { useAcceptRideMutation, useDeclineRideMutation, useGetChauffeurActiveRideQuery } from "@/services/rideService";
+import { useAcceptRideMutation, useDeclineRideMutation, useGetChauffeurActiveRideQuery, useGetChauffeurPendingOfferQuery } from "@/services/rideService";
 import { getSocket } from "@/services/socketService";
 
 const LIGHT = {
@@ -50,9 +52,9 @@ const TIER_OPTIONS = [
 ];
 
 export default function ModeChauffeurScreen() {
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
+  const s = useMemo(() => mkS(C), [C]);
   const router = useRouter();
 
   const { data, isLoading, error, refetch } = useGetMyChauffeurQuery(undefined);
@@ -87,7 +89,7 @@ export default function ModeChauffeurScreen() {
             style={{ marginTop: 16 }}
             onPress={() => router.push("/transport/chauffeur-access" as any)}
           >
-            <Text style={{ fontFamily: "NexaBold", fontSize: 13, color: C.primary }}>
+            <Text style={{ fontFamily: "LatoBold", fontSize: 13, color: C.primary }}>
               J'ai un code d'accès chauffeur
             </Text>
           </TouchableOpacity>
@@ -180,6 +182,21 @@ function OnlineToggle({ C, s, chauffeur, onChanged }: { C: typeof LIGHT; s: any;
   const [offer, setOffer] = useState<RideOffer | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  // Course pour laquelle l'écran « course en cours » a déjà été ouvert (pas de doublon).
+  const openedFor = useRef<string | null>(null);
+  const openRide = (rn: string) => {
+    if (openedFor.current === rn) return;
+    openedFor.current = rn;
+    // push (et non replace) : cet écran reste monté et continue d'envoyer la
+    // position GPS, qui fait avancer le compteur kilométrique de la course.
+    router.push({ pathname: "/transport/course-en-cours", params: { rideNumber: rn } } as any);
+  };
+  // Filet de sécurité : offre manquée par le socket (app ouverte depuis le push).
+  const { data: pendingOfferData } = useGetChauffeurPendingOfferQuery(undefined, { skip: !chauffeur.isOnline || !!offer, pollingInterval: 5000 });
+  useEffect(() => {
+    const p = pendingOfferData?.data;
+    if (p && !offer) { setOffer(p); setSecondsLeft(p.expiresInSec || 15); }
+  }, [pendingOfferData]);
 
   const isPending = chauffeur.status === "pending";
   const isOnline = !!chauffeur.isOnline;
@@ -191,9 +208,9 @@ function OnlineToggle({ C, s, chauffeur, onChanged }: { C: typeof LIGHT; s: any;
     }, [])
   );
   useEffect(() => {
-    if (activeRideData?.data?.rideNumber) {
-      router.replace({ pathname: "/transport/course-en-cours", params: { rideNumber: activeRideData.data.rideNumber } } as any);
-    }
+    const rn = activeRideData?.data?.rideNumber;
+    if (rn) openRide(rn);
+    else openedFor.current = null; // course terminée → la prochaine pourra s'ouvrir
   }, [activeRideData]);
 
   // Offres de course en direct pendant que le chauffeur est en ligne
@@ -226,7 +243,7 @@ function OnlineToggle({ C, s, chauffeur, onChanged }: { C: typeof LIGHT; s: any;
       await acceptRide(offer.rideNumber).unwrap();
       const rn = offer.rideNumber;
       setOffer(null);
-      router.push({ pathname: "/transport/course-en-cours", params: { rideNumber: rn } } as any);
+      openRide(rn);
     } catch (e: any) {
       Alert.alert("Trop tard", e?.data?.message || "Cette course n'est plus disponible.");
       setOffer(null);
@@ -350,53 +367,53 @@ function mkS(C: typeof LIGHT) { return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
   iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.iconBtnBg, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.iconBtnBord },
-  title: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
+  title: { fontFamily: "LatoBold", fontSize: 16, color: C.text },
 
   introCard: { alignItems: "center", gap: 8, backgroundColor: C.glass, borderRadius: 20, padding: 20, borderWidth: 1, borderColor: C.glassBord },
-  introTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text, textAlign: "center" },
-  introSub: { fontFamily: "NexaLight", fontSize: 12, color: C.textSub, textAlign: "center" },
+  introTitle: { fontFamily: "LatoBold", fontSize: 15, color: C.text, textAlign: "center" },
+  introSub: { fontFamily: "LatoLight", fontSize: 12, color: C.textSub, textAlign: "center" },
 
-  fieldLabel: { fontFamily: "NexaLight", fontSize: 12, color: C.textSub },
-  input: { backgroundColor: C.glass, borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "NexaLight", fontSize: 14, color: C.text },
+  fieldLabel: { fontFamily: "LatoLight", fontSize: 12, color: C.textSub },
+  input: { backgroundColor: C.glass, borderWidth: 1, borderColor: C.border, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "LatoLight", fontSize: 14, color: C.text },
 
   tierChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, backgroundColor: C.glass, borderWidth: 1, borderColor: C.border },
   tierChipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  tierChipText: { fontFamily: "NexaBold", fontSize: 12, color: C.text },
+  tierChipText: { fontFamily: "LatoBold", fontSize: 12, color: C.text },
 
   ctaBtn: { marginTop: 6, backgroundColor: C.primary, borderRadius: 20, paddingVertical: 15, alignItems: "center", justifyContent: "center" },
-  ctaText: { fontFamily: "NexaBold", fontSize: 14, color: "#fff" },
+  ctaText: { fontFamily: "LatoBold", fontSize: 14, color: "#fff" },
 
-  errorText: { fontFamily: "NexaLight", fontSize: 12, color: C.red, textAlign: "center" },
+  errorText: { fontFamily: "LatoLight", fontSize: 12, color: C.red, textAlign: "center" },
 
   pendingBanner: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: `${C.amber}14`, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: `${C.amber}33` },
-  pendingText: { flex: 1, fontFamily: "NexaLight", fontSize: 12, color: C.textSub, lineHeight: 18 },
+  pendingText: { flex: 1, fontFamily: "LatoLight", fontSize: 12, color: C.textSub, lineHeight: 18 },
 
   statusCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: C.glass, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: C.glassBord },
-  statusTitle: { fontFamily: "NexaBold", fontSize: 14, color: C.text },
-  statusSub: { fontFamily: "NexaLight", fontSize: 11.5, color: C.textSub, marginTop: 2 },
+  statusTitle: { fontFamily: "LatoBold", fontSize: 14, color: C.text },
+  statusSub: { fontFamily: "LatoLight", fontSize: 11.5, color: C.textSub, marginTop: 2 },
 
   vehicleCard: { backgroundColor: C.glass, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: C.glassBord, gap: 4 },
-  vehicleTitle: { fontFamily: "NexaBold", fontSize: 15, color: C.text },
-  vehicleSub: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  vehicleTitle: { fontFamily: "LatoBold", fontSize: 15, color: C.text },
+  vehicleSub: { fontFamily: "LatoLight", fontSize: 12, color: C.textMut },
   statsRow: { flexDirection: "row", gap: 12, marginTop: 12 },
   statBox: { flex: 1, alignItems: "center", backgroundColor: C.canvas, borderRadius: 14, paddingVertical: 12 },
-  statVal: { fontFamily: "NexaBold", fontSize: 16, color: C.text },
-  statLabel: { fontFamily: "NexaLight", fontSize: 10.5, color: C.textMut, marginTop: 2 },
+  statVal: { fontFamily: "LatoBold", fontSize: 16, color: C.text },
+  statLabel: { fontFamily: "LatoLight", fontSize: 10.5, color: C.textMut, marginTop: 2 },
 
   offerBackdrop: { flex: 1, backgroundColor: "rgba(15,23,42,0.55)", justifyContent: "flex-end" },
   offerCard: { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, gap: 14 },
   offerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  offerTitle: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  offerTitle: { fontFamily: "LatoBold", fontSize: 17, color: C.text },
   offerTimer: { backgroundColor: `${C.primary}14`, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
-  offerTimerText: { fontFamily: "NexaBold", fontSize: 13, color: C.primary },
+  offerTimerText: { fontFamily: "LatoBold", fontSize: 13, color: C.primary },
   offerFareRow: { flexDirection: "row", alignItems: "baseline", gap: 10 },
-  offerFare: { fontFamily: "NexaBold", fontSize: 28, color: C.text },
-  offerMeta: { fontFamily: "NexaLight", fontSize: 12, color: C.textMut },
+  offerFare: { fontFamily: "LatoBold", fontSize: 28, color: C.text },
+  offerMeta: { fontFamily: "LatoLight", fontSize: 12, color: C.textMut },
   offerAddr: { flexDirection: "row", alignItems: "center", gap: 10 },
-  offerAddrText: { flex: 1, fontFamily: "NexaBold", fontSize: 13, color: C.text },
+  offerAddrText: { flex: 1, fontFamily: "LatoBold", fontSize: 13, color: C.text },
   offerBtnRow: { flexDirection: "row", gap: 12, marginTop: 6 },
   declineBtn: { flex: 1, alignItems: "center", justifyContent: "center", height: 52, borderRadius: 20, backgroundColor: C.glass, borderWidth: 1, borderColor: C.border },
-  declineText: { fontFamily: "NexaBold", fontSize: 14, color: C.textSub },
+  declineText: { fontFamily: "LatoBold", fontSize: 14, color: C.textSub },
   acceptBtn: { flex: 1.4, alignItems: "center", justifyContent: "center", height: 52, borderRadius: 20, backgroundColor: C.green },
-  acceptText: { fontFamily: "NexaBold", fontSize: 14, color: "#fff" },
+  acceptText: { fontFamily: "LatoBold", fontSize: 14, color: "#fff" },
 }); }

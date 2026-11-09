@@ -108,6 +108,12 @@ export const livreurApi = createApi({
       invalidatesTags: ["livreur"],
     }),
 
+    // Commande récupérée → « En route » chez le client
+    pickupOrder: builder.mutation({
+      query: (orderNumber) => ({ url: `/livreur/orders/pickup/${orderNumber}`, method: "PUT" }),
+      invalidatesTags: ["livreur"],
+    }),
+
     // Annuler une livraison
     cancelDelivery: builder.mutation({
       query: (orderNumber) => ({ url: `/livreur/orders/cancel/${orderNumber}`, method: "PUT" }),
@@ -152,6 +158,7 @@ export const {
   useGetMyDeliveriesQuery,
   useAcceptOrderMutation,
   useCancelDeliveryMutation,
+  usePickupOrderMutation,
   useGetMyEarningsQuery,
   useSendSOSMutation,
   useGetMyRatingsQuery,

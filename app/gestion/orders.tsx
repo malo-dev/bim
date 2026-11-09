@@ -1,3 +1,5 @@
+import { useBimPalette } from "@/components/bim/legacy";
+import { useTh } from "@/components/bim/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
@@ -50,9 +52,9 @@ function statusColor(status: string, C: typeof LIGHT) {
 
 export default function GestionOrdersScreen() {
   const router = useRouter();
-  const { isDark } = useAppTheme();
-  const C = isDark ? DARK : LIGHT;
-  const s = useMemo(() => mkS(C), [isDark]);
+  const isDark = !useTh().light;
+  const C = useBimPalette() as any;
+  const s = useMemo(() => mkS(C), [C]);
 
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -98,7 +100,7 @@ export default function GestionOrdersScreen() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.bg} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -147,7 +149,7 @@ export default function GestionOrdersScreen() {
           data={orders}
           keyExtractor={(item) => String(item.orderId)}
           contentContainerStyle={{ padding: 16, gap: 10 }}
-          ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune commande</Text> : null}
+          ListEmptyComponent={!isFetching ? <Text style={s.empty}>Aucune commande</Text> : undefined}
           renderItem={({ item }) => (
             <TouchableOpacity style={s.card} onPress={() => openActions(item)} activeOpacity={0.85}>
               <View style={{ flex: 1 }}>
@@ -171,19 +173,19 @@ export default function GestionOrdersScreen() {
 function mkS(C: typeof LIGHT) { return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 },
-  title: { fontFamily: "NexaBold", fontSize: 17, color: C.text },
+  title: { fontFamily: "LatoBold", fontSize: 17, color: C.text },
   searchWrap: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 10 },
-  searchInput: { flex: 1, fontFamily: "NexaLight", fontSize: 13, color: C.text },
+  searchInput: { flex: 1, fontFamily: "LatoLight", fontSize: 13, color: C.text },
   chipRow: { paddingHorizontal: 16, paddingVertical: 6, gap: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.border },
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  chipText: { fontFamily: "NexaBold", fontSize: 12, color: C.muted },
+  chipText: { fontFamily: "LatoBold", fontSize: 12, color: C.muted },
   chipTextActive: { color: "#fff" },
   card: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.border },
-  orderNum: { fontFamily: "NexaBold", fontSize: 13, color: C.text },
-  orderInfo: { fontFamily: "NexaLight", fontSize: 12, color: C.muted, marginTop: 2 },
+  orderNum: { fontFamily: "LatoBold", fontSize: 13, color: C.text },
+  orderInfo: { fontFamily: "LatoLight", fontSize: 12, color: C.muted, marginTop: 2 },
   statusBadge: { alignSelf: "flex-start", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
-  statusText: { fontFamily: "NexaBold", fontSize: 10, textTransform: "uppercase" },
-  amount: { fontFamily: "NexaBold", fontSize: 14, color: C.primary },
-  empty: { textAlign: "center", fontFamily: "NexaLight", color: C.muted, marginTop: 40 },
+  statusText: { fontFamily: "LatoBold", fontSize: 10, textTransform: "uppercase" },
+  amount: { fontFamily: "LatoBold", fontSize: 14, color: C.primary },
+  empty: { textAlign: "center", fontFamily: "LatoLight", color: C.muted, marginTop: 40 },
 }); }

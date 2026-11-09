@@ -1,122 +1,103 @@
-import { Ionicons } from "@expo/vector-icons";
+/**
+ * Barre de navigation BIM NEXT : Accueil · Scanner · Profil (maquette).
+ * Les autres onglets restent dans Réglages (non affichés ici).
+ */
+import { BlurTargetView, BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { useEffect, useRef, type ComponentProps } from "react";
-import { useAppTheme } from "@/app/_layout";
+import React, { useEffect, useRef, type ComponentProps, type ComponentRef } from "react";
+import { Animated, Easing, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { BimIcon } from "@/components/bim/icons";
+import { useTh } from "@/components/bim/theme";
+import { TabBlurProvider, useTabBlur } from "@/components/bim/tabBlur";
+import { T, tap } from "@/components/bim/ui";
 
-const W = {
-  primary: "#0047FF",
-  text:    "#1A1C1C",
-  muted:   "#B0B4CC",
-  white:   "#FFFFFF",
-  border:  "#E8EDF5",
-};
+const VISIBLE = ["index", "profil"];
 
-const TAB_CONFIG = [
-  { name: "index",   label: "Accueil", icon: { active: "home",      inactive: "home-outline"      } },
-  { name: "reseaux", label: "Réseaux", icon: { active: "people",    inactive: "people-outline"    } },
-  { name: "scan",    label: "Scan",    icon: { active: "qr-code",   inactive: "qr-code-outline"   }, isCenter: true },
-  { name: "stats",   label: "Stats",   icon: { active: "bar-chart", inactive: "bar-chart-outline" } },
-  { name: "params",  label: "Params",  icon: { active: "settings",  inactive: "settings-outline"  } },
-] as const;
+/* Chaque onglet est une cible de flou pour la barre (voir components/bim/tabBlur.tsx). */
+function TabScreenTarget({ name, children }: { name: string; children: React.ReactNode }) {
+  const ref = useRef<ComponentRef<typeof View> | null>(null);
+  const { register } = useTabBlur();
+  useEffect(() => { register(name, ref); }, [name]);
+  return <BlurTargetView ref={ref} style={{ flex: 1 }}>{children}</BlurTargetView>;
+}
 
-function TabItem({
-  config,
-  focused,
-  onPress,
-}: {
-  config: typeof TAB_CONFIG[number];
-  focused: boolean;
-  onPress: () => void;
-}) {
-  const { isDark } = useAppTheme();
-  const dropScale = useRef(new Animated.Value(focused ? 1 : 0)).current;
+/** Enfoncement + rebond à l'appui (comme les boutons de la maquette). */
+function usePress(to = 0.88) {
+  const p = useRef(new Animated.Value(0)).current;
+  const onPressIn = () => { tap(); Animated.timing(p, { toValue: 1, duration: 110, easing: Easing.out(Easing.quad), useNativeDriver: true }).start(); };
+  const onPressOut = () => Animated.spring(p, { toValue: 0, friction: 4, tension: 180, useNativeDriver: true }).start();
+  return { onPressIn, onPressOut, scale: p.interpolate({ inputRange: [0, 1], outputRange: [1, to] }) };
+}
 
-  useEffect(() => {
-    dropScale.stopAnimation();
-    Animated.spring(dropScale, {
-      toValue: focused ? 1 : 0,
-      friction: 7,
-      tension: 90,
-      useNativeDriver: true,
-    }).start();
-  }, [focused, dropScale]);
+type TabBarProps = NonNullable<ComponentProps<typeof Tabs>["tabBar"]> extends (props: infer P) => any ? P : never;
 
-  if ("isCenter" in config && config.isCenter) {
-    return (
-      <Pressable style={tb.centerWrap} onPress={onPress} hitSlop={10}>
-        <View style={[tb.fab, !focused && tb.fabMuted, !focused && isDark && { backgroundColor: "#1A2540" }]}>
-          <Ionicons
-            name={focused ? "qr-code" : "qr-code-outline"}
-            size={26}
-            color={focused ? W.white : W.muted}
-          />
-        </View>
-        <Text style={[tb.label, focused && tb.labelActive, focused && isDark && { color: "#4D8DFF" }]}>Scan</Text>
-      </Pressable>
-    );
-  }
-
-  const iconName = focused ? config.icon.active : config.icon.inactive;
-
+function SideTab({ label, icon, focused, onPress }: { label: string; icon: "home" | "user"; focused: boolean; onPress: () => void }) {
+  const th = useTh();
+  const v = useRef(new Animated.Value(focused ? 1 : 0)).current;
+  const pr = usePress();
+  useEffect(() => { Animated.spring(v, { toValue: focused ? 1 : 0, friction: 6, tension: 120, useNativeDriver: true }).start(); }, [focused]);
   return (
-    <Pressable style={tb.tabItem} onPress={onPress} hitSlop={10}>
-      <View style={tb.iconWrap}>
-        <Animated.View
-          pointerEvents="none"
-          style={[tb.liquidDrop, { transform: [{ scale: dropScale }] }]}
-        />
-        <Ionicons
-          name={iconName as any}
-          size={22}
-          color={focused ? W.white : W.muted}
-        />
-      </View>
-      <Text style={[tb.label, focused && tb.labelActive, focused && isDark && { color: "#4D8DFF" }]}>
-        {config.label}
-      </Text>
+    <Pressable onPress={onPress} onPressIn={pr.onPressIn} onPressOut={pr.onPressOut} style={{ flex: 1, alignItems: "center", justifyContent: "center", height: 70 }} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={label} hitSlop={8}>
+      <Animated.View style={{ alignItems: "center", gap: 4, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }, { scale: pr.scale }, { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -2] }) }] }}>
+        <BimIcon name={icon} size={22} color={focused ? th.fg : th.muted} filled={focused && icon === "home"} />
+        <T w={focused ? "bold" : "regular"} size={11} color={focused ? th.fg : th.muted}>{label}</T>
+      </Animated.View>
     </Pressable>
   );
 }
 
-// Le type exact de `tabBar` vient d'expo-router (pas de @react-navigation/bottom-tabs :
-// depuis le SDK 56, expo-router a son propre type, structurellement proche mais distinct).
-type TabBarProps = NonNullable<ComponentProps<typeof Tabs>["tabBar"]> extends (props: infer P) => any ? P : never;
-
-function CustomTabBar({ state, navigation }: TabBarProps) {
-  const { isDark } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const bottomPos = insets.bottom > 0 ? insets.bottom + 8 : 16;
-
+function ScanTab({ onPress }: { onPress: () => void }) {
+  const th = useTh();
+  const ring = useRef(new Animated.Value(0)).current;
+  const pr = usePress(0.86);
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(ring, { toValue: 1, duration: 1800, easing: Easing.out(Easing.ease), useNativeDriver: true }));
+    loop.start(); return () => loop.stop();
+  }, []);
   return (
-    <View style={[tb.container, { bottom: bottomPos }]}>
-      <View style={[tb.pill, isDark && { backgroundColor: "rgba(26,37,64,0.95)", borderColor: "rgba(31,42,68,0.80)" }]}>
-        {state.routes.map((route, index) => {
-          const config = TAB_CONFIG.find(c => c.name === route.name) ?? TAB_CONFIG[index];
-          const focused = state.index === index;
+    <Pressable onPress={onPress} onPressIn={pr.onPressIn} onPressOut={pr.onPressOut} accessibilityRole="tab" accessibilityLabel="Scanner" style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+      <Animated.View pointerEvents="none" style={{ position: "absolute", width: 58, height: 58, borderRadius: 29, borderWidth: 2, borderColor: th.aura ? th.scan : th.glass(0.55),
+        opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }), transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }] }} />
+      <Animated.View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: th.scan, alignItems: "center", justifyContent: "center", transform: [{ scale: pr.scale }],
+        boxShadow: th.aura ? `0 8px 22px ${th.scan}99` : "0 8px 20px rgba(0,0,0,0.3)" }}>
+        <BimIcon name="scan" size={24} color={th.onScan} strokeWidth={1.9} />
+      </Animated.View>
+    </Pressable>
+  );
+}
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
-            if (!focused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
-          return (
-            <TabItem key={route.key} config={config} focused={focused} onPress={onPress} />
-          );
-        })}
+function BimTabBar({ state, navigateToTab }: TabBarProps) {
+  const th = useTh();
+  const { targets, covered } = useTabBlur();
+  const current0 = state.routes[state.index]?.name;
+  // Le flou (et le fond de la barre) n'apparaît que si du contenu passe sous la barre — fondu animé.
+  const blur = useRef(new Animated.Value(0)).current;
+  const on = !!covered[current0];
+  useEffect(() => { Animated.timing(blur, { toValue: on ? 1 : 0, duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1), useNativeDriver: true }).start(); }, [on]);
+  const insets = useSafeAreaInsets();
+  const current = state.routes[state.index]?.name;
+  if (!VISIBLE.includes(current)) return null;
+  const press = (name: string) => {
+    const route = state.routes.find((r) => r.name === name);
+    if (!route) return;
+    if (current !== name) navigateToTab(route.key);
+  };
+  return (
+    <View pointerEvents="box-none" style={{ position: "absolute", left: 50, right: 50, bottom: (insets.bottom > 0 ? insets.bottom : 0) + 18, zIndex: 999, elevation: 999 }}>
+      <View style={{ height: 70, borderRadius: 35, flexDirection: "row", alignItems: "center" }}>
+        {/* La barre reste toujours visible ; seule l'opacité du flou / du fond change (fondu animé). */}
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: 35, overflow: "hidden", borderWidth: 1, borderColor: th.glass(0.18),
+          boxShadow: `${th.glassFx}, 0 12px 30px rgba(0,0,0,0.25)`, backgroundColor: th.navBg }}>
+          <Animated.View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, opacity: blur }}>
+          <BlurView blurTarget={targets[current]} blurMethod="dimezisBlurViewSdk31Plus" intensity={34} tint={th.light ? "light" : "dark"}
+            style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} />
+          <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: th.navBg }} />
+          </Animated.View>
+        </View>
+        <SideTab label="Accueil" icon="home" focused={current === "index"} onPress={() => press("index")} />
+        <ScanTab onPress={() => press("scan")} />
+        <SideTab label="Profil" icon="user" focused={current === "profil"} onPress={() => press("profil")} />
       </View>
     </View>
   );
@@ -124,111 +105,16 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
 
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{ headerShown: false, lazy: true }}
-      tabBar={(props) => <CustomTabBar {...props} />}
-    >
+    <TabBlurProvider>
+    <Tabs screenOptions={{ headerShown: false, lazy: true, animation: "shift" }} tabBar={(props) => <BimTabBar {...props} />}
+      screenLayout={({ route, children }) => <TabScreenTarget name={route.name}>{children}</TabScreenTarget>}>
       <Tabs.Screen name="index"   options={{ title: "Accueil" }} />
-      <Tabs.Screen name="reseaux" options={{ title: "Réseaux" }} />
-      <Tabs.Screen name="scan"    options={{ title: ""        }} />
-      <Tabs.Screen name="stats"   options={{ title: "Stats"   }} />
-      <Tabs.Screen name="params"  options={{ title: "Params"  }} />
+      <Tabs.Screen name="scan"    options={{ title: "Scanner" }} />
+      <Tabs.Screen name="profil"  options={{ title: "Profil" }} />
+      <Tabs.Screen name="params"  options={{ title: "Réglages avancés", href: null }} />
+      <Tabs.Screen name="reseaux" options={{ title: "Réseaux", href: null }} />
+      <Tabs.Screen name="stats"   options={{ title: "Stats", href: null }} />
     </Tabs>
+    </TabBlurProvider>
   );
 }
-
-const PILL_HEIGHT = 68;
-
-const tb = StyleSheet.create({
-  container: {
-    position: "absolute",
-    left: 16, right: 16,
-    alignItems: "center",
-    zIndex: 999,
-    elevation: 999,
-  },
-
-  pill: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    width: "100%",
-    height: PILL_HEIGHT,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 40,
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.6)",
-    elevation: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.13,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-  },
-
-  tabItem: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 8,
-  },
-
-  iconWrap: {
-    width: 44, height: 44,
-    alignItems: "center", justifyContent: "center",
-    position: "relative",
-  },
-
-  liquidDrop: {
-    position: "absolute",
-    width: 44, height: 44,
-    borderRadius: 22,
-    backgroundColor: W.primary,
-    shadowColor: W.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-
-  label: {
-    fontFamily: "NexaRegular",
-    fontSize: 9,
-    color: W.muted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  labelActive: {
-    fontFamily: "NexaBold",
-    color: W.primary,
-  },
-
-  centerWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 2,
-    gap: 3,
-  },
-  fab: {
-    width: 54, height: 54,
-    borderRadius: 27,
-    backgroundColor: W.primary,
-    alignItems: "center", justifyContent: "center",
-    elevation: 10,
-    shadowColor: W.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-  fabMuted: {
-    backgroundColor: "#E8EDF5",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    borderColor: "rgba(255,255,255,0.9)",
-  },
-});

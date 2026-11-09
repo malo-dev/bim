@@ -257,7 +257,7 @@ export default function OrderTracking() {
 
   return (
     <View style={s.root}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={C.card} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* ── HEADER blanc ── */}
       <SafeAreaView edges={["top"]} style={s.header}>
@@ -283,7 +283,7 @@ export default function OrderTracking() {
         <ScrollView
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={C.primary} />}
+          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={() => { refetch(); }} tintColor={C.primary} />}
         >
           {/* ── Status hero card ── */}
           <View style={[s.statusCard, { borderColor: meta.color + "30" }]}>
