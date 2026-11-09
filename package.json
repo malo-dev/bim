@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "eas-build-pre-install": "[ \"$EAS_BUILD_PLATFORM\" = \"android\" ] && bash ./scripts/eas-memory.sh start || true",
+    "eas-build-on-error": "[ \"$EAS_BUILD_PLATFORM\" = \"android\" ] && bash ./scripts/eas-memory.sh report || true"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
