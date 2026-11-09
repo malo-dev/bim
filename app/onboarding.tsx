@@ -12,15 +12,23 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert, Animated, DeviceEventEmitter, Easing, KeyboardAvoidingView, Platform,
+  Alert, Animated, AppState, DeviceEventEmitter, Easing, KeyboardAvoidingView, Platform,
   Pressable, ScrollView, View, useWindowDimensions,
 } from "react-native";
+import Constants from "expo-constants";
+import { io, Socket } from "socket.io-client";
+import axiosInstance from "@/services/axiosInstance";
 import { LinearGradient } from "expo-linear-gradient";
 import { SvgXml } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useAskPasswordResetMutation, useLoginMutation, usePhoneLoginMutation, useQuickAccessMutation,
+  useResetPasswordMutation,
 } from "@/services/authService";
+
+// Mot de passe oublié : identifiant de session (32 hex) pour la room socket.
+const newResetSession = () => Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+const SOCKET_URL = String(Constants.expoConfig?.extra?.API_URL ?? "https://serverbimnext.masmara-dimajelo.org/api/v1").replace(/\/api\/v1\/?$/, "");
 import { persistAuthSession } from "@/utils/authSession.utils";
 import { BimIcon } from "@/components/bim/icons";
 import {
@@ -35,7 +43,7 @@ import { useTh } from "@/components/bim/theme";
 
 type Step =
   | "splash" | "s1" | "s2" | "s3" | "s4" | "compte"
-  | "connexion" | "motdepasse" | "ins1" | "ins2" | "ins3";
+  | "connexion" | "motdepasse" | "reinitattente" | "reinitmp" | "ins1" | "ins2" | "ins3";
 
 /**
  * Enchaînement des écrans comme la maquette : l'écran sortant s'efface en glissant
@@ -294,6 +302,13 @@ export default function Onboarding() {
   const [pin, setPin] = useState("");
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
+  // Réinitialisation par lien : session socket, code de vérification, autorisation reçue.
+  const [resetSid, setResetSid] = useState<string | null>(null);
+  const [matchCode, setMatchCode] = useState<string | null>(null);
+  const [resetGrant, setResetGrant] = useState<string | null>(null);
+  const [newPin, setNewPin] = useState("");
+  const [newPinFirst, setNewPinFirst] = useState<string | null>(null);
+  const resetSocket = useRef<Socket | null>(null);
   const [emailMode, setEmailMode] = useState(false);
   const [legacyEmail, setLegacyEmail] = useState("");
   const [legacyPwd, setLegacyPwd] = useState("");
@@ -304,6 +319,7 @@ export default function Onboarding() {
   const [phoneLogin] = usePhoneLoginMutation();
   const [loginUser] = useLoginMutation();
   const [askReset] = useAskPasswordResetMutation();
+  const [resetPassword] = useResetPasswordMutation();
 
   const fullPhone = `${country.code}${phone.replace(/\s/g, "")}`;
   const phoneOk = phone.replace(/\s/g, "").length >= 8;
@@ -371,16 +387,88 @@ export default function Onboarding() {
     } finally { setBusy(false); }
   };
 
+  // Mot de passe oublié — 1) e-mail avec un lien ; l'app attend (socket) que le
+  // client touche le lien et confirme, puis ouvre « nouveau mot de passe ».
   const doReset = async () => {
-    const m = resetEmail.trim();
+    const m = resetEmail.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(m)) { Alert.alert("E-mail", "Entre une adresse e-mail valide."); return; }
     setBusy(true);
+    const sid = newResetSession();
     try {
-      await askReset({ email: m }).unwrap();
+      const res: any = await askReset({ email: m, sessionId: sid }).unwrap();
+      grantRef.current = null;
+      setResetSid(sid); setMatchCode(res?.matchCode ?? null); setResetGrant(null);
+      setNewPin(""); setNewPinFirst(null);
+      go("reinitattente");
+    } catch (err: any) {
+      Alert.alert("Erreur", err?.data?.message || "Envoi impossible. Réessaie.");
+    } finally { setBusy(false); }
+  };
+
+  // Socket et vérification de secours peuvent arriver presque ensemble : une seule ouverture.
+  const grantRef = useRef<string | null>(null);
+  const onResetVerified = (grant: string) => {
+    if (!grant || grantRef.current) return;
+    grantRef.current = grant;
+    setResetGrant(grant);
+    go("reinitmp");
+  };
+
+  // 2) Attente : socket (instantané) + vérification toutes les 3 s et au retour
+  //    dans l'app (le socket peut être coupé pendant que le client lit l'e-mail).
+  useEffect(() => {
+    if (step !== "reinitattente" || !resetSid) return;
+    const sock = io(SOCKET_URL, { transports: ["websocket"], reconnection: true, reconnectionDelay: 1500 });
+    resetSocket.current = sock;
+    sock.on("connect", () => sock.emit("reset:watch", resetSid));
+    sock.on("reset:verified", (p: { grant?: string }) => p?.grant && onResetVerified(p.grant));
+
+    let stopped = false;
+    const check = async () => {
+      try {
+        const { data } = await axiosInstance.get(`/auth/reset-status/${resetSid}`);
+        if (stopped) return;
+        if (data?.verified && data?.grant) onResetVerified(data.grant);
+        else if (data?.expired) {
+          stopped = true;
+          Alert.alert("Lien expiré", "La demande a expiré. Recommence « Mot de passe oublié ».");
+          go("motdepasse", false);
+        }
+      } catch {}
+    };
+    const timer = setInterval(check, 3000);
+    const appSub = AppState.addEventListener("change", (s) => {
+      if (s === "active") { if (!sock.connected) sock.connect(); check(); }
+    });
+    return () => { stopped = true; clearInterval(timer); appSub.remove(); sock.disconnect(); resetSocket.current = null; };
+  }, [step, resetSid]);
+
+  // Quitter le parcours (retour, autre écran) l'annule : il faudra recommencer.
+  useEffect(() => {
+    if (step !== "reinitattente" && step !== "reinitmp" && resetSid) {
+      grantRef.current = null;
+      setResetSid(null); setMatchCode(null); setResetGrant(null); setNewPin(""); setNewPinFirst(null);
+    }
+  }, [step]);
+
+  // 3) Nouveau mot de passe : 6 chiffres, saisis deux fois.
+  const doSetNewPassword = async () => {
+    if (newPin.length !== 6) { Alert.alert("Mot de passe", "Ton mot de passe doit contenir 6 chiffres."); return; }
+    if (newPinFirst === null) { setNewPinFirst(newPin); setNewPin(""); return; }
+    if (newPin !== newPinFirst) {
+      Alert.alert("Les mots de passe ne correspondent pas", "Recommence la saisie.");
+      setNewPin(""); setNewPinFirst(null); return;
+    }
+    setBusy(true);
+    try {
+      await resetPassword({ grant: resetGrant, newPassword: newPin }).unwrap();
+      setPassword(""); setLegacyPwd("");
       setResetSent(true);
       go("connexion");
     } catch (err: any) {
-      Alert.alert("Erreur", err?.data?.message || "Envoi impossible. Réessaie.");
+      Alert.alert("Erreur", err?.data?.message || "Impossible d'enregistrer le mot de passe.", [
+        { text: "OK", onPress: () => { if (err?.status === 400) go("motdepasse", false); } },
+      ]);
     } finally { setBusy(false); }
   };
 
@@ -443,7 +531,7 @@ export default function Onboarding() {
           <Appear kind="rise">
             <View style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 10, padding: 14, borderRadius: 16, backgroundColor: th.accent }} accessibilityRole="alert">
               <BimIcon name="mail" size={18} color={th.onAccent} />
-              <T size={14} color={th.onAccent} style={{ flex: 1 }}>Lien envoyé ! Regarde ta boîte Gmail.</T>
+              <T size={14} color={th.onAccent} style={{ flex: 1 }}>Mot de passe changé ! Connecte-toi avec ton nouveau mot de passe.</T>
             </View>
           </Appear>
         )}
@@ -470,8 +558,62 @@ export default function Onboarding() {
         <TopBar onBack={() => go("connexion", false)} />
         <View style={{ marginTop: 50 }}><HeroBubble icon="lock" /></View>
         <View style={{ marginTop: 36 }}><H1 a="Mot de passe" b="oublié ?" /></View>
-        <T size={15} color={th.muted} style={{ marginTop: 12, lineHeight: 23 }}>Entre l'adresse Gmail utilisée à l'inscription. On t'envoie un lien pour choisir un nouveau mot de passe.</T>
+        <T size={15} color={th.muted} style={{ marginTop: 12, lineHeight: 23 }}>Entre l'adresse e-mail de ton compte. On t'envoie un lien : touche-le, et l'app ouvrira la page pour choisir un nouveau mot de passe.</T>
         <View style={{ marginTop: 24 }}><TextField id="md-mail" label="Adresse e-mail" value={resetEmail} onChange={setResetEmail} placeholder="nom@gmail.com" keyboardType="email-address" autoComplete="email" /></View>
+      </FormScreen>
+    );
+  } else if (step === "reinitattente") {
+    screen = (
+      <FormScreen footer={
+        <>
+          <SlideButton variant="accent" label="Renvoyer l'e-mail" loading={busy} onDone={doReset} />
+          <View style={{ alignItems: "center", marginTop: 8 }}><LinkText onPress={() => go("connexion", false)}>Annuler</LinkText></View>
+        </>
+      }>
+        <TopBar onBack={() => go("motdepasse", false)} />
+        <View style={{ marginTop: 44 }}><HeroBubble icon="lock" /></View>
+        <View style={{ marginTop: 32 }}><H1 a="Regarde tes" b="e-mails" /></View>
+        <T size={15} color={th.muted} style={{ marginTop: 12, lineHeight: 23 }}>
+          On a envoyé un lien à <T w="bold" size={15}>{resetEmail.trim()}</T>. Touche-le : cette page s'ouvrira toute seule pour choisir ton nouveau mot de passe.
+        </T>
+        {!!matchCode && (
+          <View style={{ marginTop: 22, alignItems: "center", padding: 16, borderRadius: 22, backgroundColor: th.glassFill(0.14), borderWidth: 1, borderColor: th.glass(0.22) }} accessibilityLabel={`Code de vérification ${matchCode.split("").join(" ")}`}>
+            <T size={13} color={th.muted}>Code de vérification</T>
+            <T w="bold" size={36} style={{ letterSpacing: 10, marginTop: 4 }}>{matchCode}</T>
+            <T size={12} color={th.muted} style={{ marginTop: 6, textAlign: "center", lineHeight: 18 }}>La page du lien doit afficher le même code. Sinon, ne confirme pas.</T>
+          </View>
+        )}
+        <View style={{ marginTop: 18, flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center" }}>
+          <PinDot on /><T size={13} color={th.muted}>En attente de ta confirmation… garde cet écran ouvert.</T>
+        </View>
+      </FormScreen>
+    );
+  } else if (step === "reinitmp") {
+    const padKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
+    const confirming = newPinFirst !== null;
+    screen = (
+      <FormScreen glow={false} footer={<SlideButton variant="accent" label={confirming ? "Valider" : "Continuer"} loading={busy} onDone={doSetNewPassword} />}>
+        <TopBar onBack={() => go("connexion", false)} />
+        <View style={{ marginTop: 34 }}><H1 a={confirming ? "Confirme ton" : "Crée ton nouveau"} b="mot de passe" /></View>
+        <T size={15} color={th.muted} style={{ marginTop: 10, lineHeight: 23 }}>
+          {confirming ? "Entre encore les mêmes 6 chiffres." : "C'est bien toi ✅ Choisis 6 chiffres simples à retenir."}
+        </T>
+        <View style={{ marginTop: 26, flexDirection: "row", justifyContent: "center", gap: 14 }} accessibilityLabel={`${newPin.length} chiffres sur 6 saisis`}>
+          {[0, 1, 2, 3, 4, 5].map((n) => <PinDot key={n} on={n < newPin.length} />)}
+        </View>
+        <View style={{ marginTop: 26, alignSelf: "center", width: 282, flexDirection: "row", flexWrap: "wrap", rowGap: 10, columnGap: 18 }}>
+          {padKeys.map((kk, idx) => {
+            const digit = kk !== "" && kk !== "⌫";
+            return (
+              <PressScale key={idx} disabled={kk === ""} accessibilityLabel={kk === "⌫" ? "Effacer" : digit ? `Chiffre ${kk}` : "Vide"}
+                onPress={() => { if (kk === "⌫") setNewPin((p) => p.slice(0, -1)); else if (digit) setNewPin((p) => (p.length < 6 ? p + kk : p)); }}
+                style={{ width: 82, height: 58, borderRadius: 29, alignItems: "center", justifyContent: "center",
+                  backgroundColor: digit ? th.glassFill(0.12) : "transparent", borderWidth: 1, borderColor: digit ? th.glass(0.22) : "transparent", boxShadow: th.glassFx }}>
+                <T w="light" size={24}>{kk}</T>
+              </PressScale>
+            );
+          })}
+        </View>
       </FormScreen>
     );
   } else if (step === "ins1") {

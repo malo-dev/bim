@@ -198,9 +198,9 @@ export default function HomeScreen() {
         <View style={{ marginTop: 10, gap: 10 }}>
           <OrderRow icon="bike" title="EAU, GAZ, CARBURANT" titleSize={15} sub="Livrés chez toi à Bunia" delay={380} onPress={() => router.push("/commande" as any)} />
           <OrderRow icon="taxi" title="TAXI" sub="Commander un taxi" delay={450} onPress={() => router.push(`/transport/${transport?.businessId ?? 2}` as any)} />
+          <OrderRow icon="box" title="MES COMMANDES" sub={activeOrders.length ? `${activeOrders.length} en cours · voir et suivre` : "Voir et suivre toutes mes commandes"} delay={520} onPress={() => router.push("/commandes" as any)} />
         </View>
-        {/* « Mes commandes » et la commande en cours ne sont plus sur l'accueil :
-            accessibles depuis Réglages → Mes commandes (et la page Solde). */}
+        {/* Le bloc « commande en cours » reste retiré de l'accueil. */}
       </ScrollView>
     </BimBackground>
   );
