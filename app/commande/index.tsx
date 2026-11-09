@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BimIcon, BimIconName } from "@/components/bim/icons";
 import { fallbackArt } from "@/components/bim/illustrations";
 import { BimType, TYPE_META, useTh } from "@/components/bim/theme";
-import { Appear, BimBackground, Glow, Header, PressScale, ProductArt, Swap, T } from "@/components/bim/ui";
+import { Appear, BimBackground, Glow, Header, PressScale, ProductArt, SectionLabel, Swap, T } from "@/components/bim/ui";
 
 const CHOICES: { type: BimType; icon: BimIconName; text: string; art: string }[] = [
   { type: "gaz", icon: "flame", text: "Recharge ou bouteille neuve, livrée chez toi.", art: "bouteille 12 kg" },
@@ -53,6 +53,23 @@ export default function CommanderChoix() {
             </Appear>
           ))}
         </View>
+
+        {/* Autres produits disponibles chez BIM NEXT (même parcours de commande) */}
+        <Appear kind="rise" delay={440}>
+          <SectionLabel style={{ marginTop: 26 }}>AUTRES PRODUITS</SectionLabel>
+          <PressScale scaleTo={0.97} onPress={() => router.push("/commande/autres" as any)} accessibilityLabel="Voir les autres produits disponibles"
+            style={{ marginTop: 10, minHeight: 96, borderRadius: 28, backgroundColor: th.accent, flexDirection: "row", alignItems: "center", gap: 14,
+              paddingLeft: 12, paddingRight: 18, paddingVertical: 12, overflow: "hidden", boxShadow: th.glassFx }}>
+            <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: th.ink, alignItems: "center", justifyContent: "center" }}>
+              <BimIcon name="box" size={30} color={th.onInk} strokeWidth={1.8} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <T w="bold" size={18} color={th.onAccent} style={{ letterSpacing: 0.4 }}>Tous nos autres produits</T>
+              <T size={13} color={th.onAccent} style={{ marginTop: 4, lineHeight: 19, opacity: 0.75 }}>Rangés par catégorie, livrés et payés comme le reste.</T>
+            </View>
+            <T w="bold" size={15} color={th.onAccent} style={{ letterSpacing: 2 }}>›››</T>
+          </PressScale>
+        </Appear>
       </ScrollView>
     </BimBackground>
   );

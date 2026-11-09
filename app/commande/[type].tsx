@@ -33,7 +33,13 @@ type Method = "ec" | "mm" | "cash";
 type Item = { id: number; name: string; sub: string; desc: string; price: number; uri: string | null; art: string; companyId: number | null };
 
 const TYPES: BimType[] = ["eau", "gaz", "carburant"];
-const ICON: Record<BimType, BimIconName> = { eau: "drop", gaz: "flame", carburant: "pump" };
+// « autres » : tous les autres produits disponibles, même parcours de commande.
+type CatType = BimType | "autres";
+const ICON: Record<CatType, BimIconName> = { eau: "drop", gaz: "flame", carburant: "pump", autres: "box" };
+const META: Record<CatType, { title: string; label: string }> = { ...TYPE_META, autres: { title: "Autres produits", label: "AUTRES" } };
+// Illustration de secours d'un « autre produit » sans photo (colis).
+const BOX_ART = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path d="M60 14 104 36v48L60 106 16 84V36z" fill="#E9EEF7"/><path d="M60 14 104 36 60 58 16 36z" fill="#FFFFFF"/><path d="M60 58v48L16 84V36z" fill="#C9D4E6"/><path d="M38 25 82 47v14l-8-4V51L30 29z" fill="#F5C518"/></svg>`;
+const artFor = (t: CatType, name: string) => (t === "autres" ? BOX_ART : fallbackArt(t, name));
 const DELIVERY_NOTE = "Frais de livraison payés au livreur";
 const PERMS_KEY = "bim_order_perms_asked";
 
@@ -82,9 +88,10 @@ export default function CommandeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ type?: string }>();
-  const initial = (TYPES.includes(params.type as BimType) ? params.type : "eau") as BimType;
+  const initial = (params.type === "autres" || TYPES.includes(params.type as BimType) ? params.type : "eau") as CatType;
 
-  const [type, setType] = useState<BimType>(initial);
+  const [type, setType] = useState<CatType>(initial);
+  const isOther = type === "autres";
   const [sub, setSub] = useState("Tout");
   const [item, setItem] = useState<Item | null>(null);
   const [qty, setQty] = useState(1);
@@ -119,11 +126,11 @@ export default function CommandeScreen() {
   const items: Item[] = useMemo(() => (data?.data ?? []).map((p: any) => ({
     id: p.productId,
     name: p.name,
-    sub: p.sub || TYPE_META[type].title,
+    sub: p.sub || META[type].title,
     desc: p.description || p.Warning || "",
     price: Number(p.effectivePrice ?? p.price ?? 0),
     uri: imgUri(p.imageUrl),
-    art: fallbackArt(type, p.name),
+    art: artFor(type, p.name),
     companyId: p.companyId ?? null,
   })), [data, type]);
   const subs = useMemo(() => ["Tout", ...Array.from(new Set(items.map((i) => i.sub)))], [items]);
@@ -195,7 +202,7 @@ export default function CommandeScreen() {
         destinationLng: coords?.lng,
         paymentMethod: method === "ec" ? "ec" : method === "mm" ? "mobile_money" : "delivery",
         clientPhone: phone,
-        notes: `${TYPE_META[type].title} — commande BIM NEXT`,
+        notes: `${META[type].title} — commande BIM NEXT`,
       }).unwrap();
       let paid = false;
       if (method === "ec") {
@@ -223,8 +230,8 @@ export default function CommandeScreen() {
   const renderCatalogue = () => (
     <ScrollView contentContainerStyle={pad} showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={!isLoading && isFetching} onRefresh={() => { refetch(); }} tintColor="#FFF" />}>
-      <Header title="Commander" backLabel="Retour à l'accueil" onBack={() => router.back()} />
-      <View style={{ marginTop: 18, flexDirection: "row", gap: 6, padding: 5, borderRadius: 27, backgroundColor: th.glassFill(0.1), borderWidth: 1, borderColor: th.glass(0.18), boxShadow: th.glassFx }}>
+      <Header title={isOther ? "Autres produits" : "Commander"} backLabel="Retour" onBack={() => router.back()} />
+      {!isOther && <View style={{ marginTop: 18, flexDirection: "row", gap: 6, padding: 5, borderRadius: 27, backgroundColor: th.glassFill(0.1), borderWidth: 1, borderColor: th.glass(0.18), boxShadow: th.glassFx }}>
         {TYPES.map((t) => {
           const on = t === type;
           return (
@@ -236,13 +243,23 @@ export default function CommandeScreen() {
             </PressScale>
           );
         })}
-      </View>
+      </View>}
 
       <Appear key={type + "-t"} kind="rise">
-        <T style={{ marginTop: 22 }}>
-          <T w="light" size={32} style={{ lineHeight: 36 }}>Toute l'offre </T>
-          <T w="bold" size={32} style={{ lineHeight: 36 }}>{TYPE_META[type].title}</T>
-        </T>
+        {isOther ? (
+          <>
+            <T style={{ marginTop: 22 }}>
+              <T w="light" size={32} style={{ lineHeight: 36 }}>Tous nos{"\n"}</T>
+              <T w="bold" size={32} style={{ lineHeight: 36 }}>autres produits</T>
+            </T>
+            <T size={14} color={th.muted} style={{ marginTop: 6 }}>Choisis une catégorie, puis ton produit. Livré chez toi.</T>
+          </>
+        ) : (
+          <T style={{ marginTop: 22 }}>
+            <T w="light" size={32} style={{ lineHeight: 36 }}>Toute l'offre </T>
+            <T w="bold" size={32} style={{ lineHeight: 36 }}>{META[type].title}</T>
+          </T>
+        )}
       </Appear>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14, marginRight: -20 }} contentContainerStyle={{ gap: 8, paddingRight: 20 }}>
@@ -263,7 +280,7 @@ export default function CommandeScreen() {
           <Glass style={{ padding: 22, alignItems: "center", gap: 10 }}>
             <BimIcon name={ICON[type]} size={30} color={th.fg} />
             <T w="bold" size={16}>Bientôt disponible</T>
-            <T size={14} color={th.muted} style={{ textAlign: "center" }}>Aucun produit {TYPE_META[type].title.toLowerCase()} pour le moment. Tire vers le bas pour actualiser.</T>
+            <T size={14} color={th.muted} style={{ textAlign: "center" }}>{isOther ? "Aucun autre produit pour le moment." : `Aucun produit ${META[type].title.toLowerCase()} pour le moment.`} Tire vers le bas pour actualiser.</T>
           </Glass>
         )}
         {shown.map((it, idx) => (
@@ -292,7 +309,7 @@ export default function CommandeScreen() {
       <Glow top={40} opacity={0.22} />
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <RoundButton icon="back" label="Retour" onPress={() => go("cat", false)} />
-        <T size={14} color={th.muted} numberOfLines={1} style={{ flexShrink: 1, marginHorizontal: 8 }}>{TYPE_META[type].title} · {item.sub}</T>
+        <T size={14} color={th.muted} numberOfLines={1} style={{ flexShrink: 1, marginHorizontal: 8 }}>{isOther ? item.sub : `${META[type].title} · ${item.sub}`}</T>
         <View style={{ width: 46 }} />
       </View>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
