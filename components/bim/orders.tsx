@@ -35,7 +35,7 @@ export function OrderArt({ item, size, tile }: { item: OrderArtItem; size: numbe
   const th = useTh();
   return (
     <View style={{ width: tile, height: tile, borderRadius: tile * 0.3, backgroundColor: th.glassFill(0.18), borderWidth: 1, borderColor: th.glass(0.22), alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: th.glassFx }}>
-      <ProductArt uri={item.uri} xml={item.art} size={size} />
+      <ProductArt uri={item.uri} xml={item.art} size={size} fill />
     </View>
   );
 }

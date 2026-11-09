@@ -78,7 +78,7 @@ export default function FavoritesScreen() {
               <PressScale scaleTo={0.96} onPress={() => router.push(route(p) as any)} accessibilityLabel={p.name}
                 style={{ flex: 1, padding: 12, borderRadius: 24, backgroundColor: th.glassFill(0.12), borderWidth: 1, borderColor: th.glass(0.2), boxShadow: th.glassFx }}>
                 <View style={{ height: 110, borderRadius: 18, backgroundColor: th.glass(0.12), alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                  {uri ? <Image source={{ uri }} style={{ width: 96, height: 96 }} contentFit="contain" transition={200} /> : <ProductArt xml={fallbackArt(orderType(p.name), p.name)} size={92} />}
+                  {uri ? <Image source={{ uri }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" contentPosition="center" transition={200} /> : <ProductArt xml={fallbackArt(orderType(p.name), p.name)} size={92} />}
                   {r > 0 && r <= 100 && (
                     <View style={{ position: "absolute", top: 8, left: 8, paddingHorizontal: 8, height: 22, borderRadius: 11, backgroundColor: th.knob, justifyContent: "center" }}>
                       <T w="bold" size={11} color="#FFFFFF">−{Math.round(r)} %</T>

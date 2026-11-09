@@ -2,14 +2,13 @@
  * Mon réseau BIM NEXT (design BIM NEXT) : secteurs partenaires, recherche, à la une + liste paginée.
  */
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, RefreshControl, TextInput, View } from "react-native";
+import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch } from "react-redux";
 import { BimIcon } from "@/components/bim/icons";
-import { F, useTh } from "@/components/bim/theme";
+import { useTh } from "@/components/bim/theme";
 import { Appear, BimBackground, EmptyState, Header, PressScale, SectionLabel, T } from "@/components/bim/ui";
 import { setSectors } from "@/services/globalApi";
 import { useGetAllSectorsQuery } from "@/services/sectorsServices";
@@ -80,13 +79,13 @@ export default function Reseaux() {
   const router = useRouter();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
-  const [search, setSearch] = useState("");
+  const search = ""; // liste simple : pas de recherche
   const [page, setPage] = useState(1);
   const [list, setList] = useState<Sector[]>([]);
   const first = useRef(true);
   const { data, isLoading, isFetching, refetch } = useGetAllSectorsQuery({ page, pageSize: 10, search, paginate: true });
 
-  useEffect(() => { first.current = true; setPage(1); }, [search]);
+
   useEffect(() => {
     if (!data?.data) return;
     if (first.current) { setList(data.data); first.current = false; }
@@ -106,42 +105,9 @@ export default function Reseaux() {
       <Header title="Mon réseau" onBack={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)" as any))} />
       <Appear kind="rise" delay={60}>
         <T style={{ marginTop: 22 }}><T w="light" size={30} style={{ lineHeight: 35 }}>Le réseau{"\n"}</T><T w="bold" size={30} style={{ lineHeight: 35 }}>BIM NEXT</T></T>
-        <T size={14} color={th.muted} style={{ marginTop: 6 }}>Découvre les partenaires par secteur · {data?.total ?? list.length} secteurs</T>
+        <T size={14} color={th.muted} style={{ marginTop: 6 }}>{data?.total ?? list.length} réseau{(data?.total ?? list.length) > 1 ? "x" : ""} disponible{(data?.total ?? list.length) > 1 ? "s" : ""}</T>
       </Appear>
-      <View style={{ marginTop: 16, flexDirection: "row", alignItems: "center", gap: 10, height: 52, borderRadius: 26, paddingHorizontal: 16,
-        backgroundColor: th.glassFill(0.12), borderWidth: 1, borderColor: th.glass(0.22), boxShadow: th.glassFx }}>
-        <BimIcon name="search" size={18} color={th.muted} />
-        <TextInput value={search} onChangeText={setSearch} placeholder="Rechercher un secteur" placeholderTextColor={th.glass(0.55)} returnKeyType="search"
-          accessibilityLabel="Rechercher un secteur" style={{ flex: 1, color: th.fg, fontFamily: F.regular, fontSize: 15, includeFontPadding: false }} />
-        {!!search && <PressScale onPress={() => setSearch("")} accessibilityLabel="Effacer"><BimIcon name="close" size={16} color={th.muted} /></PressScale>}
-      </View>
-      {!search && list.length > 0 && (
-        <>
-          <SectionLabel style={{ marginTop: 20 }}>À LA UNE</SectionLabel>
-          <FlatList horizontal data={list.slice(0, 6)} keyExtractor={(s) => `f-${s.businessId}`} showsHorizontalScrollIndicator={false}
-            style={{ marginHorizontal: -20, marginTop: 10 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
-            renderItem={({ item, index }) => {
-              const count = item.companies?.length ?? 0;
-              return (
-                <Appear kind="left" delay={index * 80}>
-                  <PressScale scaleTo={0.96} onPress={() => go(item)} accessibilityLabel={item.name}
-                    style={{ width: 250, height: 170, borderRadius: 26, overflow: "hidden", borderWidth: 1, borderColor: th.glass(0.22) }}>
-                    <Image source={{ uri: getSectorImage(item.name) }} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} contentFit="cover" transition={300} />
-                    <LinearGradient colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.82)"]} style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }} />
-                    <View style={{ position: "absolute", left: 14, right: 14, bottom: 12 }}>
-                      <View style={{ alignSelf: "flex-start", paddingHorizontal: 8, height: 20, borderRadius: 10, backgroundColor: th.knob, justifyContent: "center" }}>
-                        <T w="bold" size={10} color="#FFFFFF">{getSectorLabel(item.name).toUpperCase()}</T>
-                      </View>
-                      <T w="bold" size={18} color="#FFFFFF" numberOfLines={1} style={{ marginTop: 6 }}>{item.name}</T>
-                      <T size={12} color="rgba(255,255,255,0.8)">{count} entreprise{count > 1 ? "s" : ""}</T>
-                    </View>
-                  </PressScale>
-                </Appear>
-              );
-            }} />
-        </>
-      )}
-      <SectionLabel style={{ marginTop: 20, marginBottom: 10 }}>{search ? "RÉSULTATS" : "TOUS LES SECTEURS"}</SectionLabel>
+      <SectionLabel style={{ marginTop: 20, marginBottom: 10 }}>RÉSEAUX DISPONIBLES</SectionLabel>
     </View>
   );
 
@@ -157,7 +123,7 @@ export default function Reseaux() {
         onEndReached={loadMore}
         onEndReachedThreshold={0.4}
         refreshControl={<RefreshControl refreshing={!isLoading && isFetching && page === 1} onRefresh={() => { first.current = true; setPage(1); refetch(); }} tintColor={th.fg} />}
-        ListEmptyComponent={isLoading ? <EmptyState loading title="Chargement…" /> : <EmptyState icon="users" title="Aucun secteur trouvé" text={search ? "Essaie un autre mot." : undefined} />}
+        ListEmptyComponent={isLoading ? <EmptyState loading title="Chargement…" /> : <EmptyState icon="users" title="Aucun réseau disponible pour le moment" />}
         renderItem={({ item, index }) => {
           const count = item.companies?.length ?? 0;
           return (

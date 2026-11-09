@@ -198,28 +198,9 @@ export default function HomeScreen() {
         <View style={{ marginTop: 10, gap: 10 }}>
           <OrderRow icon="bike" title="EAU, GAZ, CARBURANT" titleSize={15} sub="Livrés chez toi à Bunia" delay={380} onPress={() => router.push("/commande" as any)} />
           <OrderRow icon="taxi" title="TAXI" sub="Commander un taxi" delay={450} onPress={() => router.push(`/transport/${transport?.businessId ?? 2}` as any)} />
-          <OrderRow icon="box" title="MES COMMANDES" sub={activeOrders.length ? `${activeOrders.length} en cours · voir et suivre` : "Voir et suivre toutes mes commandes"} delay={520} onPress={() => router.push("/commandes" as any)} />
         </View>
-
-        {liveOrder && (
-          <Appear kind="rise" delay={360}>
-            <SectionLabel style={{ marginTop: 18 }}>{activeOrders.length > 1 ? `${activeOrders.length} COMMANDES EN COURS` : "COMMANDE EN COURS"}</SectionLabel>
-            <PressScale scaleTo={0.97} onPress={() => router.push(`/commandes/${liveOrder.orderNumber}` as any)} accessibilityLabel="Suivre ma commande en cours"
-              style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 22, backgroundColor: th.glassFill(0.18), borderWidth: 1, borderColor: th.glass(0.26), boxShadow: th.glassFx }}>
-              <OrderArt item={orderArtItem(liveOrder)} size={42} tile={52} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T w="bold" size={15} numberOfLines={1}>{orderArtItem(liveOrder).name} × {liveOrder.quantity ?? 1}</T>
-                <View style={{ marginTop: 5, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: orderStatus(liveOrder.status).color }} />
-                  <T size={13} color={th.muted}>{orderStatus(liveOrder.status).label} · toucher pour suivre</T>
-                </View>
-              </View>
-              <View style={{ height: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: th.accent, justifyContent: "center" }}>
-                <T w="bold" size={13} color={th.onAccent}>Suivre</T>
-              </View>
-            </PressScale>
-          </Appear>
-        )}
+        {/* « Mes commandes » et la commande en cours ne sont plus sur l'accueil :
+            accessibles depuis Réglages → Mes commandes (et la page Solde). */}
       </ScrollView>
     </BimBackground>
   );

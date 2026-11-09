@@ -44,7 +44,7 @@ function ArtTile({ item, size, tile }: { item: Item; size: number; tile: number 
   const th = useTh();
   return (
     <View style={{ width: tile, height: tile, borderRadius: tile * 0.3, backgroundColor: th.glassFill(0.18), borderWidth: 1, borderColor: th.glass(0.22), alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: th.glassFx }}>
-      <ProductArt uri={item.uri} xml={item.art} size={size} />
+      <ProductArt uri={item.uri} xml={item.art} size={size} fill />
     </View>
   );
 }
@@ -298,8 +298,8 @@ export default function CommandeScreen() {
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
         <Appear kind="pop" style={{ alignSelf: "center", marginTop: 34 }}>
           <Float amp={7} duration={4500}>
-            <View style={{ width: 200, height: 200, borderRadius: 100, backgroundColor: th.glassFill(0.14), borderWidth: 1, borderColor: th.glass(0.24), alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: th.glassFx }}>
-              <ProductArt uri={item.uri} xml={item.art} size={176} />
+            <View style={{ width: 220, height: 220, borderRadius: 40, backgroundColor: th.glassFill(0.14), borderWidth: 1, borderColor: th.glass(0.24), alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: th.glassFx }}>
+              <ProductArt uri={item.uri} xml={item.art} size={176} fill />
             </View>
           </Float>
         </Appear>

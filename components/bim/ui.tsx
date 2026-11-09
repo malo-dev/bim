@@ -447,9 +447,18 @@ export function SectionLabel({ children, style }: { children: React.ReactNode; s
   return <T size={13} color={th.muted} style={[{ letterSpacing: 1 }, style]}>{children}</T>;
 }
 
-export function ProductArt({ uri, xml, size }: { uri?: string | null; xml: string; size: number }) {
+/**
+ * Image d'un produit. `fill` : une vraie photo remplit toute sa case (centrée,
+ * recadrée) — la case parente donne la forme arrondie (overflow: hidden).
+ * L'illustration de secours (SVG) garde sa taille `size`.
+ */
+export function ProductArt({ uri, xml, size, fill }: { uri?: string | null; xml: string; size: number; fill?: boolean }) {
   const [failed, setFailed] = useState(false);
-  if (uri && !failed) return <Image source={{ uri }} style={{ width: size, height: size }} contentFit="contain" transition={200} onError={() => setFailed(true)} />;
+  if (uri && !failed) {
+    return fill
+      ? <Image source={{ uri }} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" contentPosition="center" transition={200} onError={() => setFailed(true)} />
+      : <Image source={{ uri }} style={{ width: size, height: size }} contentFit="contain" transition={200} onError={() => setFailed(true)} />;
+  }
   return <SvgXml xml={xml} width={size} height={size} />;
 }
 
