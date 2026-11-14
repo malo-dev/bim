@@ -228,7 +228,7 @@ export default function RechargeScreen() {
     const telephone = `${code.replace("+", "")}${local}`;
     try {
       if (mode === "manual") {
-        await createManual({ id: userId, amount: amt, telephone, method: note.trim() || "Manuel" }).unwrap();
+        await createManual({ id: userId, amount: amt, currency: cur, telephone, method: note.trim() || "Manuel" }).unwrap();
         setCredited(null);
         setPhase("done");
         return;
